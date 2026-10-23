@@ -22,6 +22,7 @@ header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 8
 .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:9px;padding:7px 12px;font:600 13px inherit;font-family:inherit;cursor:pointer}
 main{max-width:1280px;margin:0 auto;padding:14px 16px 60px;display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px}
 @media(max-width:980px){main{grid-template-columns:1fr}}
+main>*{min-width:0}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
 .card h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .price{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}.price b{font-size:28px;font-family:'JetBrains Mono',monospace}
@@ -42,7 +43,7 @@ main{max-width:1280px;margin:0 auto;padding:14px 16px 60px;display:grid;grid-tem
 .steps{display:flex;gap:4px;margin:8px 0;flex-wrap:wrap}.steps span{font-size:11px;padding:3px 7px;border-radius:6px;background:var(--panel2);color:var(--muted);border:1px solid var(--line)}
 .steps span.done{color:var(--ink);border-color:var(--blue)}.steps span.now{background:var(--blue);color:#fff;border-color:var(--blue)}
 .ck{list-style:none;margin:6px 0 0;padding:0;font-size:13.5px}.ck li{display:flex;gap:8px;padding:3px 0;border-bottom:1px dashed var(--line)}.ck li:last-child{border:0}
-.ck .y{color:var(--buy)}.ck .n{color:var(--muted)}.ck em{margin-left:auto;font-style:normal;color:var(--muted);font-size:12px}
+.ck .y{color:var(--buy)}.ck .n{color:var(--muted)}.ck li{flex-wrap:wrap}.ck em{margin-left:auto;text-align:right;font-style:normal;color:var(--muted);font-size:12px}
 .side{display:grid;gap:14px;align-content:start}
 table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line);white-space:nowrap}th{color:var(--muted);font-weight:600;font-size:12px}
 .tw{overflow-x:auto}.stat{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px}
@@ -111,7 +112,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 <div id="toast"></div>
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
-<script src="engine.js?v=3"></script>
-<script src="app.js?v=3"></script>
+<script src="engine.js?v=4"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

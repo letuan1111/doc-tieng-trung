@@ -300,7 +300,7 @@
         live: { ...live, price: f(live.price), zones: live.zones.map(flipZone), touched: live.touched && { ...live.touched, zone: flipZone(live.touched.zone) },
           sweep: live.sweep && { ...live.sweep, low: f(live.sweep.low), level: f(live.sweep.level) }, active: live.active && res_active(live.active, sg) },
         rejected: D.rej,
-        events: { m5: D.m5.events.map(e => ({ ...e, dir: e.dir * sg, p: f(e.p) })), m15: D.m15.events.map(e => ({ ...e, dir: e.dir * sg, p: f(e.p) })) },
+        events: Object.fromEntries(['m5', 'm15', 'h1', 'h4'].map(k => [k, D[k].events.map(e => ({ ...e, t: D[k].c[e.k].t, dir: e.dir * sg, p: f(e.p) }))])),
       };
       if (side === 'buy') res.ind = { m5: D.m5, m15: D.m15, h1: D.h1, h4: D.h4 };
     }

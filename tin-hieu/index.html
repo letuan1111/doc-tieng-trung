@@ -44,7 +44,7 @@ main>*{min-width:0}
 .steps span.done{color:var(--ink);border-color:var(--blue)}.steps span.now{background:var(--blue);color:#fff;border-color:var(--blue)}
 .ck{list-style:none;margin:6px 0 0;padding:0;font-size:13.5px}.ck li{display:flex;gap:8px;padding:3px 0;border-bottom:1px dashed var(--line)}.ck li:last-child{border:0}
 .ck .y{color:var(--buy)}.ck .n{color:var(--muted)}.ck li{flex-wrap:wrap}.ck em{margin-left:auto;text-align:right;font-style:normal;color:var(--muted);font-size:12px}
-.side{display:grid;gap:14px;align-content:start}
+.side{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-content:start}
 table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line);white-space:nowrap}th{color:var(--muted);font-weight:600;font-size:12px}
 .tw{overflow-x:auto}.stat{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px}
 .stat div{background:var(--panel2);border-radius:10px;padding:8px 10px}.stat b{display:block;font-size:18px;font-family:'JetBrains Mono',monospace}.stat small{color:var(--muted)}
@@ -65,7 +65,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 </div></header>
 
 <main>
-  <section style="display:grid;gap:14px;align-content:start;min-width:0">
+  <section style="display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-content:start;min-width:0">
     <div class="card">
       <div class="price"><b id="px">—</b><span id="chg" class="chip">—</span><span id="src" class="chip">đang tải…</span><span id="upd" class="note"></span></div>
       <div class="note" id="offNote" style="margin-top:4px"></div>
@@ -112,7 +112,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 <div id="toast"></div>
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
-<script src="engine.js?v=4"></script>
-<script src="app.js?v=4"></script>
+<script src="engine.js?v=5"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

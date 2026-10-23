@@ -109,7 +109,7 @@
       let lo = 0, hi = c.length - 1, b = 0; while (lo <= hi) { const m = (lo + hi) >> 1; if (c[m].t <= t) { b = m; lo = m + 1; } else hi = m - 1; } return tsec(c[b].t);
     };
     const mk = [];
-    for (const e of (r.buy.events[S.tf] || []).slice(-60)) if (e.t >= t0)
+    for (const e of (r.buy.events[S.tf] || []).slice(S.tf === 'm5' ? -14 : -30)) if (e.t >= t0)
       mk.push({ time: snap(e.t), position: e.dir > 0 ? 'belowBar' : 'aboveBar', color: e.type === 'CHoCH' ? '#f59e0b' : (e.dir > 0 ? '#22c55e' : '#f43f5e'), shape: e.dir > 0 ? 'arrowUp' : 'arrowDown', text: e.type });
     for (const s of r.all) if (s.t >= t0) {
       mk.push({ time: snap(s.t), position: s.side === 'buy' ? 'belowBar' : 'aboveBar', color: '#a855f7', shape: 'circle', text: (s.side === 'buy' ? 'BUY ' : 'SELL ') + s.score });

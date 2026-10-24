@@ -314,7 +314,7 @@
       }
       waves.push({ t, p: to, from: p, kind, name, tag, bars }); p = to;
     };
-    const MIN = 0.8 * a15;
+    const MIN = Math.max(1.2 * a15, 0.8 * a1); // sóng đẩy tối thiểu ~0.8 ATR H1, bỏ qua các mốc quá sát
     // đích của sóng đẩy: thanh khoản / FVG kế tiếp theo hướng d, cách tối thiểu MIN
     const target = (d, strong) => {
       const c = lv.filter(l => !used.has(l) && (d > 0 ? l.type === 'R' && l.p > p + MIN : l.type === 'S' && l.p < p - MIN) && (!strong || l.w >= 2))
@@ -336,7 +336,7 @@
       const d = bias;
       // sóng 0: giá đang xa EMA34 theo hướng xu hướng → hồi về EMA34 (hoặc FVG nằm giữa)
       const ext = (p - e34) * d;
-      if (ext > 1.2 * a15) {
+      if (ext > Math.max(1.2 * a15, 0.5 * a1)) {
         const mid = lv.filter(l => !used.has(l) && l.zone && (d > 0 ? l.type === 'S' : l.type === 'R') && (d > 0 ? l.p < p - 0.3 * a15 && l.p >= e34 : l.p > p + 0.3 * a15 && l.p <= e34))
           .sort((x, y) => Math.abs(x.p - p) - Math.abs(y.p - p))[0];
         if (mid) { used.add(mid); move(mid.p, 'pb', 'hồi ' + (d > 0 ? 'xuống' : 'lên') + ' lấp ' + mid.name, mid.tag); }

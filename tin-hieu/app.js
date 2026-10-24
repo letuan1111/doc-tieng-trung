@@ -194,10 +194,18 @@
         if (pts.length < 2) return; g.strokeStyle = col; g.lineWidth = w; g.setLineDash(dash); g.beginPath();
         pts.forEach((p, i) => { const x = X(p.t), y = cs.priceToCoordinate(p.p); if (x == null || y == null) return; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); g.setLineDash([]);
         if (labels) pts.forEach((p, i) => { if (!i) return; const x = X(p.t), y = cs.priceToCoordinate(p.p); if (x == null || y == null) return;
-          g.fillStyle = col; g.beginPath(); g.arc(x, y, 3.5, 0, 7); g.fill(); g.font = '600 10px JetBrains Mono'; g.fillText(fx(p.p), x + 5, y + (i % 2 ? -6 : 12)); });
+          const up = i < pts.length - 1 ? pts[i + 1].p < p.p : p.p > pts[i - 1].p; // đỉnh sóng → nhãn phía trên
+          g.fillStyle = col; g.beginPath(); g.arc(x, y, 3.5, 0, 7); g.fill();
+          const t1 = (labels === 'wave' ? i + '. ' : '') + fx(p.p), t2 = labels === 'wave' && p.tag ? p.tag : '';
+          g.font = '700 10px JetBrains Mono'; const w1 = g.measureText(t1).width; g.font = '600 9.5px Be Vietnam Pro'; const w2 = t2 ? g.measureText(t2).width : 0;
+          const bw = Math.max(w1, w2) + 8, bh = t2 ? 26 : 15, bx = Math.min(x - bw / 2, W - psW - bw - 2), by = up ? y - bh - 7 : y + 7;
+          g.fillStyle = 'rgba(13,17,23,.82)'; g.fillRect(bx, by, bw, bh); g.strokeStyle = col; g.lineWidth = 1; g.strokeRect(bx, by, bw, bh);
+          g.fillStyle = col; g.font = '700 10px JetBrains Mono'; g.fillText(t1, bx + 4, by + 11);
+          if (t2) { g.fillStyle = '#cbd5e1'; g.font = '600 9.5px Be Vietnam Pro'; g.fillText(t2, bx + 4, by + 22); } });
       };
-      path(r.proj.alt, 'rgba(148,163,184,.75)', [3, 4], 1.5, true);
-      path(r.proj.path, r.proj.bias > 0 ? '#4ade80' : r.proj.bias < 0 ? '#fb7185' : '#e5e7eb', [7, 5], 2.2, true);
+      if (SHOW.e34 && r.proj.ema34) { path(r.proj.ema34, 'rgba(6,182,212,.7)', [2, 3], 1.4, false); path(r.proj.ema89, 'rgba(234,179,8,.7)', [2, 3], 1.4, false); }
+      path(r.proj.alt, 'rgba(148,163,184,.75)', [3, 4], 1.5, 'price');
+      path(r.proj.path, r.proj.bias > 0 ? '#4ade80' : r.proj.bias < 0 ? '#fb7185' : '#e5e7eb', [], 2.4, 'wave');
       if (r.proj.inval) { const y = cs.priceToCoordinate(r.proj.inval.p), x = X(r.proj.path[0].t); if (y != null && x != null) { g.strokeStyle = 'rgba(245,158,11,.9)'; g.setLineDash([1, 3]); g.beginPath(); g.moveTo(x, y); g.lineTo(W - psW, y); g.stroke(); g.setLineDash([]); g.fillStyle = '#f59e0b'; g.font = '600 10px Be Vietnam Pro'; g.fillText('Vô hiệu ' + fx(r.proj.inval.p), x + 4, y - 4); } }
     }
     // vùng FVG/OB của setup
@@ -254,12 +262,15 @@
   function projCard() {
     const P = S.res.proj; if (!P) return '';
     const bn = P.bias > 0 ? '<span class="chip buy">THIÊN TĂNG</span>' : P.bias < 0 ? '<span class="chip sell">THIÊN GIẢM</span>' : '<span class="chip">ĐI NGANG</span>';
-    const steps = P.path.slice(1).map((p, i) => `<li><span class="y">${i + 1}</span> ${p.act || ''} <b class="mono">${fx(p.p)}</b> <em>${p.name || ''} · ~${ft(p.t)}</em></li>`).join('');
-    const alt = P.alt.length ? `<p class="note" style="margin:8px 0 0">Kịch bản phụ (đường xám): nếu giá đóng nến ${P.bias > 0 ? 'dưới' : 'trên'} <b>${fx(P.inval.p)}</b> (${P.inval.name}) → ${P.alt[2].act} <b>${fx(P.alt[2].p)}</b>${P.alt[2].name ? ' (' + P.alt[2].name + ')' : ''}.</p>` : '';
+    const steps = P.path.slice(1).map((p, i) => {
+      const dP = p.p - p.from, kind = p.kind === 'imp' ? '<span class="chip ' + (dP > 0 ? 'buy' : 'sell') + '">Sóng đẩy</span>' : '<span class="chip">Sóng hồi</span>';
+      return `<li style="display:block"><b>Sóng ${i + 1}</b> ${kind} ${dP > 0 ? '▲' : '▼'} <b class="mono">${fx(p.p)}</b> <span class="muted">(${dP > 0 ? '+' : ''}${fx(dP)})</span><br><span class="note">${p.name} · ~${p.bars} nến M15 · tới khoảng ${ft(p.t)}</span></li>`;
+    }).join('');
+    const alt = P.alt.length ? `<p class="note" style="margin:8px 0 0">Kịch bản phụ (đường xám): nếu giá đóng nến ${P.bias > 0 ? 'dưới' : 'trên'} <b>${fx(P.inval.p)}</b> (${P.inval.name}) thì kịch bản chính sai → ${P.alt[2].name} <b>${fx(P.alt[2].p)}</b>.</p>` : '';
     return `<div style="display:flex;justify-content:space-between;align-items:center">${bn}<span class="note">điểm xu hướng ${P.sum > 0 ? '+' : ''}${P.sum}/6</span></div>
       <ul class="ck">${P.factors.map(x => `<li>${x.v > 0 ? '<span class="y">▲</span>' : x.v < 0 ? '<span style="color:var(--sell)">▼</span>' : '<span class="n">•</span>'} ${x.n}</li>`).join('')}</ul>
       <p class="note" style="margin:10px 0 2px"><b>Kịch bản chính</b> (đường nét đứt trên chart):</p><ul class="ck">${steps}</ul>${alt}
-      <p class="note" style="margin:8px 0 0">Dự kiến dựa trên EMA 34/89 và các vùng OB/FVG, thanh khoản M15/H1/H4 gần nhất; thời gian chỉ là ước lượng theo ATR. Không phải tín hiệu vào lệnh.</p>`;
+      <p class="note" style="margin:8px 0 0">Mỗi sóng đẩy nhắm tới thanh khoản (BSL/SSL) hoặc vùng FVG/OB kế tiếp; mỗi sóng hồi về FVG/OB, EMA34 hoặc EMA89 (EMA được tính tiếp theo đường giá dự kiến – nét chấm xanh/vàng trên chart). Thời gian ước lượng theo ATR. Không phải tín hiệu vào lệnh.</p>`;
   }
   function statsHist() {
     const st = S.res.stats, all = S.res.all.slice().reverse();

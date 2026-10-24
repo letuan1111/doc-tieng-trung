@@ -282,62 +282,94 @@
     const I = res.ind, m15 = I.m15, h1 = I.h1, h4 = I.h4, n = m15.n - 1;
     const price = m15.c[n].c, a15 = m15.atr[n], a1 = h1.atr[h1.n - 1], T = m15.c[n].ct;
     const k1 = h1.n - 1, k4 = h4.n - 1;
+    // ---- 1. thiên hướng theo EMA 34/89 + cấu trúc ----
     const f = [
-      { n: 'H4 EMA34 ' + (h4.e3[k4] > h4.e2[k4] ? '>' : '<') + ' EMA89', v: h4.e3[k4] > h4.e2[k4] ? 1 : -1 },
-      { n: 'H1 EMA34 ' + (h1.e3[k1] > h1.e2[k1] ? '>' : '<') + ' EMA89', v: h1.e3[k1] > h1.e2[k1] ? 1 : -1 },
-      { n: 'M15 EMA34 ' + (m15.e3[n] > m15.e2[n] ? '>' : '<') + ' EMA89', v: m15.e3[n] > m15.e2[n] ? 1 : -1 },
+      { n: 'H4: EMA34 ' + (h4.e3[k4] > h4.e2[k4] ? 'trên' : 'dưới') + ' EMA89', v: h4.e3[k4] > h4.e2[k4] ? 1 : -1 },
+      { n: 'H1: EMA34 ' + (h1.e3[k1] > h1.e2[k1] ? 'trên' : 'dưới') + ' EMA89', v: h1.e3[k1] > h1.e2[k1] ? 1 : -1 },
+      { n: 'M15: EMA34 ' + (m15.e3[n] > m15.e2[n] ? 'trên' : 'dưới') + ' EMA89', v: m15.e3[n] > m15.e2[n] ? 1 : -1 },
       { n: 'Giá ' + (price > h1.e2[k1] ? 'trên' : 'dưới') + ' EMA89 H1', v: price > h1.e2[k1] ? 1 : -1 },
       { n: 'BOS H1 gần nhất ' + (h1.st[k1].dir > 0 ? 'tăng' : h1.st[k1].dir < 0 ? 'giảm' : '—'), v: h1.st[k1].dir },
       { n: 'BOS H4 gần nhất ' + (h4.st[k4].dir > 0 ? 'tăng' : h4.st[k4].dir < 0 ? 'giảm' : '—'), v: h4.st[k4].dir },
     ];
     const sum = f.reduce((x, y) => x + y.v, 0);
     const bias = sum >= 2 ? 1 : sum <= -2 ? -1 : 0;
-    // các mức hỗ trợ / kháng cự
-    const lv = [];
-    const W = { m15: 1, h1: 2, h4: 3 };
+    // ---- 2. các mốc SMC: FVG/OB + thanh khoản (S = hỗ trợ, R = kháng cự) ----
+    const lv = [], W = { m15: 1, h1: 2, h4: 3 }, U = (k) => k.toUpperCase();
     for (const k of ['m15', 'h1', 'h4']) {
-      for (const q of res.buy.htf[k].zones) lv.push({ p: q.top, lo: q.bot, hi: q.top, type: 'S', w: W[k], name: q.kind + ' tăng ' + k.toUpperCase() });
-      for (const q of res.sell.htf[k].zones) lv.push({ p: q.bot, lo: q.bot, hi: q.top, type: 'R', w: W[k], name: q.kind + ' giảm ' + k.toUpperCase() });
-      for (const l of res.buy.htf[k].liq) lv.push({ p: l.p, type: 'R', w: W[k], name: 'BSL ' + k.toUpperCase() });
-      for (const l of res.sell.htf[k].liq) lv.push({ p: l.p, type: 'S', w: W[k], name: 'SSL ' + k.toUpperCase() });
+      for (const q of res.buy.htf[k].zones) lv.push({ p: q.top, lo: q.bot, hi: q.top, type: 'S', w: W[k], name: q.kind + ' tăng ' + U(k), tag: q.kind + ' ' + U(k), zone: true });
+      for (const q of res.sell.htf[k].zones) lv.push({ p: q.bot, lo: q.bot, hi: q.top, type: 'R', w: W[k], name: q.kind + ' giảm ' + U(k), tag: q.kind + ' ' + U(k), zone: true });
+      for (const l of res.buy.htf[k].liq) lv.push({ p: l.p, type: 'R', w: W[k], name: 'thanh khoản BSL ' + U(k), tag: 'BSL ' + U(k), liq: true });
+      for (const l of res.sell.htf[k].liq) lv.push({ p: l.p, type: 'S', w: W[k], name: 'thanh khoản SSL ' + U(k), tag: 'SSL ' + U(k), liq: true });
     }
-    for (const [nm, v] of [['EMA34 M15', m15.e3[n]], ['EMA89 M15', m15.e2[n]], ['EMA34 H1', h1.e3[k1]], ['EMA89 H1', h1.e2[k1]], ['EMA89 H4', h4.e2[k4]]])
-      lv.push({ p: v, type: v < price ? 'S' : 'R', w: 1.5, name: nm, ema: true });
-    const gap = 0.3 * a15;
-    const isS = (l) => l.type === 'S' || l.ema, isR = (l) => l.type === 'R' || l.ema;
-    const below = (x, skip = 0) => lv.filter(l => isS(l) && l.p < x - gap).sort((p, q) => q.p - p.p)[skip] || null;
-    const above = (x, skip = 0) => lv.filter(l => isR(l) && l.p > x + gap).sort((p, q) => p.p - q.p)[skip] || null;
-    const strongAbove = (x) => lv.filter(l => isR(l) && l.p > x + gap && l.w >= 2).sort((p, q) => p.p - q.p)[0] || above(x);
-    const strongBelow = (x) => lv.filter(l => isS(l) && l.p < x - gap && l.w >= 2).sort((p, q) => q.p - p.p)[0] || below(x);
-    const fb = (x, d) => ({ p: x + d * 2 * a1, name: 'mở rộng 2×ATR H1' });
-    const pts = [{ p: price, name: 'Giá hiện tại' }];
-    const ema34 = m15.e3[n];
+    // ---- 3. mô phỏng từng con sóng; EMA34/89 M15 được cập nhật theo đường giá dự kiến ----
+    let p = price, t = T, e34 = m15.e3[n], e89 = m15.e2[n];
+    const k34 = 2 / 35, k89 = 2 / 90, used = new Set();
+    const ema34 = [{ t, p: e34 }], ema89 = [{ t, p: e89 }], waves = [{ t, p, kind: 'now', name: 'Giá hiện tại', tag: '' }];
+    const move = (to, kind, name, tag) => {
+      const spd = (kind === 'imp' ? 0.6 : 0.35) * a15;
+      const bars = Math.max(2, Math.round(Math.abs(to - p) / spd));
+      for (let i = 1; i <= bars; i++) {
+        const q = p + (to - p) * i / bars; e34 += (q - e34) * k34; e89 += (q - e89) * k89; t += 9e5;
+        ema34.push({ t, p: e34 }); ema89.push({ t, p: e89 });
+      }
+      waves.push({ t, p: to, from: p, kind, name, tag, bars }); p = to;
+    };
+    const MIN = 0.8 * a15;
+    // đích của sóng đẩy: thanh khoản / FVG kế tiếp theo hướng d, cách tối thiểu MIN
+    const target = (d, strong) => {
+      const c = lv.filter(l => !used.has(l) && (d > 0 ? l.type === 'R' && l.p > p + MIN : l.type === 'S' && l.p < p - MIN) && (!strong || l.w >= 2))
+        .sort((x, y) => d > 0 ? x.p - y.p : y.p - x.p);
+      return c[0] || null;
+    };
+    // đích của sóng hồi sau sóng đẩy A→B: ưu tiên FVG/OB, rồi EMA34, EMA89, cuối cùng 50%
+    const pullback = (A, B) => {
+      const d = Math.sign(B - A), lo = B - d * 0.30 * Math.abs(B - A), hi = B - d * 0.65 * Math.abs(B - A);
+      const inBand = (x) => d < 0 ? x >= lo && x <= hi : x <= lo && x >= hi;
+      const z = lv.filter(l => !used.has(l) && l.zone && (d < 0 ? l.type === 'R' : l.type === 'S') && inBand(l.p)).sort((x, y) => Math.abs(x.p - B) - Math.abs(y.p - B))[0];
+      if (z) { used.add(z); return { p: z.p, name: 'lấp ' + z.name, tag: z.tag }; }
+      if (inBand(e34)) return { p: e34, name: 'chạm EMA34 M15', tag: 'EMA34' };
+      if (inBand(e89)) return { p: e89, name: 'chạm EMA89 M15', tag: 'EMA89' };
+      return { p: B - d * 0.5 * Math.abs(B - A), name: 'hồi 50% sóng trước', tag: '50%' };
+    };
     let inval = null, alt = [];
-    if (bias === 1) {
-      if (price - ema34 > 1.0 * a15) { const p1 = below(price) || { p: ema34, name: 'EMA34 M15' }; pts.push({ ...p1, act: 'hồi về' }); }
-      const r1 = above(price) || fb(price, 1); pts.push({ ...r1, act: 'tăng tới' });
-      const base = pts[pts.length - 2].p, pb = r1.p - 0.382 * (r1.p - base); pts.push({ p: pb, name: 'hồi 38.2%', act: 'điều chỉnh' });
-      const r2 = strongAbove(r1.p) || fb(r1.p, 1); pts.push({ ...r2, act: 'tiếp tục tới' });
-      const lowRef = Math.min(...pts.map(x => x.p));
-      inval = strongBelow(lowRef) || { p: lowRef - a1, name: 'dưới đáy gần nhất' };
-      alt = [{ p: price }, { ...inval, act: 'phá xuống' }, { ...(below(inval.p) || fb(inval.p, -1)), act: 'giảm tiếp tới' }];
-    } else if (bias === -1) {
-      if (ema34 - price > 1.0 * a15) { const p1 = above(price) || { p: ema34, name: 'EMA34 M15' }; pts.push({ ...p1, act: 'hồi lên' }); }
-      const s1 = below(price) || fb(price, -1); pts.push({ ...s1, act: 'giảm tới' });
-      const base = pts[pts.length - 2].p, pb = s1.p + 0.382 * (base - s1.p); pts.push({ p: pb, name: 'hồi 38.2%', act: 'điều chỉnh' });
-      const s2 = strongBelow(s1.p) || fb(s1.p, -1); pts.push({ ...s2, act: 'tiếp tục tới' });
-      const hiRef = Math.max(...pts.map(x => x.p));
-      inval = strongAbove(hiRef) || { p: hiRef + a1, name: 'trên đỉnh gần nhất' };
-      alt = [{ p: price }, { ...inval, act: 'phá lên' }, { ...(above(inval.p) || fb(inval.p, 1)), act: 'tăng tiếp tới' }];
+    if (bias !== 0) {
+      const d = bias;
+      // sóng 0: giá đang xa EMA34 theo hướng xu hướng → hồi về EMA34 (hoặc FVG nằm giữa)
+      const ext = (p - e34) * d;
+      if (ext > 1.2 * a15) {
+        const mid = lv.filter(l => !used.has(l) && l.zone && (d > 0 ? l.type === 'S' : l.type === 'R') && (d > 0 ? l.p < p - 0.3 * a15 && l.p >= e34 : l.p > p + 0.3 * a15 && l.p <= e34))
+          .sort((x, y) => Math.abs(x.p - p) - Math.abs(y.p - p))[0];
+        if (mid) { used.add(mid); move(mid.p, 'pb', 'hồi ' + (d > 0 ? 'xuống' : 'lên') + ' lấp ' + mid.name, mid.tag); }
+        else move(e34 + d * 0.1 * a15, 'pb', 'hồi ' + (d > 0 ? 'xuống' : 'lên') + ' chạm EMA34 M15', 'EMA34');
+      } else if (ext < -0.3 * a15) {
+        // giá đang ở sai phía EMA34: cần lấy lại EMA34 trước
+        move(e34 + d * 0.3 * a15, 'imp', (d > 0 ? 'lấy lại' : 'mất') + ' EMA34 M15', 'EMA34');
+      }
+      for (let i = 0; i < 3; i++) {
+        const last = i === 2, tg = target(d, last) || target(d, false);
+        const A = p;
+        if (tg) { used.add(tg); move(tg.p, 'imp', (tg.liq ? (d > 0 ? 'tăng quét ' : 'giảm quét ') : (d > 0 ? 'tăng tới ' : 'giảm tới ')) + tg.name, tg.tag); }
+        else { move(p + d * 2 * a1, 'imp', (d > 0 ? 'tăng' : 'giảm') + ' mở rộng ~2 ATR H1', '2ATR'); }
+        if (!last) { const pbv = pullback(A, p); move(pbv.p, 'pb', (d > 0 ? 'hồi xuống ' : 'hồi lên ') + pbv.name, pbv.tag); }
+        if (!tg) break;
+      }
+      // mức vô hiệu: phía bên kia của cấu trúc gần nhất (vượt qua là kịch bản sai)
+      const ext0 = d > 0 ? Math.min(...waves.map(w => w.p)) : Math.max(...waves.map(w => w.p));
+      const iv = lv.filter(l => (d > 0 ? l.type === 'S' && l.p < ext0 - 0.3 * a15 : l.type === 'R' && l.p > ext0 + 0.3 * a15) && l.w >= 2).sort((x, y) => d > 0 ? y.p - x.p : x.p - y.p)[0];
+      inval = iv ? { p: iv.p, name: iv.name } : { p: ext0 - d * a1, name: d > 0 ? 'dưới đáy sóng gần nhất' : 'trên đỉnh sóng gần nhất' };
+      const nx = lv.filter(l => d > 0 ? l.type === 'S' && l.p < inval.p - MIN : l.type === 'R' && l.p > inval.p + MIN).sort((x, y) => d > 0 ? y.p - x.p : x.p - y.p)[0];
+      alt = [{ p: price, t: T }, { p: inval.p, name: (d > 0 ? 'phá xuống ' : 'phá lên ') + inval.name }, { p: nx ? nx.p : inval.p - d * 2 * a1, name: (d > 0 ? 'giảm tới ' : 'tăng tới ') + (nx ? nx.name : 'mở rộng 2 ATR H1') }];
+      let ta = T; alt = alt.map((x, i) => { if (i) ta += Math.max(2, Math.round(Math.abs(x.p - alt[i - 1].p) / (0.6 * a15))) * 9e5; return { ...x, t: ta }; });
     } else {
-      const r1 = above(price) || fb(price, 1), s1 = below(price) || fb(price, -1);
-      const first = (r1.p - price) < (price - s1.p) ? [r1, s1] : [s1, r1];
-      pts.push({ ...first[0], act: 'chạm' }, { ...first[1], act: 'quay về' }, { p: (r1.p + s1.p) / 2, name: 'giữa biên', act: 'đi ngang quanh' });
-      inval = null;
+      // đi ngang: dao động giữa hỗ trợ và kháng cự gần nhất
+      const r = target(1, false), s = target(-1, false);
+      const R = r ? r : { p: p + 1.5 * a15, name: 'biên trên', tag: 'biên' }, S2 = s ? s : { p: p - 1.5 * a15, name: 'biên dưới', tag: 'biên' };
+      const upFirst = R.p - p < p - S2.p;
+      const seq = upFirst ? [R, S2, R] : [S2, R, S2];
+      seq.forEach((x, i) => move(x.p, i % 2 ? 'pb' : 'imp', (x === R ? 'lên chạm ' : 'xuống chạm ') + x.name, x.tag));
+      move((R.p + S2.p) / 2, 'pb', 'về giữa biên chờ phá vỡ', 'giữa');
     }
-    // thời gian: mỗi đoạn ≈ |Δ| / (0.5 × ATR M15) nến M15
-    const timed = (arr) => { let t = T; return arr.map((x, i) => { if (i) t += Math.max(2, Math.round(Math.abs(x.p - arr[i - 1].p) / (0.5 * a15))) * 9e5; return { ...x, t }; }); };
-    return { bias, sum, factors: f, path: timed(pts), alt: alt.length ? timed(alt) : [], inval, levels: lv };
+    return { bias, sum, factors: f, path: waves, ema34, ema89, alt, inval, levels: lv };
   }
 
   // ---------------- API ----------------

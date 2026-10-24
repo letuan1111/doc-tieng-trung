@@ -304,10 +304,11 @@
     for (const [nm, v] of [['EMA34 M15', m15.e3[n]], ['EMA89 M15', m15.e2[n]], ['EMA34 H1', h1.e3[k1]], ['EMA89 H1', h1.e2[k1]], ['EMA89 H4', h4.e2[k4]]])
       lv.push({ p: v, type: v < price ? 'S' : 'R', w: 1.5, name: nm, ema: true });
     const gap = 0.3 * a15;
-    const below = (x, skip = 0) => lv.filter(l => l.p < x - gap).sort((p, q) => q.p - p.p)[skip] || null;
-    const above = (x, skip = 0) => lv.filter(l => l.p > x + gap).sort((p, q) => p.p - q.p)[skip] || null;
-    const strongAbove = (x) => lv.filter(l => l.p > x + gap && l.w >= 2).sort((p, q) => p.p - q.p)[0] || above(x);
-    const strongBelow = (x) => lv.filter(l => l.p < x - gap && l.w >= 2).sort((p, q) => q.p - p.p)[0] || below(x);
+    const isS = (l) => l.type === 'S' || l.ema, isR = (l) => l.type === 'R' || l.ema;
+    const below = (x, skip = 0) => lv.filter(l => isS(l) && l.p < x - gap).sort((p, q) => q.p - p.p)[skip] || null;
+    const above = (x, skip = 0) => lv.filter(l => isR(l) && l.p > x + gap).sort((p, q) => p.p - q.p)[skip] || null;
+    const strongAbove = (x) => lv.filter(l => isR(l) && l.p > x + gap && l.w >= 2).sort((p, q) => p.p - q.p)[0] || above(x);
+    const strongBelow = (x) => lv.filter(l => isS(l) && l.p < x - gap && l.w >= 2).sort((p, q) => q.p - p.p)[0] || below(x);
     const fb = (x, d) => ({ p: x + d * 2 * a1, name: 'mở rộng 2×ATR H1' });
     const pts = [{ p: price, name: 'Giá hiện tại' }];
     const ema34 = m15.e3[n];

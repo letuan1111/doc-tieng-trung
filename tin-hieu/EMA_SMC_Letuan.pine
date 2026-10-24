@@ -1,0 +1,613 @@
+//@version=6
+// =====================================================================
+//  EMA 24/89 + ICT/SMC — H4 → H1 → M15 → M5   (Letuan)
+//  • Vùng cản OB/FVG + thanh khoản BSL/SSL của M15, H1, H4
+//  • EMA 24 / 34 / 89
+//  • Tín hiệu BUY/SELL LIMIT: H1 hợp lệ + POI M15 + Sweep + MSS M5 (+FVG)
+//    kèm Entry, SL, TP1/2/3, điểm hợp lưu 100
+//  • Đường giá dự kiến theo EMA 34/89 + SMC
+//  Mọi dữ liệu khung lớn lấy từ nến ĐÃ ĐÓNG (không repaint).
+//  Dùng tốt nhất trên chart M5.
+// =====================================================================
+indicator("EMA 24/89 + ICT/SMC (Letuan)", shorttitle = "EMA·SMC", overlay = true, max_boxes_count = 300, max_lines_count = 400, max_labels_count = 300, max_bars_back = 1000)
+
+// ---------------- Cài đặt ----------------
+grpE = "EMA"
+emaF   = input.int(24, "EMA nhanh", group = grpE)
+emaM   = input.int(34, "EMA dự kiến", group = grpE)
+emaS   = input.int(89, "EMA chậm", group = grpE)
+atrLen = input.int(14, "ATR", group = grpE)
+showE  = input.bool(true, "Hiện EMA", group = grpE)
+
+grpZ = "Vùng cản"
+showZ15  = input.bool(true, "Vùng M15", group = grpZ)
+showZ60  = input.bool(true, "Vùng H1", group = grpZ)
+showZ240 = input.bool(true, "Vùng H4", group = grpZ)
+showLiq  = input.bool(true, "Thanh khoản BSL/SSL", group = grpZ)
+pivHTF   = input.int(3, "Pivot khung lớn (trái/phải)", group = grpZ)
+
+grpS = "Tín hiệu (thiết kế cho M5)"
+showSig   = input.bool(true, "Hiện tín hiệu", group = grpS)
+strict    = input.bool(true, "Chặt chẽ: bắt buộc FVG M5", group = grpS)
+entryMode = input.string("A — FVG 50%", "Kiểu Entry", options = ["A — FVG 50%", "B — Order Block"], group = grpS)
+minRR     = input.float(1.5, "RR tối thiểu tới TP1", step = 0.1, group = grpS)
+minScore  = input.int(85, "Điểm tối thiểu", group = grpS)
+gapMin    = input.float(0.20, "Khoảng cách EMA ≥ (ATR H1)", step = 0.05, group = grpS)
+slopeMin  = input.float(0.10, "Độ dốc EMA89 ≥ (ATR H1)", step = 0.05, group = grpS)
+dispATR   = input.float(1.2, "Displacement ≥ ATR", step = 0.1, group = grpS)
+dispBody  = input.float(0.6, "Thân nến displacement ≥", step = 0.05, group = grpS)
+bufMin    = input.float(0.8, "Buffer SL tối thiểu (giá)", step = 0.1, group = grpS)
+expiry    = input.int(36, "Hết hạn chờ retest (nến)", group = grpS)
+
+grpP = "Dự kiến"
+showProj = input.bool(true, "Đường giá dự kiến", group = grpP)
+showTbl  = input.bool(true, "Bảng dự kiến", group = grpP)
+
+cBull = color.new(#22c55e, 0)
+cBear = color.new(#f43f5e, 0)
+
+// ---------------- EMA ----------------
+plot(showE ? ta.ema(close, emaF) : na, "EMA 24", color = #3b82f6, linewidth = 2)
+plot(showE ? ta.ema(close, emaM) : na, "EMA 34", color = #06b6d4, linewidth = 1)
+plot(showE ? ta.ema(close, emaS) : na, "EMA 89", color = #eab308, linewidth = 2)
+
+// ---------------- Bối cảnh khung lớn (giá trị nến đã đóng) ----------------
+ctx() =>
+    e1 = ta.ema(close, emaF)
+    e2 = ta.ema(close, emaS)
+    e3 = ta.ema(close, emaM)
+    a  = ta.atr(atrLen)
+    ph = ta.pivothigh(high, pivHTF, pivHTF)
+    pl = ta.pivotlow(low, pivHTF, pivHTF)
+    var float sh  = na
+    var float sl  = na
+    var float sh1 = na
+    var float sl1 = na
+    var bool shB = true
+    var bool slB = true
+    var int dir = 0
+    if not na(ph)
+        sh1 := sh
+        sh  := ph
+        shB := false
+    if not na(pl)
+        sl1 := sl
+        sl  := pl
+        slB := false
+    if not shB and close > sh
+        shB := true
+        dir := 1
+    if not slB and close < sl
+        slB := true
+        dir := -1
+    bool hhhl = not na(sh1) and not na(sl1) and sh > sh1 and sl > sl1
+    bool lhll = not na(sh1) and not na(sl1) and sh < sh1 and sl < sl1
+    slope = (e2 - e2[5]) / a
+    [e1[1], e2[1], e3[1], slope[1], a[1], dir[1], hhhl[1], lhll[1]]
+
+[h1e1, h1e2, h1e3, h1slope, h1atr, h1dir, h1hhhl, h1lhll] = request.security(syminfo.tickerid, "60", ctx(), lookahead = barmerge.lookahead_on)
+[h4e1, h4e2, h4e3, h4slope, h4atr, h4dir, h4hhhl, h4lhll] = request.security(syminfo.tickerid, "240", ctx(), lookahead = barmerge.lookahead_on)
+[m15e1, m15e2, m15e3, m15slope, m15atr, m15dir, m15hhhl, m15lhll] = request.security(syminfo.tickerid, "15", ctx(), lookahead = barmerge.lookahead_on)
+
+// ---------------- Vùng OB/FVG + thanh khoản của một khung ----------------
+gf(array<float> arr, int k) =>
+    array.size(arr) > k ? array.get(arr, array.size(arr) - 1 - k) : na
+gi(array<int> arr, int k) =>
+    array.size(arr) > k ? array.get(arr, array.size(arr) - 1 - k) : na
+
+zones() =>
+    a  = ta.atr(atrLen)
+    ph = ta.pivothigh(high, pivHTF, pivHTF)
+    pl = ta.pivotlow(low, pivHTF, pivHTF)
+    var array<float> bT = array.new<float>()
+    var array<float> bB = array.new<float>()
+    var array<int>   bX = array.new<int>()
+    var array<float> sT = array.new<float>()
+    var array<float> sB = array.new<float>()
+    var array<int>   sX = array.new<int>()
+    var array<float> hP = array.new<float>()
+    var array<int>   hX = array.new<int>()
+    var array<float> lP = array.new<float>()
+    var array<int>   lX = array.new<int>()
+    var float sh = na
+    var float sl = na
+    var bool shB = true
+    var bool slB = true
+    if not na(ph)
+        sh  := ph
+        shB := false
+        array.push(hP, ph)
+        array.push(hX, time[pivHTF])
+    if not na(pl)
+        sl  := pl
+        slB := false
+        array.push(lP, pl)
+        array.push(lX, time[pivHTF])
+    bool bullBos = false
+    bool bearBos = false
+    if not shB and close > sh
+        shB := true
+        bullBos := true
+    if not slB and close < sl
+        slB := true
+        bearBos := true
+    // FVG
+    if low > high[2] and (low - high[2]) >= 0.05 * a
+        array.push(bT, low)
+        array.push(bB, high[2])
+        array.push(bX, time[2])
+    if high < low[2] and (low[2] - high) >= 0.05 * a
+        array.push(sT, low[2])
+        array.push(sB, high)
+        array.push(sX, time[2])
+    // Order Block: nến ngược hướng cuối cùng trước cú phá cấu trúc
+    if bullBos
+        for j = 1 to 15
+            if close[j] < open[j]
+                array.push(bT, high[j])
+                array.push(bB, low[j])
+                array.push(bX, time[j])
+                break
+    if bearBos
+        for j = 1 to 15
+            if close[j] > open[j]
+                array.push(sT, high[j])
+                array.push(sB, low[j])
+                array.push(sX, time[j])
+                break
+    // vô hiệu khi đóng cửa xuyên qua vùng
+    if array.size(bT) > 0
+        for i = array.size(bT) - 1 to 0
+            if close < array.get(bB, i)
+                array.remove(bT, i)
+                array.remove(bB, i)
+                array.remove(bX, i)
+    if array.size(sT) > 0
+        for i = array.size(sT) - 1 to 0
+            if close > array.get(sT, i)
+                array.remove(sT, i)
+                array.remove(sB, i)
+                array.remove(sX, i)
+    // thanh khoản bị lấy
+    if array.size(hP) > 0
+        for i = array.size(hP) - 1 to 0
+            if high > array.get(hP, i) and time - array.get(hX, i) > 0
+                array.remove(hP, i)
+                array.remove(hX, i)
+    if array.size(lP) > 0
+        for i = array.size(lP) - 1 to 0
+            if low < array.get(lP, i) and time - array.get(lX, i) > 0
+                array.remove(lP, i)
+                array.remove(lX, i)
+    while array.size(bT) > 12
+        array.shift(bT)
+        array.shift(bB)
+        array.shift(bX)
+    while array.size(sT) > 12
+        array.shift(sT)
+        array.shift(sB)
+        array.shift(sX)
+    while array.size(hP) > 12
+        array.shift(hP)
+        array.shift(hX)
+    while array.size(lP) > 12
+        array.shift(lP)
+        array.shift(lX)
+    b1t = gf(bT, 0), b1b = gf(bB, 0), b1x = gi(bX, 0)
+    b2t = gf(bT, 1), b2b = gf(bB, 1), b2x = gi(bX, 1)
+    b3t = gf(bT, 2), b3b = gf(bB, 2), b3x = gi(bX, 2)
+    s1t = gf(sT, 0), s1b = gf(sB, 0), s1x = gi(sX, 0)
+    s2t = gf(sT, 1), s2b = gf(sB, 1), s2x = gi(sX, 1)
+    s3t = gf(sT, 2), s3b = gf(sB, 2), s3x = gi(sX, 2)
+    h1p = gf(hP, 0), h1x = gi(hX, 0), h2p = gf(hP, 1), h2x = gi(hX, 1), h3p = gf(hP, 2), h3x = gi(hX, 2)
+    l1p = gf(lP, 0), l1x = gi(lX, 0), l2p = gf(lP, 1), l2x = gi(lX, 1), l3p = gf(lP, 2), l3x = gi(lX, 2)
+    [b1t[1], b1b[1], b1x[1], b2t[1], b2b[1], b2x[1], b3t[1], b3b[1], b3x[1], s1t[1], s1b[1], s1x[1], s2t[1], s2b[1], s2x[1], s3t[1], s3b[1], s3x[1], h1p[1], h1x[1], h2p[1], h2x[1], h3p[1], h3x[1], l1p[1], l1x[1], l2p[1], l2x[1], l3p[1], l3x[1]]
+
+[a_b1t, a_b1b, a_b1x, a_b2t, a_b2b, a_b2x, a_b3t, a_b3b, a_b3x, a_s1t, a_s1b, a_s1x, a_s2t, a_s2b, a_s2x, a_s3t, a_s3b, a_s3x, a_h1p, a_h1x, a_h2p, a_h2x, a_h3p, a_h3x, a_l1p, a_l1x, a_l2p, a_l2x, a_l3p, a_l3x] = request.security(syminfo.tickerid, "15", zones(), lookahead = barmerge.lookahead_on)
+[b_b1t, b_b1b, b_b1x, b_b2t, b_b2b, b_b2x, b_b3t, b_b3b, b_b3x, b_s1t, b_s1b, b_s1x, b_s2t, b_s2b, b_s2x, b_s3t, b_s3b, b_s3x, b_h1p, b_h1x, b_h2p, b_h2x, b_h3p, b_h3x, b_l1p, b_l1x, b_l2p, b_l2x, b_l3p, b_l3x] = request.security(syminfo.tickerid, "60", zones(), lookahead = barmerge.lookahead_on)
+[c_b1t, c_b1b, c_b1x, c_b2t, c_b2b, c_b2x, c_b3t, c_b3b, c_b3x, c_s1t, c_s1b, c_s1x, c_s2t, c_s2b, c_s2x, c_s3t, c_s3b, c_s3x, c_h1p, c_h1x, c_h2p, c_h2x, c_h3p, c_h3x, c_l1p, c_l1x, c_l2p, c_l2x, c_l3p, c_l3x] = request.security(syminfo.tickerid, "240", zones(), lookahead = barmerge.lookahead_on)
+
+// gom thành mảng (a = M15, b = H1, c = H4)
+bullT15 = array.from(a_b1t, a_b2t, a_b3t), bullB15 = array.from(a_b1b, a_b2b, a_b3b)
+bearT15 = array.from(a_s1t, a_s2t, a_s3t), bearB15 = array.from(a_s1b, a_s2b, a_s3b)
+bsl15 = array.from(a_h1p, a_h2p, a_h3p), ssl15 = array.from(a_l1p, a_l2p, a_l3p)
+bsl60 = array.from(b_h1p, b_h2p, b_h3p), ssl60 = array.from(b_l1p, b_l2p, b_l3p)
+bsl240 = array.from(c_h1p, c_h2p, c_h3p), ssl240 = array.from(c_l1p, c_l2p, c_l3p)
+
+neg(array<float> arr) =>
+    out = array.new<float>()
+    for i = 0 to array.size(arr) - 1
+        v = array.get(arr, i)
+        array.push(out, na(v) ? na : -v)
+    out
+
+nearestAbove(array<float> arr, float x) =>
+    float best = na
+    for i = 0 to array.size(arr) - 1
+        v = array.get(arr, i)
+        if not na(v) and not na(x) and v > x and (na(best) or v < best)
+            best := v
+    best
+
+f2(float v) => str.tostring(v, format.mintick)
+
+// ---------------- Tín hiệu: cùng một logic cho BUY (d=1) và SELL (d=-1, lật giá) ----------------
+runSide(int d, array<float> zT, array<float> zB, array<float> tp15, array<float> tp60, array<float> tp240, bool h1ok, bool h4conf, bool htfAgree, bool emaPart, int h1dirS) =>
+    H = d == 1 ? high : -low
+    L = d == 1 ? low : -high
+    C = d * close
+    O = d * open
+    a5 = ta.atr(atrLen)
+    low12 = ta.lowest(L, 12)
+    ph = ta.pivothigh(H, 3, 3)
+    pl = ta.pivotlow(L, 3, 3)
+    var float sh = na
+    var bool shB = true
+    var array<float> lows = array.new<float>()
+    var int sweepBar = na
+    var float sweepLow = na
+    var int touchBar = na
+    var float zTop = na
+    var float zBot = na
+    // trạng thái setup
+    var int st = 0
+    var int sBar = na
+    var float en = na
+    var float sl = na
+    var float t1 = na
+    var float t2 = na
+    var float t3 = na
+    var float rr1 = na
+    var line lE = na
+    var line lS = na
+    var line l1 = na
+    var line l2 = na
+    var line l3 = na
+    string side = d == 1 ? "BUY" : "SELL"
+    color col = d == 1 ? cBull : cBear
+    if not na(ph)
+        sh  := ph
+        shB := false
+    if not na(pl)
+        array.push(lows, pl)
+        if array.size(lows) > 8
+            array.shift(lows)
+    // quét thanh khoản (sweep) và đáy bị phá
+    if array.size(lows) > 0
+        for i = array.size(lows) - 1 to 0
+            p = array.get(lows, i)
+            if L < p and C > p
+                if na(sweepBar) or bar_index - sweepBar > 12 or L < sweepLow
+                    sweepLow := L
+                sweepBar := bar_index
+                array.remove(lows, i)
+            else if C < p
+                array.remove(lows, i)
+    if not na(sweepBar) and bar_index - sweepBar <= 12
+        sweepLow := math.min(sweepLow, L)
+    // chạm POI M15
+    for i = 0 to array.size(zT) - 1
+        zt = array.get(zT, i)
+        zb = array.get(zB, i)
+        if not na(zt) and not na(zb) and L <= zt and C >= zb - 0.25 * nz(m15atr, a5)
+            touchBar := bar_index
+            zTop := zt
+            zBot := zb
+    // MSS bằng nến displacement
+    rng  = H - L
+    body = C - O
+    bool brk  = not shB and C > sh
+    bool disp = body > 0 and rng > 0 and body >= dispBody * rng and rng >= dispATR * nz(a5[1], a5)
+    if brk
+        shB := true
+    bool mss = brk and disp
+    bool newSetup = false
+    if mss and st == 0 and showSig and timeframe.in_seconds() <= 300
+        bool hasSweep = not na(sweepBar) and bar_index - sweepBar <= 12
+        bool hasTouch = not na(touchBar) and bar_index - touchBar <= 48
+        bool fvg = L > H[2]
+        float fvgMid = fvg ? (L + H[2]) / 2 : na
+        float obTop = na
+        for j = 1 to 15
+            if C[j] < O[j]
+                obTop := O[j]
+                break
+        float entry = entryMode == "A — FVG 50%" and fvg ? fvgMid : (not na(obTop) ? obTop : fvgMid)
+        float lowRef = hasSweep ? sweepLow : low12
+        float slv = lowRef - math.max(0.15 * a5, bufMin)
+        float R = na(entry) ? na : entry - slv
+        float tp1 = na(R) or R <= 0 ? na : nearestAbove(tp15, entry + R)
+        float tp2 = na(R) or R <= 0 ? na : nearestAbove(tp60, na(tp1) ? entry + R : tp1)
+        float tp3 = na(R) or R <= 0 ? na : nearestAbove(tp240, na(tp2) ? (na(tp1) ? entry + R : tp1) : tp2)
+        if na(tp1)
+            tp1 := tp2
+            tp2 := tp3
+            tp3 := na
+        float rr = na(tp1) ? 0.0 : (tp1 - entry) / R
+        int score = (htfAgree ? 20 : (not h4conf and h1dirS == 1 ? 10 : 0)) + (h1ok ? 15 : (emaPart ? 7 : 0)) + (hasTouch ? 15 : 0) + (hasSweep ? 15 : 0) + 20 + (fvg ? 10 : 0) + (rr >= 2 ? 5 : 0)
+        bool pass = h1ok and not h4conf and hasTouch and hasSweep and (fvg or not strict) and not na(entry) and R > 0 and not na(tp1) and rr >= minRR and score >= (strict ? minScore : math.min(minScore, 75))
+        if pass
+            st := 1
+            sBar := bar_index
+            en := entry
+            sl := slv
+            t1 := tp1
+            t2 := tp2
+            t3 := tp3
+            rr1 := rr
+            newSetup := true
+            lE := line.new(bar_index, d * en, bar_index + 1, d * en, extend = extend.right, color = #a855f7, width = 2)
+            lS := line.new(bar_index, d * sl, bar_index + 1, d * sl, extend = extend.right, color = cBear, style = line.style_dashed, width = 2)
+            l1 := line.new(bar_index, d * t1, bar_index + 1, d * t1, extend = extend.right, color = cBull, style = line.style_dashed, width = 2)
+            if not na(t2)
+                l2 := line.new(bar_index, d * t2, bar_index + 1, d * t2, extend = extend.right, color = color.new(cBull, 40), style = line.style_dotted)
+            if not na(t3)
+                l3 := line.new(bar_index, d * t3, bar_index + 1, d * t3, extend = extend.right, color = color.new(cBull, 60), style = line.style_dotted)
+            txt = side + " LIMIT · " + str.tostring(score) + "đ\nEntry " + f2(d * en) + "\nSL " + f2(d * sl) + "\nTP1 " + f2(d * t1) + " (" + str.tostring(rr1, "#.##") + "R)" + (na(t2) ? "" : "\nTP2 " + f2(d * t2)) + (na(t3) ? "" : "\nTP3 " + f2(d * t3))
+            label.new(bar_index, d == 1 ? low : high, txt, style = d == 1 ? label.style_label_up : label.style_label_down, color = color.new(#a855f7, 10), textcolor = color.white, size = size.small)
+            alert(syminfo.ticker + " 🆕 " + side + " LIMIT " + f2(d * en) + " | SL " + f2(d * sl) + " | TP1 " + f2(d * t1) + " (" + str.tostring(rr1, "#.#") + "R) | " + str.tostring(score) + " điểm", alert.freq_once_per_bar_close)
+    // vòng đời setup
+    string endTxt = ""
+    color endCol = color.gray
+    if st == 1 and not newSetup
+        if L <= en
+            st := 2
+            alert(syminfo.ticker + " 🎯 " + side + " khớp tại " + f2(d * en), alert.freq_once_per_bar_close)
+            if L <= sl
+                endTxt := "SL ✗"
+                endCol := cBear
+        else if H >= t1
+            endTxt := "Huỷ: chạy tới TP1"
+        else if C < sl
+            endTxt := "Huỷ: phá mức vô hiệu"
+        else if bar_index - sBar > expiry
+            endTxt := "Huỷ: hết hạn"
+        else if h1dirS != 1
+            endTxt := "Huỷ: H1 đổi hướng"
+    else if st == 2
+        if L <= sl
+            endTxt := "SL ✗ −1R"
+            endCol := cBear
+        else if H >= t1
+            endTxt := "TP1 ✓ +" + str.tostring(rr1, "#.##") + "R"
+            endCol := cBull
+    if endTxt != ""
+        label.new(bar_index, d == 1 ? high : low, endTxt, style = d == 1 ? label.style_label_down : label.style_label_up, color = color.new(endCol, 20), textcolor = color.white, size = size.tiny)
+        if str.contains(endTxt, "TP1") or str.contains(endTxt, "SL")
+            alert(syminfo.ticker + " " + side + " " + endTxt, alert.freq_once_per_bar_close)
+        for ln in array.from(lE, lS, l1, l2, l3)
+            if not na(ln)
+                line.set_extend(ln, extend.none)
+                line.set_x2(ln, bar_index)
+        st := 0
+        lE := na
+        lS := na
+        l1 := na
+        l2 := na
+        l3 := na
+    [st, d * en, d * sl, d * t1]
+
+// bối cảnh theo từng phía
+h1gap = math.abs(h1e1 - h1e2) / h1atr
+bool buyH1ok  = h1e1 > h1e2 and h1gap >= gapMin and h1slope >= slopeMin and h1dir == 1
+bool buyH4c   = h4dir == -1 and h4e1 < h4e2
+bool buyAgree = h4dir == 1 and h4e1 > h4e2 and h1hhhl
+bool sellH1ok  = h1e1 < h1e2 and h1gap >= gapMin and -h1slope >= slopeMin and h1dir == -1
+bool sellH4c   = h4dir == 1 and h4e1 > h4e2
+bool sellAgree = h4dir == -1 and h4e1 < h4e2 and h1lhll
+
+[bSt, bEn, bSl, bT1] = runSide(1, bullT15, bullB15, bsl15, bsl60, bsl240, buyH1ok, buyH4c, buyAgree, h1e1 > h1e2, h1dir)
+[sSt, sEn, sSl, sT1] = runSide(-1, neg(bearB15), neg(bearT15), neg(ssl15), neg(ssl60), neg(ssl240), sellH1ok, sellH4c, sellAgree, h1e1 < h1e2, -h1dir)
+
+// ---------------- Vẽ vùng cản + thanh khoản (trên nến cuối) ----------------
+var array<box>   zBoxes = array.new<box>()
+var array<line>  zLines = array.new<line>()
+var array<label> zLabs  = array.new<label>()
+
+drawZone(array<box> store, float top, float bot, int t, color c, int transp, string txt) =>
+    if not na(top) and not na(bot) and not na(t)
+        array.push(store, box.new(left = t, top = top, right = time, bottom = bot, xloc = xloc.bar_time, extend = extend.right, border_color = color.new(c, 30), bgcolor = color.new(c, transp), text = txt, text_size = size.tiny, text_color = color.new(c, 0), text_halign = text.align_left, text_valign = text.align_top))
+
+drawLiq(array<line> sl, array<label> sb, float p, int t, color c, string txt, int w) =>
+    if not na(p) and not na(t)
+        array.push(sl, line.new(t, p, time, p, xloc = xloc.bar_time, extend = extend.right, color = color.new(c, 20), style = line.style_dotted, width = w))
+        array.push(sb, label.new(t, p, txt + " " + f2(p), xloc = xloc.bar_time, style = label.style_none, textcolor = c, size = size.tiny))
+
+if barstate.islast
+    for b in zBoxes
+        box.delete(b)
+    for l in zLines
+        line.delete(l)
+    for lb in zLabs
+        label.delete(lb)
+    array.clear(zBoxes)
+    array.clear(zLines)
+    array.clear(zLabs)
+    if showZ240
+        drawZone(zBoxes, c_b1t, c_b1b, c_b1x, cBull, 78, "OB/FVG H4")
+        drawZone(zBoxes, c_b2t, c_b2b, c_b2x, cBull, 78, "OB/FVG H4")
+        drawZone(zBoxes, c_b3t, c_b3b, c_b3x, cBull, 78, "OB/FVG H4")
+        drawZone(zBoxes, c_s1t, c_s1b, c_s1x, cBear, 78, "OB/FVG H4")
+        drawZone(zBoxes, c_s2t, c_s2b, c_s2x, cBear, 78, "OB/FVG H4")
+        drawZone(zBoxes, c_s3t, c_s3b, c_s3x, cBear, 78, "OB/FVG H4")
+    if showZ60
+        drawZone(zBoxes, b_b1t, b_b1b, b_b1x, cBull, 85, "OB/FVG H1")
+        drawZone(zBoxes, b_b2t, b_b2b, b_b2x, cBull, 85, "OB/FVG H1")
+        drawZone(zBoxes, b_b3t, b_b3b, b_b3x, cBull, 85, "OB/FVG H1")
+        drawZone(zBoxes, b_s1t, b_s1b, b_s1x, cBear, 85, "OB/FVG H1")
+        drawZone(zBoxes, b_s2t, b_s2b, b_s2x, cBear, 85, "OB/FVG H1")
+        drawZone(zBoxes, b_s3t, b_s3b, b_s3x, cBear, 85, "OB/FVG H1")
+    if showZ15
+        drawZone(zBoxes, a_b1t, a_b1b, a_b1x, cBull, 90, "OB/FVG M15")
+        drawZone(zBoxes, a_b2t, a_b2b, a_b2x, cBull, 90, "OB/FVG M15")
+        drawZone(zBoxes, a_b3t, a_b3b, a_b3x, cBull, 90, "OB/FVG M15")
+        drawZone(zBoxes, a_s1t, a_s1b, a_s1x, cBear, 90, "OB/FVG M15")
+        drawZone(zBoxes, a_s2t, a_s2b, a_s2x, cBear, 90, "OB/FVG M15")
+        drawZone(zBoxes, a_s3t, a_s3b, a_s3x, cBear, 90, "OB/FVG M15")
+    if showLiq
+        drawLiq(zLines, zLabs, c_h1p, c_h1x, cBear, "BSL H4", 2)
+        drawLiq(zLines, zLabs, c_h2p, c_h2x, cBear, "BSL H4", 2)
+        drawLiq(zLines, zLabs, c_l1p, c_l1x, cBull, "SSL H4", 2)
+        drawLiq(zLines, zLabs, c_l2p, c_l2x, cBull, "SSL H4", 2)
+        drawLiq(zLines, zLabs, b_h1p, b_h1x, cBear, "BSL H1", 1)
+        drawLiq(zLines, zLabs, b_h2p, b_h2x, cBear, "BSL H1", 1)
+        drawLiq(zLines, zLabs, b_l1p, b_l1x, cBull, "SSL H1", 1)
+        drawLiq(zLines, zLabs, b_l2p, b_l2x, cBull, "SSL H1", 1)
+        drawLiq(zLines, zLabs, a_h1p, a_h1x, cBear, "BSL M15", 1)
+        drawLiq(zLines, zLabs, a_l1p, a_l1x, cBull, "SSL M15", 1)
+
+// ---------------- Đường giá dự kiến: EMA 34/89 + SMC ----------------
+var array<float>  lvP = array.new<float>()
+var array<int>    lvT = array.new<int>()     // 1 = hỗ trợ, -1 = kháng cự, 0 = EMA
+var array<float>  lvW = array.new<float>()
+var array<string> lvN = array.new<string>()
+var array<line>   pLines = array.new<line>()
+var array<label>  pLabs  = array.new<label>()
+var table tbl = table.new(position.top_right, 1, 9, bgcolor = color.new(#151b23, 5), border_color = #2a3441, border_width = 1)
+
+addLv(float p, int tp, float w, string n) =>
+    if not na(p)
+        array.push(lvP, p)
+        array.push(lvT, tp)
+        array.push(lvW, w)
+        array.push(lvN, n)
+
+// tìm mức gần nhất: dir = 1 phía trên (kháng cự), -1 phía dưới (hỗ trợ); strong = chỉ H1/H4
+pick(float x, int dir, float gap, bool strong) =>
+    float bp = na
+    string bn = ""
+    for i = 0 to array.size(lvP) - 1
+        p  = array.get(lvP, i)
+        tp = array.get(lvT, i)
+        w  = array.get(lvW, i)
+        okType = tp == 0 or (dir == 1 and tp == -1) or (dir == -1 and tp == 1)
+        okW = not strong or w >= 2
+        if okType and okW and ((dir == 1 and p > x + gap) or (dir == -1 and p < x - gap))
+            if na(bp) or (dir == 1 and p < bp) or (dir == -1 and p > bp)
+                bp := p
+                bn := array.get(lvN, i)
+    [bp, bn]
+
+if barstate.islast and (showProj or showTbl)
+    for l in pLines
+        line.delete(l)
+    for lb in pLabs
+        label.delete(lb)
+    array.clear(pLines)
+    array.clear(pLabs)
+    array.clear(lvP)
+    array.clear(lvT)
+    array.clear(lvW)
+    array.clear(lvN)
+    // hỗ trợ / kháng cự
+    for i = 0 to 2
+        addLv(array.get(bullT15, i), 1, 1, "OB/FVG tăng M15")
+        addLv(array.get(bearB15, i), -1, 1, "OB/FVG giảm M15")
+        addLv(array.get(bsl15, i), -1, 1, "BSL M15")
+        addLv(array.get(ssl15, i), 1, 1, "SSL M15")
+        addLv(array.get(bsl60, i), -1, 2, "BSL H1")
+        addLv(array.get(ssl60, i), 1, 2, "SSL H1")
+        addLv(array.get(bsl240, i), -1, 3, "BSL H4")
+        addLv(array.get(ssl240, i), 1, 3, "SSL H4")
+    addLv(b_b1t, 1, 2, "OB/FVG tăng H1")
+    addLv(b_b2t, 1, 2, "OB/FVG tăng H1")
+    addLv(b_s1b, -1, 2, "OB/FVG giảm H1")
+    addLv(b_s2b, -1, 2, "OB/FVG giảm H1")
+    addLv(c_b1t, 1, 3, "OB/FVG tăng H4")
+    addLv(c_b2t, 1, 3, "OB/FVG tăng H4")
+    addLv(c_s1b, -1, 3, "OB/FVG giảm H4")
+    addLv(c_s2b, -1, 3, "OB/FVG giảm H4")
+    addLv(m15e3, 0, 1.5, "EMA34 M15")
+    addLv(m15e2, 0, 1.5, "EMA89 M15")
+    addLv(h1e3, 0, 1.5, "EMA34 H1")
+    addLv(h1e2, 0, 1.5, "EMA89 H1")
+    addLv(h4e2, 0, 1.5, "EMA89 H4")
+    // điểm xu hướng
+    int f1 = h4e3 > h4e2 ? 1 : -1
+    int f2v = h1e3 > h1e2 ? 1 : -1
+    int f3 = m15e3 > m15e2 ? 1 : -1
+    int f4 = close > h1e2 ? 1 : -1
+    int f5 = h1dir
+    int f6 = h4dir
+    int sc = f1 + f2v + f3 + f4 + f5 + f6
+    int bias = sc >= 2 ? 1 : sc <= -2 ? -1 : 0
+    a15 = nz(m15atr, ta.atr(atrLen))
+    ah1 = nz(h1atr, a15 * 2)
+    gap = 0.3 * a15
+    array<float>  pp = array.from(close)
+    array<string> pn = array.from("Giá hiện tại")
+    float inv = na
+    string invN = ""
+    if bias == 1
+        if close - m15e3 > a15
+            [p1, n1] = pick(close, -1, gap, false)
+            array.push(pp, na(p1) ? m15e3 : p1)
+            array.push(pn, "hồi về " + (na(p1) ? "EMA34 M15" : n1))
+        [r1, rn1] = pick(close, 1, gap, false)
+        float r1v = na(r1) ? close + 2 * ah1 : r1
+        float base = array.get(pp, array.size(pp) - 1)
+        array.push(pp, r1v)
+        array.push(pn, "tăng tới " + (na(r1) ? "+2 ATR H1" : rn1))
+        array.push(pp, r1v - 0.382 * (r1v - base))
+        array.push(pn, "điều chỉnh 38.2%")
+        [r2, rn2] = pick(r1v, 1, gap, true)
+        array.push(pp, na(r2) ? r1v + 2 * ah1 : r2)
+        array.push(pn, "tiếp tục tới " + (na(r2) ? "+2 ATR H1" : rn2))
+        [iv, ivn] = pick(array.min(pp), -1, gap, true)
+        inv := na(iv) ? array.min(pp) - ah1 : iv
+        invN := na(iv) ? "dưới đáy gần nhất" : ivn
+    else if bias == -1
+        if m15e3 - close > a15
+            [p1, n1] = pick(close, 1, gap, false)
+            array.push(pp, na(p1) ? m15e3 : p1)
+            array.push(pn, "hồi lên " + (na(p1) ? "EMA34 M15" : n1))
+        [s1, sn1] = pick(close, -1, gap, false)
+        float s1v = na(s1) ? close - 2 * ah1 : s1
+        float base = array.get(pp, array.size(pp) - 1)
+        array.push(pp, s1v)
+        array.push(pn, "giảm tới " + (na(s1) ? "−2 ATR H1" : sn1))
+        array.push(pp, s1v + 0.382 * (base - s1v))
+        array.push(pn, "điều chỉnh 38.2%")
+        [s2, sn2] = pick(s1v, -1, gap, true)
+        array.push(pp, na(s2) ? s1v - 2 * ah1 : s2)
+        array.push(pn, "tiếp tục tới " + (na(s2) ? "−2 ATR H1" : sn2))
+        [iv, ivn] = pick(array.max(pp), 1, gap, true)
+        inv := na(iv) ? array.max(pp) + ah1 : iv
+        invN := na(iv) ? "trên đỉnh gần nhất" : ivn
+    else
+        [r1, rn1] = pick(close, 1, gap, false)
+        [s1, sn1] = pick(close, -1, gap, false)
+        float r1v = na(r1) ? close + 2 * ah1 : r1
+        float s1v = na(s1) ? close - 2 * ah1 : s1
+        bool upFirst = r1v - close < close - s1v
+        array.push(pp, upFirst ? r1v : s1v)
+        array.push(pn, "chạm " + (upFirst ? rn1 : sn1))
+        array.push(pp, upFirst ? s1v : r1v)
+        array.push(pn, "quay về " + (upFirst ? sn1 : rn1))
+        array.push(pp, (r1v + s1v) / 2)
+        array.push(pn, "đi ngang giữa biên")
+    // vẽ: mỗi đoạn ≈ |Δ| / (0.5 × ATR M15) nến M15
+    color pc = bias == 1 ? #4ade80 : bias == -1 ? #fb7185 : #e5e7eb
+    int t = time
+    array<int> tt = array.from(t)
+    for i = 1 to array.size(pp) - 1
+        int legs = math.max(2, math.round(math.abs(array.get(pp, i) - array.get(pp, i - 1)) / (0.5 * a15)))
+        t += legs * 900000
+        array.push(tt, t)
+    if showProj
+        for i = 1 to array.size(pp) - 1
+            array.push(pLines, line.new(array.get(tt, i - 1), array.get(pp, i - 1), array.get(tt, i), array.get(pp, i), xloc = xloc.bar_time, color = pc, style = line.style_dashed, width = 2))
+            array.push(pLabs, label.new(array.get(tt, i), array.get(pp, i), f2(array.get(pp, i)), xloc = xloc.bar_time, style = label.style_none, textcolor = pc, size = size.small))
+        if not na(inv)
+            array.push(pLines, line.new(time, inv, array.get(tt, array.size(tt) - 1), inv, xloc = xloc.bar_time, color = #f59e0b, style = line.style_dotted, width = 1))
+            array.push(pLabs, label.new(time, inv, "Vô hiệu " + f2(inv), xloc = xloc.bar_time, style = label.style_none, textcolor = #f59e0b, size = size.tiny))
+    if showTbl
+        table.clear(tbl, 0, 0, 0, 8)
+        string bt = bias == 1 ? "THIÊN TĂNG" : bias == -1 ? "THIÊN GIẢM" : "ĐI NGANG"
+        table.cell(tbl, 0, 0, "Dự kiến: " + bt + " (" + (sc > 0 ? "+" : "") + str.tostring(sc) + "/6)", text_color = pc, text_size = size.small, text_halign = text.align_left)
+        for i = 1 to array.size(pp) - 1
+            table.cell(tbl, 0, i, str.tostring(i) + ". " + array.get(pn, i) + "  " + f2(array.get(pp, i)), text_color = color.white, text_size = size.small, text_halign = text.align_left)
+        string sigTxt = bSt > 0 ? "BUY LIMIT " + f2(bEn) + " · SL " + f2(bSl) + " · TP1 " + f2(bT1) : sSt > 0 ? "SELL LIMIT " + f2(sEn) + " · SL " + f2(sSl) + " · TP1 " + f2(sT1) : "Chưa có tín hiệu (đứng ngoài)"
+        table.cell(tbl, 0, 6, na(inv) ? "" : "Vô hiệu: " + f2(inv) + " (" + invN + ")", text_color = #f59e0b, text_size = size.small, text_halign = text.align_left)
+        table.cell(tbl, 0, 7, sigTxt, text_color = bSt > 0 ? cBull : sSt > 0 ? cBear : color.gray, text_size = size.small, text_halign = text.align_left)
+        table.cell(tbl, 0, 8, timeframe.in_seconds() <= 300 ? "" : "⚠ Tín hiệu chỉ chạy trên khung ≤ M5", text_color = color.orange, text_size = size.tiny, text_halign = text.align_left)

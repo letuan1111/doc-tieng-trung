@@ -168,16 +168,28 @@
           <div class="row" style="justify-content:center;margin-top:10px"><label class="btn sm">Chọn file<input type="file" id="fFiles" multiple accept=".pdf,.mp3,.m4a,.wav,audio/*,application/pdf" hidden></label>
           <label class="btn sm">Chọn cả thư mục<input type="file" id="fDir" webkitdirectory multiple hidden></label></div></div>
           <p class="muted small" style="margin-bottom:0">Có thể tải nhiều bộ cùng lúc (web tự nhóm theo mã đề, VD H11003). Không có file mp3? Tải đề lên rồi bấm “Gắn link YouTube”. Đề được lưu ngay trên máy/trình duyệt này.</p></div>
+        <div class="card"><h2 style="margin-top:0">▶ Thi bằng video YouTube</h2><p class="muted small">Dán link video đề thi HSK trên YouTube (video có hiện câu hỏi). Web tạo phiếu trả lời 40 câu + đồng hồ; nhập đáp án để được chấm điểm.</p>
+          <input id="ytNew" placeholder="https://www.youtube.com/watch?v=..." style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit">
+          <input id="ytName" placeholder="Tên bộ đề (VD: HSK1 đề 5)" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;margin-top:8px">
+          <p id="ytNewMsg" class="small" style="color:var(--bad);margin:6px 0 0"></p>
+          <button class="btn pri" id="ytNewBtn" style="margin-top:8px">Tạo bài thi từ YouTube</button></div>
       </div>
       <h2>Bộ đề của bạn</h2>
       ${mine.length ? '<div class="grid">' + mine.map(s => `<div class="card set"><h3>${esc(s.name)}</h3>
-          <div class="muted small">${s.pages.length} trang đề · ${s.yt ? '▶ nghe qua YouTube' : s.audio ? '🔊 có file nghe' : '⚠ chưa có file nghe'} · ${s.key.filter(Boolean).length}/40 đáp án${s.transcript && s.transcript.length ? ' · có lời thoại' : ''}</div>
+          <div class="muted small">${s.pages.length ? s.pages.length + ' trang đề' : 'đề trong video'} · ${s.yt ? '▶ nghe qua YouTube' : s.audio ? '🔊 có file nghe' : '⚠ chưa có file nghe'} · ${s.key.filter(Boolean).length}/40 đáp án${s.transcript && s.transcript.length ? ' · có lời thoại' : ''}</div>
           ${best(s.id) != null ? `<div style="margin-top:6px"><span class="badge ${best(s.id) >= 120 ? 'ok' : 'bad'}">Cao nhất: ${best(s.id)}/200</span> <span class="muted small">${(hist[s.id] || []).length} lần thi</span></div>` : ''}
           <div class="row"><button class="btn pri sm" data-go="${s.id}">Bắt đầu thi</button><button class="btn sm" data-yt="${s.id}">${s.yt ? 'Đổi link YouTube' : 'Gắn link YouTube'}</button><button class="btn sm" data-key="${s.id}">Đáp án</button>${s.transcript && s.transcript.length ? `<button class="btn sm" data-tr="${s.id}">Lời thoại</button>` : ''}<button class="btn sm" data-del="${s.id}">Xoá</button></div></div>`).join('') + '</div>'
         : '<p class="muted">Chưa có bộ đề nào. Hãy tải lên 4 file của một bộ đề.</p>'}
       ${gens.length ? '<h2>Đề tự sinh đã làm</h2><div class="grid">' + gens.map(s => `<div class="card set"><h3>${esc(s.name)}</h3>${best(s.id) != null ? `<span class="badge ${best(s.id) >= 120 ? 'ok' : 'bad'}">${best(s.id)}/200</span>` : ''}<div class="row"><button class="btn sm" data-go="${s.id}">Làm lại</button><button class="btn sm" data-del="${s.id}">Xoá</button></div></div>`).join('') + '</div>' : ''}
       <p class="muted small" style="margin-top:28px">Điểm HSK1: mỗi câu 5 điểm, nghe 100 + đọc 100 = 200; đạt từ 120 điểm. Đề tải lên chỉ lưu trên trình duyệt này, không gửi đi đâu.</p>`;
     $('#genBtn').onclick = () => examGen(HSK1.generate());
+    $('#ytNewBtn').onclick = async () => {
+      const v = parseYT($('#ytNew').value);
+      if (!v) { $('#ytNewMsg').textContent = 'Link chưa đúng – hãy dán link video YouTube.'; return; }
+      const nm = $('#ytName').value.trim() || 'Đề YouTube ' + new Date().toLocaleDateString('vi-VN');
+      const st = { id: 'yt-' + v.id + '-' + Date.now(), code: 'YouTube', name: nm, created: Date.now(), pages: [], transcript: [], audio: null, yt: v, key: new Array(40).fill(null) };
+      await DB.put(st); toast('Đã tạo bài thi. Nhập đáp án để được chấm điểm (có thể nhập sau).'); keyEditor(st);
+    };
     const take = (fl) => fl && fl.length && importFiles([...fl]);
     $('#fFiles').onchange = (e) => take(e.target.files);
     $('#fDir').onchange = (e) => take(e.target.files);
@@ -273,7 +285,7 @@
         <p class="muted small">Bấm “Bắt đầu” để chạy đồng hồ và phát file nghe. Chọn đáp án trên phiếu trả lời; bấm “Nộp bài” khi xong (hết giờ sẽ tự nộp).</p>
         <button class="btn pri" id="start">▶ Bắt đầu thi</button></div>
       <div class="exam hide" id="ex">
-        <div>${s.yt ? `<div class="audiobox"><div class="small muted" style="margin-bottom:6px">▶ File nghe từ YouTube${aUrl ? ' · <button class="btn sm" id="useMp3" type="button">Dùng file mp3</button>' : ''}</div><div style="aspect-ratio:16/5;max-height:140px;border-radius:10px;overflow:hidden;background:#000"><div id="ytp" style="width:100%;height:100%"></div></div></div>` : aUrl ? `<div class="audiobox"><div class="small muted" style="margin-bottom:4px">🔊 File nghe: ${esc(s.audioName)}</div><audio id="au" controls preload="auto" src="${aUrl}"></audio></div>` : '<p class="muted">⚠ Bộ đề chưa có file nghe.</p>'}
+        <div>${s.yt ? `<div class="audiobox"><div class="small muted" style="margin-bottom:6px">▶ File nghe từ YouTube${aUrl ? ' · <button class="btn sm" id="useMp3" type="button">Dùng file mp3</button>' : ''}</div><div style="${s.pages.length ? 'aspect-ratio:16/5;max-height:140px' : 'aspect-ratio:16/9'};border-radius:10px;overflow:hidden;background:#000"><div id="ytp" style="width:100%;height:100%"></div></div></div>` : aUrl ? `<div class="audiobox"><div class="small muted" style="margin-bottom:4px">🔊 File nghe: ${esc(s.audioName)}</div><audio id="au" controls preload="auto" src="${aUrl}"></audio></div>` : '<p class="muted">⚠ Bộ đề chưa có file nghe.</p>'}
           <div class="pages">${s.pages.map((b, i) => `<img id="pg${i}" src="${objURL(b)}" alt="Trang ${i + 1}" loading="lazy">`).join('')}</div></div>
         <aside class="card sheet" id="sheet"><div class="handle" id="hdl"><span>📝 Phiếu trả lời <span id="cnt">0/40</span></span><span>▲</span></div>
           ${PDF_PARTS.map(([a, b, t]) => `<div class="ptitle">${t}</div>` + Array.from({ length: b - a + 1 }, (_, k) => a + k).map(n => `<div class="qrow"><b>${n}.</b>${OPTS[qType(n)].map(o => `<button class="op" data-n="${n}" data-v="${o}">${lab(o)}</button>`).join('')}</div>`).join('')).join('')}

@@ -33,6 +33,61 @@
     }
     return out;
   }
+  async function renderRange(pdf, list, onp) { // list = số trang (bắt đầu từ 1)
+    const out = [];
+    for (let k = 0; k < list.length; k++) {
+      const pg = await pdf.getPage(list[k]), vp0 = pg.getViewport({ scale: 1 }), sc = Math.min(2.4, 1300 / vp0.width), vp = pg.getViewport({ scale: sc });
+      const cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+      const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+      await pg.render({ canvasContext: g, viewport: vp }).promise;
+      out.push(await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.8)));
+      cv.width = cv.height = 0; onp && onp(k + 1, list.length);
+    }
+    return out;
+  }
+  const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+  // Sách nhiều đề đã biết cấu trúc: web tự tách đề + có sẵn đáp án
+  const BOOKS = [{
+    id: 'hsk1-wj', name: 'Sách HSK1 (王江)', pages: 173, tests: 10, first: 19, step: 10, len: 10, cover: true,
+    tr: [119, 122, 125, 129, 132, 136, 139, 142, 146, 149, 152],
+    keys: ['NYYNNABABCFCADEABCBANNYNYEFDCADBFAEDACFB','NNNYNCBAABCEFBABCBCBYNNYYFABEDCAEFBFABCD','YYNNNABBABCDAFBBACCANYYNNDACFBFEBADCADFB','NYNNYCABBBDAFBEABCBANYNYNBECFAEDAFBCADFB','NNYNYBCBBBEAFBCBBCACNYNNYBCADEEDFACDACFB','YYNNNACBCACABDEBBACAYNYNNDBEAFDFACEDBFAC','NNYNNACBACDAFCBCBABCNYNYYDAFBCCDFABBDFAC','NNNYYACBBCBDFAEABACBNNYYYCABDEDFBEABADFC','NNYNYACCBCAEFBCCBBBANNNYYCFEADDFCAEADBFC','NYNYNAABACCFAEDBBAACNNYYNDAEBFDEBACCDFBA'],
+  }];
+  async function importBook(pdf, prof, msg) {
+    const out = [], base = Date.now();
+    for (let t = 0; t < prof.tests; t++) {
+      const st = prof.first + prof.step * t, pages = range(st + (prof.cover ? 1 : 0), st + prof.len - 1);
+      const trp = prof.tr ? range(prof.tr[t], prof.tr[t + 1]) : [];
+      const total = pages.length + trp.length;
+      const P = await renderRange(pdf, pages, (i) => msg(`Đề ${t + 1}/${prof.tests}: trang ${i}/${pages.length}`, (t + i / total) / prof.tests));
+      const T = trp.length ? await renderRange(pdf, trp, (i) => msg(`Đề ${t + 1}/${prof.tests}: lời thoại ${i}/${trp.length}`, (t + (pages.length + i) / total) / prof.tests)) : [];
+      const s = { id: 'book-' + prof.id + '-' + (t + 1), code: 'Đề ' + (t + 1), name: prof.name + ' · Đề ' + (t + 1), created: base - t, pages: P, transcript: T, audio: null, audioName: '',
+        key: prof.keys && prof.keys[t] ? prof.keys[t].split('') : new Array(40).fill(null), trNote: prof.tr ? 'Lời thoại gồm cả phần cuối đề trước/đầu đề sau' : '' };
+      await DB.put(s); out.push(s);
+    }
+    return out;
+  }
+  // chia sách lạ theo số trang
+  function askSplit(pdf, file) {
+    return new Promise(res => {
+      const n = pdf.numPages;
+      overlay(`<h2 style="margin-top:0">Chia sách thành các đề</h2><p class="muted small">File “${esc(file.name)}” có ${n} trang. Nhập vị trí các đề (xem số trang trong trình đọc PDF). Đáp án nhập sau bằng nút “Đáp án” trên mỗi đề.</p>
+        <div class="keygrid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
+          <label>Tên sách <input id="spName" value="${esc(file.name.replace(/\.pdf$/i, ''))}" style="flex:1;padding:6px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink)"></label>
+          <label>Số đề <input id="spN" type="number" min="1" value="10" style="width:70px;padding:6px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink)"></label>
+          <label>Đề 1 bắt đầu ở trang <input id="spFirst" type="number" min="1" max="${n}" value="1" style="width:70px;padding:6px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink)"></label>
+          <label>Mỗi đề dài (trang) <input id="spLen" type="number" min="1" value="10" style="width:70px;padding:6px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink)"></label>
+          <label><input id="spCover" type="checkbox" checked> Bỏ trang bìa đầu mỗi đề</label>
+        </div><p id="spMsg" class="small" style="color:var(--bad)"></p>
+        <div class="row" style="justify-content:flex-end"><button class="btn" id="spCancel">Huỷ</button><button class="btn pri" id="spGo">Tách đề</button></div>`);
+      $('#spCancel').onclick = () => { closeOv(); res(null); };
+      $('#spGo').onclick = () => {
+        const tests = +$('#spN').value, first = +$('#spFirst').value, len = +$('#spLen').value;
+        if (!(tests >= 1 && first >= 1 && len >= 1) || first + tests * len - 1 > n) { $('#spMsg').textContent = 'Số trang vượt quá ' + n + ' trang của file – hãy kiểm tra lại.'; return; }
+        res({ id: 'custom-' + Date.now(), name: $('#spName').value.trim() || file.name, tests, first, step: len, len, cover: $('#spCover').checked });
+      };
+    });
+  }
+
   async function pdfText(file) {
     const pdf = await openPdf(file); let s = '';
     for (let i = 1; i <= pdf.numPages; i++) { const tc = await (await pdf.getPage(i)).getTextContent(); s += tc.items.map(x => x.str).join(' ') + '\n'; }
@@ -170,7 +225,7 @@
         <div class="card"><h2 style="margin-top:0">🎲 Đề HSK1 tự sinh</h2><p class="muted small">Mỗi lần bấm là một đề mới: 20 câu nghe (giọng AI chuẩn, thu sẵn) + 20 câu đọc, có tranh, pinyin và giải thích tiếng Việt.</p>
           <button class="btn pri" id="genBtn">Tạo đề mới & thi</button></div>
         <div class="card"><h2 style="margin-top:0">📤 Tải bộ đề lên</h2>
-          <div class="drop" id="drop"><div>Kéo thả file vào đây</div><div class="muted small">Đề .pdf · Đáp án (tên có “答案”) · Lời thoại (“听力材料”) · File nghe .mp3</div>
+          <div class="drop" id="drop"><div>Kéo thả file vào đây</div><div class="muted small">Đề .pdf · Đáp án (tên có “答案”) · Lời thoại (“听力材料”) · File nghe .mp3 · hoặc cả cuốn sách nhiều đề (.pdf)</div>
           <div class="row" style="justify-content:center;margin-top:10px"><label class="btn sm">Chọn file<input type="file" id="fFiles" multiple accept=".pdf,.mp3,.m4a,.wav,audio/*,application/pdf" hidden></label>
           <label class="btn sm">Chọn cả thư mục<input type="file" id="fDir" webkitdirectory multiple hidden></label></div></div>
           <p class="muted small" style="margin-bottom:0">Có thể tải nhiều bộ cùng lúc (web tự nhóm theo mã đề, VD H11003). Không có file mp3? Tải đề lên rồi bấm “Gắn link YouTube”. Đề được lưu ngay trên máy/trình duyệt này.</p></div>
@@ -180,7 +235,7 @@
       ${mine.length ? '<div class="grid">' + mine.map(s => `<div class="card set"><h3>${esc(s.name)}</h3>
           <div class="muted small">${s.pages.length ? s.pages.length + ' trang đề' : 'đề trong video'} · ${s.yt ? '▶ nghe qua YouTube' : s.audio ? '🔊 có file nghe' : '⚠ chưa có file nghe'} · ${s.key.filter(Boolean).length}/40 đáp án${s.transcript && s.transcript.length ? ' · có lời thoại' : ''}</div>
           ${best(s.id) != null ? `<div style="margin-top:6px"><span class="badge ${best(s.id) >= 120 ? 'ok' : 'bad'}">Cao nhất: ${best(s.id)}/200</span> <span class="muted small">${(hist[s.id] || []).length} lần thi</span></div>` : ''}
-          <div class="row"><button class="btn pri sm" data-go="${s.id}">Bắt đầu thi</button><button class="btn sm" data-yt="${s.id}">${s.yt ? 'Đổi link YouTube' : 'Gắn link YouTube'}</button><button class="btn sm" data-key="${s.id}">Đáp án</button>${s.transcript && s.transcript.length ? `<button class="btn sm" data-tr="${s.id}">Lời thoại</button>` : ''}<button class="btn sm" data-del="${s.id}">Xoá</button></div></div>`).join('') + '</div>'
+          <div class="row"><button class="btn pri sm" data-go="${s.id}">Bắt đầu thi</button><label class="btn sm">${s.audio ? 'Đổi file nghe' : 'Gắn file nghe'}<input type="file" accept="audio/*,.mp3,.m4a,.wav" data-mp3="${s.id}" hidden></label><button class="btn sm" data-yt="${s.id}">${s.yt ? 'Đổi link YouTube' : 'Gắn link YouTube'}</button><button class="btn sm" data-key="${s.id}">Đáp án</button>${s.transcript && s.transcript.length ? `<button class="btn sm" data-tr="${s.id}">Lời thoại</button>` : ''}<button class="btn sm" data-del="${s.id}">Xoá</button></div></div>`).join('') + '</div>'
         : '<p class="muted">Chưa có bộ đề nào. Hãy tải lên 4 file của một bộ đề.</p>'}
       ${gens.length ? '<h2>Đề tự sinh đã làm</h2><div class="grid">' + gens.map(s => `<div class="card set"><h3>${esc(s.name)}</h3>${best(s.id) != null ? `<span class="badge ${best(s.id) >= 120 ? 'ok' : 'bad'}">${best(s.id)}/200</span>` : ''}<div class="row"><button class="btn sm" data-go="${s.id}">Làm lại</button><button class="btn sm" data-del="${s.id}">Xoá</button></div></div>`).join('') + '</div>' : ''}
       <p class="muted small" style="margin-top:28px">Điểm HSK1: mỗi câu 5 điểm, nghe 100 + đọc 100 = 200; đạt từ 120 điểm. Đề tải lên chỉ lưu trên trình duyệt này, không gửi đi đâu.</p>`;
@@ -201,6 +256,7 @@
     d.ondrop = async (e) => { e.preventDefault(); d.classList.remove('over'); take(await dropFiles(e.dataTransfer)); };
     app.querySelectorAll('[data-go]').forEach(b => b.onclick = async () => { const s = await DB.get(b.dataset.go); s.generated ? examGen(s) : examPdf(s); });
     app.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => { if (confirm('Xoá bộ đề này khỏi máy?')) { await DB.del(b.dataset.del); home(); } });
+    app.querySelectorAll('[data-mp3]').forEach(inp => inp.onchange = async () => { const f = inp.files[0]; if (!f) return; const st = await DB.get(inp.dataset.mp3); st.audio = f; st.audioName = f.name; await DB.put(st); toast('Đã gắn file nghe ' + f.name); home(); });
     app.querySelectorAll('[data-yt]').forEach(b => b.onclick = async () => ytEditor(await DB.get(b.dataset.yt)));
     app.querySelectorAll('[data-key]').forEach(b => b.onclick = async () => keyEditor(await DB.get(b.dataset.key)));
     app.querySelectorAll('[data-tr]').forEach(b => b.onclick = async () => showTranscript(await DB.get(b.dataset.tr)));
@@ -223,6 +279,28 @@
   async function importFiles(files) {
     files = files.filter(f => /\.(pdf|mp3|m4a|wav|ogg)$/i.test(f.name));
     if (!files.length) return toast('Không thấy file .pdf hoặc .mp3');
+    // sách nhiều đề (PDF dài > 30 trang): tách thành từng đề
+    const books = [];
+    for (const f of files.filter(f => /\.pdf$/i.test(f.name) && f.size > 3e6)) {
+      overlay(`<h2 style="margin-top:0">Đang mở file…</h2><p class="muted">${esc(f.name)}</p>`);
+      let pdf; try { pdf = await openPdf(f); } catch (e) { continue; }
+      if (pdf.numPages > 30) books.push({ f, pdf });
+    }
+    if (books.length) {
+      files = files.filter(f => !books.some(b => b.f === f));
+      let made = [];
+      for (const { f, pdf } of books) {
+        let prof = BOOKS.find(b => b.pages === pdf.numPages);
+        if (!prof) prof = await askSplit(pdf, f);
+        if (!prof) continue;
+        overlay(`<h2 style="margin-top:0">Đang tách ${esc(prof.name)}…</h2><p id="impMsg" class="muted">Chuẩn bị</p><div class="prog"><i id="impBar"></i></div><p class="muted small">Sách dày nên có thể mất 1–3 phút. Đừng đóng trang.</p>`);
+        const msg = (t, p) => { $('#impMsg').textContent = t; if (p != null) $('#impBar').style.width = Math.round(p * 100) + '%'; };
+        try { made = made.concat(await importBook(pdf, prof, msg)); } catch (e) { console.error(e); toast('Lỗi khi tách sách: ' + e.message); }
+      }
+      closeOv();
+      if (made.length) toast('Đã tạo ' + made.length + ' đề từ sách. Gắn file nghe bằng nút “Gắn file nghe” hoặc “Gắn link YouTube”.');
+      if (!files.length) return home();
+    }
     // nhóm theo mã đề (VD H11003) hoặc theo thư mục
     const groups = new Map();
     for (const f of files) {

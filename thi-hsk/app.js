@@ -160,6 +160,12 @@
     app.innerHTML = `
       <h1>Thi thử HSK ngay trên web</h1>
       <p class="muted">Tải bộ đề (file đề PDF, đáp án, lời thoại, file nghe mp3) lên là thi được ngay, web tự chấm điểm. Hoặc để web tự soạn đề HSK1 mới đúng cấu trúc 40 câu.</p>
+      <div class="card" style="margin-top:14px;border:2px solid var(--red)"><h2 style="margin-top:0">▶ Dán link YouTube để thi</h2>
+        <p class="muted small" style="margin-top:0">Dán link video đề thi HSK trên YouTube (video có câu hỏi + phần nghe). Web tạo phiếu trả lời 40 câu và đồng hồ 40 phút.</p>
+        <div class="row" style="align-items:stretch"><input id="ytNew" placeholder="Dán link YouTube vào đây: https://www.youtube.com/watch?v=..." style="flex:2 1 280px;min-width:0;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit">
+        <input id="ytName" placeholder="Tên bộ đề (không bắt buộc)" style="flex:1 1 180px;min-width:0;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit">
+        <button class="btn pri" id="ytNewBtn">Tạo bài thi</button></div>
+        <p id="ytNewMsg" class="small" style="color:var(--bad);margin:6px 0 0"></p></div>
       <div class="grid" style="margin-top:14px">
         <div class="card"><h2 style="margin-top:0">🎲 Đề HSK1 tự sinh</h2><p class="muted small">Mỗi lần bấm là một đề mới: 20 câu nghe (giọng AI chuẩn, thu sẵn) + 20 câu đọc, có tranh, pinyin và giải thích tiếng Việt.</p>
           <button class="btn pri" id="genBtn">Tạo đề mới & thi</button></div>
@@ -168,11 +174,7 @@
           <div class="row" style="justify-content:center;margin-top:10px"><label class="btn sm">Chọn file<input type="file" id="fFiles" multiple accept=".pdf,.mp3,.m4a,.wav,audio/*,application/pdf" hidden></label>
           <label class="btn sm">Chọn cả thư mục<input type="file" id="fDir" webkitdirectory multiple hidden></label></div></div>
           <p class="muted small" style="margin-bottom:0">Có thể tải nhiều bộ cùng lúc (web tự nhóm theo mã đề, VD H11003). Không có file mp3? Tải đề lên rồi bấm “Gắn link YouTube”. Đề được lưu ngay trên máy/trình duyệt này.</p></div>
-        <div class="card"><h2 style="margin-top:0">▶ Thi bằng video YouTube</h2><p class="muted small">Dán link video đề thi HSK trên YouTube (video có hiện câu hỏi). Web tạo phiếu trả lời 40 câu + đồng hồ; nhập đáp án để được chấm điểm.</p>
-          <input id="ytNew" placeholder="https://www.youtube.com/watch?v=..." style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit">
-          <input id="ytName" placeholder="Tên bộ đề (VD: HSK1 đề 5)" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;margin-top:8px">
-          <p id="ytNewMsg" class="small" style="color:var(--bad);margin:6px 0 0"></p>
-          <button class="btn pri" id="ytNewBtn" style="margin-top:8px">Tạo bài thi từ YouTube</button></div>
+
       </div>
       <h2>Bộ đề của bạn</h2>
       ${mine.length ? '<div class="grid">' + mine.map(s => `<div class="card set"><h3>${esc(s.name)}</h3>

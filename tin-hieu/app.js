@@ -129,7 +129,7 @@
     let fut = 6;
     if (SHOW.proj && r.proj && r.proj.path.length) { const last = r.proj.path[r.proj.path.length - 1].t; fut = Math.min(220, Math.max(6, Math.ceil((last - c[c.length - 1].t) / TFMS[S.tf]) + 4)); }
     chart.timeScale().applyOptions({ rightOffset: Math.max(8, fut) });
-    if (fit) chart.timeScale().setVisibleLogicalRange({ from: c.length - 160, to: c.length + fut });
+    if (fit) chart.timeScale().setVisibleLogicalRange({ from: c.length - Math.max(80, 130 - fut), to: c.length + fut });
     drawOverlay();
   }
   function current() { const r = S.res; if (!r) return null; return [r.buy.live.active, r.sell.live.active].filter(Boolean).sort((a, b) => b.t - a.t)[0] || null; }
@@ -158,7 +158,7 @@
           const y = cs.priceToCoordinate(l.p), x0 = xOf(l.t); if (y == null || x0 == null) continue;
           g.strokeStyle = side === 'buy' ? 'rgba(244,63,94,.8)' : 'rgba(34,197,94,.8)'; g.setLineDash([2, 3]); g.lineWidth = k === 'h4' ? 1.6 : 1;
           g.beginPath(); g.moveTo(Math.max(0, x0), y); g.lineTo(W - psW, y); g.stroke(); g.setLineDash([]);
-          g.fillStyle = g.strokeStyle; g.font = '600 10px Be Vietnam Pro'; g.fillText((side === 'buy' ? 'BSL ' : 'SSL ') + k.toUpperCase(), W - psW - 52, y - 3);
+          g.fillStyle = g.strokeStyle; g.font = '600 10px Be Vietnam Pro'; g.fillText((side === 'buy' ? 'BSL ' : 'SSL ') + k.toUpperCase() + ' ' + fx(l.p), Math.max(2, x0 + 4), y - 3);
         }
       }
     }

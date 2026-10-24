@@ -99,6 +99,16 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
     <div class="card"><h3>Tiến trình BUY</h3><div id="pBuy"></div></div>
     <div class="card"><h3>Tiến trình SELL</h3><div id="pSell"></div></div>
     <div class="card">
+      <h3>Nguồn MT5 (Exness) — dữ liệu chuẩn</h3>
+      <div class="grid2">
+        <label class="f full">Địa chỉ Firebase Realtime Database<input id="mDb" placeholder="https://ten-du-an-default-rtdb.asia-southeast1.firebasedatabase.app"></label>
+        <label class="f">Mã vàng trên MT5<input id="mX" value="XAUUSDm"></label>
+        <label class="f">Mã BTC trên MT5<input id="mB" value="BTCUSDm"></label>
+        <button class="btn full" id="mSave">Lưu & kết nối MT5</button>
+      </div>
+      <p class="note">Cần chạy EA <b>MT5_Bridge_Firebase</b> trong MT5. Khi MT5 tắt hoặc thị trường đóng cửa, trang tự quay về nguồn Binance. <a href="HUONG-DAN-MT5.html" style="color:var(--blue)">Hướng dẫn cài đặt</a></p>
+    </div>
+    <div class="card">
       <h3>Cài đặt</h3>
       <div class="grid2">
         <label class="f">Mức lọc<select id="cMode"><option value="strict">Chặt chẽ (sweep + MSS + FVG)</option><option value="balanced">Cân bằng (FVG tuỳ chọn)</option></select></label>
@@ -115,7 +125,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 <div id="toast"></div>
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
-<script src="engine.js?v=7"></script>
-<script src="app.js?v=8"></script>
+<script src="engine.js?v=9"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>

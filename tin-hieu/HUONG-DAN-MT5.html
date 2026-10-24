@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kết nối MT5</title>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d1117;--panel:#151b23;--line:#2a3441;--ink:#e6edf3;--muted:#8b98a8;--accent:#22c55e;--blue:#3b82f6}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 'Be Vietnam Pro',system-ui,sans-serif}
+main{max-width:760px;margin:0 auto;padding:24px 16px 60px}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:-.02em}h2{font-size:18px;margin:28px 0 8px;display:flex;gap:10px;align-items:center}
+h2 span{background:var(--accent);color:#04120a;border-radius:99px;width:28px;height:28px;display:inline-grid;place-items:center;font-size:14px;flex:none}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+ol{padding-left:20px;margin:6px 0}li{margin:4px 0}
+code,pre{font-family:'JetBrains Mono',monospace;font-size:13.5px}code{background:#0b0f14;border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+pre{background:#0b0f14;border:1px solid var(--line);border-radius:10px;padding:12px;overflow-x:auto}
+.muted{color:var(--muted)}a{color:var(--blue)}b{color:#fff}
+.btn{display:inline-block;background:var(--accent);color:#04120a;font-weight:800;border-radius:10px;padding:9px 14px;text-decoration:none;margin:4px 6px 4px 0}
+.warn{border-left:3px solid #f59e0b;padding-left:10px;color:#fcd9a0}
+</style>
+</head>
+<body><main>
+<h1>Kết nối dữ liệu MT5 (Exness) vào web</h1>
+<p class="muted">EA nhỏ chạy trong MT5 gửi giá và nến M5/M15/H1/H4 lên Firebase (miễn phí của Google). Trang tín hiệu đọc từ đó nên giá, nến, Entry/SL/TP khớp đúng với MT5. EA này không đặt lệnh.</p>
+<p><a class="btn" href="MT5_Bridge_Firebase.mq5" download>Tải EA MT5_Bridge_Firebase.mq5</a><a class="btn" href="./" style="background:#1c2430;color:#e6edf3">← Về trang tín hiệu</a></p>
+
+<h2><span>1</span>Tạo kho Firebase (làm 1 lần, ~3 phút)</h2>
+<div class="card"><ol>
+<li>Vào <a href="https://console.firebase.google.com" target="_blank" rel="noopener">console.firebase.google.com</a>, đăng nhập Google.</li>
+<li><b>Create a project</b> → đặt tên (VD <code>letuan-mt5</code>) → tắt Google Analytics → <b>Create</b>.</li>
+<li>Menu trái: <b>Build → Realtime Database → Create Database</b> → chọn vị trí <b>Singapore (asia-southeast1)</b> → <b>Start in locked mode</b> → Enable.</li>
+<li>Mở tab <b>Rules</b>, xoá hết rồi dán đoạn dưới → <b>Publish</b>:
+<pre>{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "mt5": { ".read": true, ".write": true }
+  }
+}</pre></li>
+<li>Mở tab <b>Data</b>, sao chép địa chỉ ở trên cùng, dạng <code>https://letuan-mt5-default-rtdb.asia-southeast1.firebasedatabase.app</code>.</li>
+</ol></div>
+
+<h2><span>2</span>Cho phép MT5 gửi dữ liệu</h2>
+<div class="card"><ol>
+<li>Trong MT5: <b>Tools → Options → Expert Advisors</b>.</li>
+<li>Tích <b>Allow WebRequest for listed URL</b>, bấm thêm dòng mới và dán địa chỉ Firebase ở bước 1 → <b>OK</b>.</li>
+</ol></div>
+
+<h2><span>3</span>Cài EA</h2>
+<div class="card"><ol>
+<li>MT5: <b>File → Open Data Folder → MQL5 → Experts</b>, chép file <code>MT5_Bridge_Firebase.mq5</code> vào đây.</li>
+<li>Mở <b>MetaEditor</b> (F4), mở file đó, bấm <b>Compile</b> (F7) – phải báo 0 errors.</li>
+<li>Quay lại MT5, mở <b>một chart riêng</b> (VD XAUUSDm M5 – không dùng chart đang chạy bot giao dịch), kéo EA <b>MT5_Bridge_Firebase</b> từ Navigator vào chart.</li>
+<li>Tab <b>Inputs</b>: dán địa chỉ Firebase vào <code>InpDbUrl</code>; kiểm tra <code>InpSymbols</code> đúng tên mã trong Market Watch (Exness thường là <code>XAUUSDm,BTCUSDm</code>) → <b>OK</b>.</li>
+<li>Góc trái chart hiện <b>"Gửi thành công: …"</b> là chạy đúng. Nếu báo "Chưa cho phép WebRequest" → làm lại bước 2.</li>
+</ol></div>
+
+<h2><span>4</span>Nối web với MT5</h2>
+<div class="card"><ol>
+<li>Mở trang tín hiệu, ô <b>Nguồn MT5 (Exness)</b>: dán địa chỉ Firebase, kiểm tra tên mã → <b>Lưu &amp; kết nối MT5</b>.</li>
+<li>Nhãn nguồn chuyển màu xanh <b>"MT5 Exness · XAUUSDm"</b> là đang dùng dữ liệu MT5.</li>
+<li>Trên điện thoại cũng nhập địa chỉ này 1 lần (mỗi trình duyệt lưu riêng).</li>
+</ol></div>
+
+<h2><span>!</span>Lưu ý</h2>
+<div class="card">
+<p class="warn">Web chỉ có dữ liệu MT5 khi máy tính đang bật và MT5 đang chạy EA. Khi MT5 tắt (hoặc cuối tuần sàn vàng đóng), trang tự quay về nguồn Binance và hiện nhãn vàng "MT5 chưa kết nối". Muốn chạy 24/7 thì dùng VPS cho MT5.</p>
+<p class="muted">Không chia sẻ địa chỉ Firebase công khai: kho chỉ chứa giá thị trường, nhưng ai có địa chỉ đều ghi đè được. Gói miễn phí của Firebase (1 GB lưu trữ, 10 GB tải/tháng) dư dùng cho việc này.</p>
+</div>
+</main></body></html>

@@ -42,6 +42,19 @@
     return (j.result.list || []).reverse().map(k => ({ t: +k[0], ct: +k[0] + IVMS[iv], o: +k[1], h: +k[2], l: +k[3], c: +k[4] }));
   }
   const IV = { m5: '5m', m15: '15m', h1: '1h', h4: '4h' };
+  // ---- MT5 (Exness) qua Firebase: EA MT5_Bridge gửi nến + giá ----
+  const MT5 = Object.assign({ db: '', root: 'mt5', XAU: 'XAUUSDm', BTC: 'BTCUSDm' }, LS.get('smc.mt5', {}));
+  const IVK = { '5m': 'm5', '15m': 'm15', '1h': 'h1', '4h': 'h4' };
+  const mt5Base = () => MT5.db.replace(/\/+$/, '') + '/' + MT5.root + '/' + MT5[S.sym];
+  async function mt5(sym, iv, total) {
+    const base = MT5.db.replace(/\/+$/, '') + '/' + MT5.root + '/' + MT5[sym];
+    const j = await getJSON(`${base}/${IVK[iv]}.json?orderBy=%22$key%22&limitToLast=${total}`);
+    if (!j) throw new Error('MT5 chưa gửi dữ liệu ' + MT5[sym]);
+    const out = Object.entries(j).map(([k, v]) => ({ t: +k * 1000, ct: +k * 1000 + IVMS[iv], o: +v[0], h: +v[1], l: +v[2], c: +v[3] })).sort((a, b) => a.t - b.t);
+    if (iv === '5m' && out.length && Date.now() - out[out.length - 1].t > 20 * 60e3) throw new Error('MT5 không cập nhật (MT5 tắt hoặc thị trường đóng cửa)');
+    return out;
+  }
+  const sources = (sym) => (MT5.db ? [{ n: 'MT5 Exness · ' + MT5[sym], mt5: true, f: (iv, tot) => mt5(sym, iv, tot) }] : []).concat(SYMS[sym].src);
 
   // ---------------- trạng thái ----------------
   const S = {
@@ -50,11 +63,11 @@
   };
 
   async function loadAll(sym, full) {
-    const def = SYMS[sym]; let lastErr;
-    const order = [S.srcIdx[sym] || 0, ...def.src.map((_, i) => i)].filter((v, i, a) => a.indexOf(v) === i);
+    const srcs = sources(sym); let lastErr;
+    const order = [S.srcIdx[sym] || 0, ...srcs.map((_, i) => i)].filter((v, i, a) => a.indexOf(v) === i);
     for (const si of order) {
       try {
-        const src = def.src[si], d = {};
+        const src = srcs[si], d = {};
         for (const k of ['h4', 'h1', 'm15', 'm5']) {
           const prev = S.raw[sym] && S.raw[sym][k];
           if (!full && prev && prev.length && S.srcIdx[sym] === si) { // chỉ tải phần mới
@@ -63,7 +76,7 @@
             d[k] = [...m.values()].sort((a, b) => a.t - b.t).slice(-NEED[k] - 50);
           } else d[k] = await src.f(IV[k], NEED[k]);
         }
-        S.srcIdx[sym] = si; S.raw[sym] = d; S.srcName = src.n; return d;
+        S.srcIdx[sym] = si; S.raw[sym] = d; S.srcName = src.n; S.isMT5 = !!src.mt5; return d;
       } catch (e) { lastErr = e; console.warn('Nguồn lỗi', e); }
     }
     throw lastErr || new Error('Không tải được dữ liệu');
@@ -280,12 +293,13 @@
     try {
       const sym = S.sym, d = await loadAll(sym, full);
       if (sym !== S.sym) return;
-      const off = S.offset[sym] || 0;
+      const off = S.isMT5 ? 0 : (S.offset[sym] || 0);
       S.res = SMC.analyze(closedOnly(d, off), { ...S.cfg, minBuf: SYMS[sym].minBuf });
       const m5 = d.m5, last = m5[m5.length - 1], prevDay = m5[Math.max(0, m5.length - 289)];
       $('px').textContent = fx(last.c + off);
       const ch = (last.c - prevDay.c) / prevDay.c * 100; $('chg').textContent = (ch >= 0 ? '+' : '') + ch.toFixed(2) + '% 24h'; $('chg').className = 'chip ' + (ch >= 0 ? 'buy' : 'sell');
-      $('src').textContent = S.srcName; $('upd').textContent = 'Cập nhật ' + new Date().toLocaleTimeString('vi-VN');
+      $('src').textContent = S.srcName; $('src').className = 'chip ' + (S.isMT5 ? 'buy' : (MT5.db ? 'warn' : ''));
+      if (MT5.db && !S.isMT5) $('src').textContent += ' (MT5 chưa kết nối)'; $('upd').textContent = 'Cập nhật ' + new Date().toLocaleTimeString('vi-VN');
       $('offNote').textContent = off ? `Đã căn theo giá Exness: chênh ${off >= 0 ? '+' : ''}${fx(off)} so với nguồn dữ liệu.` : '';
       $('now').innerHTML = nowCard(); $('proj').innerHTML = projCard(); $('pBuy').innerHTML = progress('buy'); $('pSell').innerHTML = progress('sell');
       statsHist(); renderChart(full); checkAlerts(!firstRun[sym]); firstRun[sym] = true;
@@ -298,9 +312,9 @@
     const last = d.m5[d.m5.length - 1];
     if (Date.now() >= last.ct + 2000) return refresh(false);
     try {
-      const src = SYMS[S.sym].src[S.srcIdx[S.sym] || 0], a = await src.f('5m', 2);
+      const src = sources(S.sym)[S.srcIdx[S.sym] || 0], a = await src.f('5m', 2);
       const m = new Map(d.m5.map(x => [x.t, x])); a.forEach(x => m.set(x.t, x)); d.m5 = [...m.values()].sort((p, q) => p.t - q.t);
-      const off = S.offset[S.sym] || 0, l = d.m5[d.m5.length - 1]; $('px').textContent = fx(l.c + off);
+      const off = S.isMT5 ? 0 : (S.offset[S.sym] || 0), l = d.m5[d.m5.length - 1]; $('px').textContent = fx(l.c + off);
       cs && cs.update && S.tf === 'm5' && cs.update({ time: tsec(l.t), open: l.o + off, high: l.h + off, low: l.l + off, close: l.c + off });
     } catch (_) {}
   }
@@ -317,6 +331,11 @@
   seg('viewSeg', 'v', (v) => { S.view = v; $('chartWrap').classList.toggle('hide', v !== 'chart'); $('tv').classList.toggle('hide', v !== 'tv'); if (v === 'tv') renderTV(); else setTimeout(() => renderChart(false), 50); });
   [...$('symSeg').children].forEach(b => b.classList.toggle('on', b.dataset.s === S.sym));
   $('cMode').value = S.cfg.mode; $('cEntry').value = S.cfg.entry; $('cRR').value = S.cfg.minRR; $('cScore').value = S.cfg.minScore;
+  $('mDb').value = MT5.db; $('mX').value = MT5.XAU; $('mB').value = MT5.BTC;
+  $('mSave').onclick = () => {
+    MT5.db = $('mDb').value.trim(); MT5.XAU = $('mX').value.trim() || 'XAUUSDm'; MT5.BTC = $('mB').value.trim() || 'BTCUSDm';
+    LS.set('smc.mt5', MT5); S.srcIdx = {}; S.raw = {}; toast(MT5.db ? 'Đã lưu – đang lấy dữ liệu từ MT5…' : 'Đã tắt nguồn MT5'); refresh(true);
+  };
   $('cApply').onclick = () => {
     S.cfg = { mode: $('cMode').value, entry: $('cEntry').value, minRR: +$('cRR').value || 1.5, minScore: +$('cScore').value || 85 }; LS.set('smc.cfg', S.cfg);
     const ex = parseFloat($('cEx').value), d = S.raw[S.sym];

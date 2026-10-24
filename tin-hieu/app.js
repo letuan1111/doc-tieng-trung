@@ -110,8 +110,19 @@
     e24 = chart.addLineSeries({ color: '#3b82f6', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
     e34 = chart.addLineSeries({ color: '#06b6d4', lineWidth: 1, lineStyle: 0, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
     e89 = chart.addLineSeries({ color: '#eab308', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-    chart.timeScale().subscribeVisibleLogicalRangeChange(drawOverlay);
-    new ResizeObserver(() => setTimeout(drawOverlay, 30)).observe(el);
+    // vẽ lại lớp vùng/nhãn mỗi khi khung nhìn hoặc thang giá thay đổi (phóng to, kéo, tự co giãn giá)
+    let ovSig = '';
+    const ovLoop = () => {
+      try {
+        if (S.res && S.view === 'chart') {
+          const r = chart.timeScale().getVisibleLogicalRange(), w = el.clientWidth, h = el.clientHeight;
+          const sig = r ? [r.from.toFixed(3), r.to.toFixed(3), w, h, cs.coordinateToPrice(0), cs.coordinateToPrice(h / 2)].join('|') : '';
+          if (sig !== ovSig) { ovSig = sig; drawOverlay(); }
+        }
+      } catch (_) {}
+      requestAnimationFrame(ovLoop);
+    };
+    requestAnimationFrame(ovLoop);
   }
   let viewBars = [];
   function renderChart(fit) {

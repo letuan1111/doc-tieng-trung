@@ -10,7 +10,7 @@
   'use strict';
 
   const DEF = {
-    emaFast: 24, emaSlow: 89, atrLen: 14,
+    emaFast: 24, emaSlow: 89, emaMid: 34, atrLen: 14,
     pivotL: 3, pivotR: 3,             // pivot M5 3/3
     pivotHTF: 3,                      // pivot cho M15/H1/H4
     gapMin: 0.20, slopeMin: 0.10, slopeBack: 5,
@@ -46,7 +46,7 @@
   // ---------------- chuẩn bị 1 khung thời gian ----------------
   function prepTF(c, cfg, L, R) {
     const n = c.length, close = c.map(x => x.c);
-    const tf = { c, n, e1: ema(close, cfg.emaFast), e2: ema(close, cfg.emaSlow), atr: atr(c, cfg.atrLen), pivH: [], pivL: [], events: [], st: new Array(n) };
+    const tf = { c, n, e1: ema(close, cfg.emaFast), e2: ema(close, cfg.emaSlow), e3: ema(close, cfg.emaMid), atr: atr(c, cfg.atrLen), pivH: [], pivL: [], events: [], st: new Array(n) };
     for (let i = L; i < n - R; i++) {
       let isH = true, isL = true;
       for (let k = i - L; k <= i + R; k++) {
@@ -276,6 +276,69 @@
     return { stage, t1, t4, h1Valid, h4Bear, zones, touched, sweep, active: act, price };
   }
 
+
+  // ---------------- dự kiến đường giá: EMA 34/89 + SMC ----------------
+  function project(res, cfg) {
+    const I = res.ind, m15 = I.m15, h1 = I.h1, h4 = I.h4, n = m15.n - 1;
+    const price = m15.c[n].c, a15 = m15.atr[n], a1 = h1.atr[h1.n - 1], T = m15.c[n].ct;
+    const k1 = h1.n - 1, k4 = h4.n - 1;
+    const f = [
+      { n: 'H4 EMA34 ' + (h4.e3[k4] > h4.e2[k4] ? '>' : '<') + ' EMA89', v: h4.e3[k4] > h4.e2[k4] ? 1 : -1 },
+      { n: 'H1 EMA34 ' + (h1.e3[k1] > h1.e2[k1] ? '>' : '<') + ' EMA89', v: h1.e3[k1] > h1.e2[k1] ? 1 : -1 },
+      { n: 'M15 EMA34 ' + (m15.e3[n] > m15.e2[n] ? '>' : '<') + ' EMA89', v: m15.e3[n] > m15.e2[n] ? 1 : -1 },
+      { n: 'Giá ' + (price > h1.e2[k1] ? 'trên' : 'dưới') + ' EMA89 H1', v: price > h1.e2[k1] ? 1 : -1 },
+      { n: 'BOS H1 gần nhất ' + (h1.st[k1].dir > 0 ? 'tăng' : h1.st[k1].dir < 0 ? 'giảm' : '—'), v: h1.st[k1].dir },
+      { n: 'BOS H4 gần nhất ' + (h4.st[k4].dir > 0 ? 'tăng' : h4.st[k4].dir < 0 ? 'giảm' : '—'), v: h4.st[k4].dir },
+    ];
+    const sum = f.reduce((x, y) => x + y.v, 0);
+    const bias = sum >= 2 ? 1 : sum <= -2 ? -1 : 0;
+    // các mức hỗ trợ / kháng cự
+    const lv = [];
+    const W = { m15: 1, h1: 2, h4: 3 };
+    for (const k of ['m15', 'h1', 'h4']) {
+      for (const q of res.buy.htf[k].zones) lv.push({ p: q.top, lo: q.bot, hi: q.top, type: 'S', w: W[k], name: q.kind + ' tăng ' + k.toUpperCase() });
+      for (const q of res.sell.htf[k].zones) lv.push({ p: q.bot, lo: q.bot, hi: q.top, type: 'R', w: W[k], name: q.kind + ' giảm ' + k.toUpperCase() });
+      for (const l of res.buy.htf[k].liq) lv.push({ p: l.p, type: 'R', w: W[k], name: 'BSL ' + k.toUpperCase() });
+      for (const l of res.sell.htf[k].liq) lv.push({ p: l.p, type: 'S', w: W[k], name: 'SSL ' + k.toUpperCase() });
+    }
+    for (const [nm, v] of [['EMA34 M15', m15.e3[n]], ['EMA89 M15', m15.e2[n]], ['EMA34 H1', h1.e3[k1]], ['EMA89 H1', h1.e2[k1]], ['EMA89 H4', h4.e2[k4]]])
+      lv.push({ p: v, type: v < price ? 'S' : 'R', w: 1.5, name: nm, ema: true });
+    const gap = 0.3 * a15;
+    const below = (x, skip = 0) => lv.filter(l => l.p < x - gap).sort((p, q) => q.p - p.p)[skip] || null;
+    const above = (x, skip = 0) => lv.filter(l => l.p > x + gap).sort((p, q) => p.p - q.p)[skip] || null;
+    const strongAbove = (x) => lv.filter(l => l.p > x + gap && l.w >= 2).sort((p, q) => p.p - q.p)[0] || above(x);
+    const strongBelow = (x) => lv.filter(l => l.p < x - gap && l.w >= 2).sort((p, q) => q.p - p.p)[0] || below(x);
+    const fb = (x, d) => ({ p: x + d * 2 * a1, name: 'mở rộng 2×ATR H1' });
+    const pts = [{ p: price, name: 'Giá hiện tại' }];
+    const ema34 = m15.e3[n];
+    let inval = null, alt = [];
+    if (bias === 1) {
+      if (price - ema34 > 1.0 * a15) { const p1 = below(price) || { p: ema34, name: 'EMA34 M15' }; pts.push({ ...p1, act: 'hồi về' }); }
+      const r1 = above(price) || fb(price, 1); pts.push({ ...r1, act: 'tăng tới' });
+      const base = pts[pts.length - 2].p, pb = r1.p - 0.382 * (r1.p - base); pts.push({ p: pb, name: 'hồi 38.2%', act: 'điều chỉnh' });
+      const r2 = strongAbove(r1.p) || fb(r1.p, 1); pts.push({ ...r2, act: 'tiếp tục tới' });
+      const lowRef = Math.min(...pts.map(x => x.p));
+      inval = strongBelow(lowRef) || { p: lowRef - a1, name: 'dưới đáy gần nhất' };
+      alt = [{ p: price }, { ...inval, act: 'phá xuống' }, { ...(below(inval.p) || fb(inval.p, -1)), act: 'giảm tiếp tới' }];
+    } else if (bias === -1) {
+      if (ema34 - price > 1.0 * a15) { const p1 = above(price) || { p: ema34, name: 'EMA34 M15' }; pts.push({ ...p1, act: 'hồi lên' }); }
+      const s1 = below(price) || fb(price, -1); pts.push({ ...s1, act: 'giảm tới' });
+      const base = pts[pts.length - 2].p, pb = s1.p + 0.382 * (base - s1.p); pts.push({ p: pb, name: 'hồi 38.2%', act: 'điều chỉnh' });
+      const s2 = strongBelow(s1.p) || fb(s1.p, -1); pts.push({ ...s2, act: 'tiếp tục tới' });
+      const hiRef = Math.max(...pts.map(x => x.p));
+      inval = strongAbove(hiRef) || { p: hiRef + a1, name: 'trên đỉnh gần nhất' };
+      alt = [{ p: price }, { ...inval, act: 'phá lên' }, { ...(above(inval.p) || fb(inval.p, 1)), act: 'tăng tiếp tới' }];
+    } else {
+      const r1 = above(price) || fb(price, 1), s1 = below(price) || fb(price, -1);
+      const first = (r1.p - price) < (price - s1.p) ? [r1, s1] : [s1, r1];
+      pts.push({ ...first[0], act: 'chạm' }, { ...first[1], act: 'quay về' }, { p: (r1.p + s1.p) / 2, name: 'giữa biên', act: 'đi ngang quanh' });
+      inval = null;
+    }
+    // thời gian: mỗi đoạn ≈ |Δ| / (0.5 × ATR M15) nến M15
+    const timed = (arr) => { let t = T; return arr.map((x, i) => { if (i) t += Math.max(2, Math.round(Math.abs(x.p - arr[i - 1].p) / (0.5 * a15))) * 9e5; return { ...x, t }; }); };
+    return { bias, sum, factors: f, path: timed(pts), alt: alt.length ? timed(alt) : [], inval, levels: lv };
+  }
+
   // ---------------- API ----------------
   function analyze(raw, userCfg) {
     const cfg = Object.assign({}, DEF, userCfg || {});
@@ -302,6 +365,22 @@
         rejected: D.rej,
         events: Object.fromEntries(['m5', 'm15', 'h1', 'h4'].map(k => [k, D[k].events.map(e => ({ ...e, t: D[k].c[e.k].t, dir: e.dir * sg, p: f(e.p) }))])),
       };
+      // vùng cản đa khung: OB/FVG còn hiệu lực + thanh khoản chưa bị lấy
+      const zs = {};
+      for (const k of ['m15', 'h1', 'h4']) {
+        const tf = D[k], last = tf.n - 1, price = tf.c[last].c, a = tf.atr[last];
+        const z = buildPOI(tf).filter(q => q.dead === Infinity && last - q.ci <= 400 && q.bot < price + 0.5 * a)
+          .sort((x, y) => (price - x.top) - (price - y.top)).slice(0, 3);
+        const liq = [];
+        for (let q = tf.sh.length - 1; q >= 0 && liq.length < 3; q--) {
+          const p = tf.sh[q]; if (p.p <= price) continue;
+          let taken = false; for (let u = p.i + 1; u <= last; u++) if (tf.c[u].h > p.p) { taken = true; break; }
+          if (!taken && !liq.some(l => Math.abs(l.p - p.p) < 0.15 * a)) liq.push({ p: p.p, t: tf.c[p.i].t });
+        }
+        liq.sort((x, y) => x.p - y.p);
+        zs[k] = { zones: z.map(q => ({ ...flipZone(q), tf: k })), liq: liq.map(l => ({ p: f(l.p), t: l.t, tf: k })) };
+      }
+      res[side].htf = zs;
       if (side === 'buy') res.ind = { m5: D.m5, m15: D.m15, h1: D.h1, h4: D.h4 };
     }
     function res_active(a, sg) { const f = v => v == null ? v : v * sg; return { ...a, entry: f(a.entry), sl: f(a.sl), tp1: f(a.tp1), tp2: f(a.tp2), tp3: f(a.tp3) }; }
@@ -314,6 +393,7 @@
       winRate: closed.length ? wins.length / closed.length : 0, netR: gw - gl, pf: gl ? gw / gl : (gw ? Infinity : 0), maxDD: dd,
       invalid: all.filter(s => s.state === 'INVALID').length };
     res.all = all; res.cfg = cfg;
+    res.proj = project(res, cfg);
     return res;
   }
 

@@ -82,7 +82,8 @@
   const STATE_VI = { WAIT_RETEST: 'Chờ khớp', SIGNAL: 'Đang chạy', WIN: 'TP ✓', LOSS: 'SL ✗', INVALID: 'Huỷ' };
 
   // ---------------- chart ----------------
-  let chart, cs, e24, e89, plines = [];
+  let chart, cs, e24, e34, e89, plines = [];
+  const SHOW = Object.assign({ m15: true, h1: true, h4: true, liq: true, proj: true, e34: true }, LS.get('smc.show', {}));
   const TZ = -new Date().getTimezoneOffset() * 60;
   const tsec = (t) => Math.floor(t / 1000) + TZ;
   function initChart() {
@@ -94,6 +95,7 @@
     });
     cs = chart.addCandlestickSeries({ upColor: '#22c55e', downColor: '#f43f5e', borderVisible: false, wickUpColor: '#22c55e', wickDownColor: '#f43f5e' });
     e24 = chart.addLineSeries({ color: '#3b82f6', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    e34 = chart.addLineSeries({ color: '#06b6d4', lineWidth: 1, lineStyle: 0, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
     e89 = chart.addLineSeries({ color: '#eab308', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
     chart.timeScale().subscribeVisibleLogicalRangeChange(drawOverlay);
     new ResizeObserver(() => setTimeout(drawOverlay, 30)).observe(el);
@@ -105,6 +107,7 @@
     cs.setData(c.map(x => ({ time: tsec(x.t), open: x.o, high: x.h, low: x.l, close: x.c })));
     e24.setData(c.map((x, i) => ({ time: tsec(x.t), value: tf.e1[i] })));
     e89.setData(c.map((x, i) => ({ time: tsec(x.t), value: tf.e2[i] })));
+    e34.setData(SHOW.e34 ? c.map((x, i) => ({ time: tsec(x.t), value: tf.e3[i] })) : []);
     const t0 = c.length ? c[0].t : 0, snap = (t) => { // đưa thời điểm về nến của khung đang xem
       let lo = 0, hi = c.length - 1, b = 0; while (lo <= hi) { const m = (lo + hi) >> 1; if (c[m].t <= t) { b = m; lo = m + 1; } else hi = m - 1; } return tsec(c[b].t);
     };
@@ -123,7 +126,10 @@
       add(a.entry, '#a855f7', 'ENTRY'); add(a.sl, '#f43f5e', 'SL', 2);
       add(a.tp1, '#22c55e', `TP1 ${a.rr1.toFixed(1)}R`, 2); add(a.tp2, '#16a34a', 'TP2', 1); add(a.tp3, '#15803d', 'TP3', 1);
     }
-    if (fit) chart.timeScale().setVisibleLogicalRange({ from: c.length - 160, to: c.length + 6 });
+    let fut = 6;
+    if (SHOW.proj && r.proj && r.proj.path.length) { const last = r.proj.path[r.proj.path.length - 1].t; fut = Math.min(220, Math.max(6, Math.ceil((last - c[c.length - 1].t) / TFMS[S.tf]) + 4)); }
+    chart.timeScale().applyOptions({ rightOffset: Math.max(8, fut) });
+    if (fit) chart.timeScale().setVisibleLogicalRange({ from: c.length - 160, to: c.length + fut });
     drawOverlay();
   }
   function current() { const r = S.res; if (!r) return null; return [r.buy.live.active, r.sell.live.active].filter(Boolean).sort((a, b) => b.t - a.t)[0] || null; }
@@ -142,9 +148,33 @@
       g.strokeStyle = stroke; g.lineWidth = 1; g.strokeRect(x0, y0, Math.max(2, (x1 ?? W - psW) - x0), Math.max(1, y1 - y0));
       if (label) { g.fillStyle = stroke; g.font = '600 10px Be Vietnam Pro'; g.fillText(label, x0 + 3, y0 + 11); }
     };
-    // POI M15 còn hiệu lực (gần nhất)
-    for (const [side, col] of [['buy', '34,197,94'], ['sell', '244,63,94']]) {
-      for (const q of r[side].live.zones) box(q.t0, null, q.bot, q.top, `rgba(${col},.13)`, `rgba(${col},.65)`, `${q.kind} M15`);
+    // vùng cản OB/FVG M15/H1/H4 + thanh khoản
+    const A = { m15: [.07, .45], h1: [.11, .65], h4: [.16, .9] };
+    for (const k of ['h4', 'h1', 'm15']) {
+      if (!SHOW[k]) continue;
+      for (const [side, col] of [['buy', '34,197,94'], ['sell', '244,63,94']]) {
+        for (const q of r[side].htf[k].zones) box(q.t0, null, q.bot, q.top, `rgba(${col},${A[k][0]})`, `rgba(${col},${A[k][1]})`, `${q.kind} ${k.toUpperCase()}`);
+        if (SHOW.liq) for (const l of r[side].htf[k].liq) {
+          const y = cs.priceToCoordinate(l.p), x0 = xOf(l.t); if (y == null || x0 == null) continue;
+          g.strokeStyle = side === 'buy' ? 'rgba(244,63,94,.8)' : 'rgba(34,197,94,.8)'; g.setLineDash([2, 3]); g.lineWidth = k === 'h4' ? 1.6 : 1;
+          g.beginPath(); g.moveTo(Math.max(0, x0), y); g.lineTo(W - psW, y); g.stroke(); g.setLineDash([]);
+          g.fillStyle = g.strokeStyle; g.font = '600 10px Be Vietnam Pro'; g.fillText((side === 'buy' ? 'BSL ' : 'SSL ') + k.toUpperCase(), W - psW - 52, y - 3);
+        }
+      }
+    }
+    // đường giá dự kiến
+    if (SHOW.proj && r.proj) {
+      const lastI = c.length - 1, lastT = c[lastI].t, step = TFMS[S.tf];
+      const X = (t) => ts.logicalToCoordinate(lastI + (t - lastT) / step);
+      const path = (pts, col, dash, w, labels) => {
+        if (pts.length < 2) return; g.strokeStyle = col; g.lineWidth = w; g.setLineDash(dash); g.beginPath();
+        pts.forEach((p, i) => { const x = X(p.t), y = cs.priceToCoordinate(p.p); if (x == null || y == null) return; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); g.setLineDash([]);
+        if (labels) pts.forEach((p, i) => { if (!i) return; const x = X(p.t), y = cs.priceToCoordinate(p.p); if (x == null || y == null) return;
+          g.fillStyle = col; g.beginPath(); g.arc(x, y, 3.5, 0, 7); g.fill(); g.font = '600 10px JetBrains Mono'; g.fillText(fx(p.p), x + 5, y + (i % 2 ? -6 : 12)); });
+      };
+      path(r.proj.alt, 'rgba(148,163,184,.75)', [3, 4], 1.5, true);
+      path(r.proj.path, r.proj.bias > 0 ? '#4ade80' : r.proj.bias < 0 ? '#fb7185' : '#e5e7eb', [7, 5], 2.2, true);
+      if (r.proj.inval) { const y = cs.priceToCoordinate(r.proj.inval.p), x = X(r.proj.path[0].t); if (y != null && x != null) { g.strokeStyle = 'rgba(245,158,11,.9)'; g.setLineDash([1, 3]); g.beginPath(); g.moveTo(x, y); g.lineTo(W - psW, y); g.stroke(); g.setLineDash([]); g.fillStyle = '#f59e0b'; g.font = '600 10px Be Vietnam Pro'; g.fillText('Vô hiệu ' + fx(r.proj.inval.p), x + 4, y - 4); } }
     }
     // vùng FVG/OB của setup
     for (const s of r.all.slice(-8)) {
@@ -197,6 +227,16 @@
       <p class="note" style="margin:0">Tạo lúc ${ft(a.ct)} · POI ${a.zone.kind} M15 ${fx(a.zone.bot)}–${fx(a.zone.top)} · Huỷ nếu không khớp sau ${Math.round(r.cfg.expiryBars * 5 / 60)}h, giá chạy tới TP1 trước, phá ${b ? 'đáy' : 'đỉnh'} sweep hoặc H1 đổi hướng.</p>
     </div>`;
   }
+  function projCard() {
+    const P = S.res.proj; if (!P) return '';
+    const bn = P.bias > 0 ? '<span class="chip buy">THIÊN TĂNG</span>' : P.bias < 0 ? '<span class="chip sell">THIÊN GIẢM</span>' : '<span class="chip">ĐI NGANG</span>';
+    const steps = P.path.slice(1).map((p, i) => `<li><span class="y">${i + 1}</span> ${p.act || ''} <b class="mono">${fx(p.p)}</b> <em>${p.name || ''} · ~${ft(p.t)}</em></li>`).join('');
+    const alt = P.alt.length ? `<p class="note" style="margin:8px 0 0">Kịch bản phụ (đường xám): nếu giá đóng nến ${P.bias > 0 ? 'dưới' : 'trên'} <b>${fx(P.inval.p)}</b> (${P.inval.name}) → ${P.alt[2].act} <b>${fx(P.alt[2].p)}</b>${P.alt[2].name ? ' (' + P.alt[2].name + ')' : ''}.</p>` : '';
+    return `<div style="display:flex;justify-content:space-between;align-items:center">${bn}<span class="note">điểm xu hướng ${P.sum > 0 ? '+' : ''}${P.sum}/6</span></div>
+      <ul class="ck">${P.factors.map(x => `<li>${x.v > 0 ? '<span class="y">▲</span>' : x.v < 0 ? '<span style="color:var(--sell)">▼</span>' : '<span class="n">•</span>'} ${x.n}</li>`).join('')}</ul>
+      <p class="note" style="margin:10px 0 2px"><b>Kịch bản chính</b> (đường nét đứt trên chart):</p><ul class="ck">${steps}</ul>${alt}
+      <p class="note" style="margin:8px 0 0">Dự kiến dựa trên EMA 34/89 và các vùng OB/FVG, thanh khoản M15/H1/H4 gần nhất; thời gian chỉ là ước lượng theo ATR. Không phải tín hiệu vào lệnh.</p>`;
+  }
   function statsHist() {
     const st = S.res.stats, all = S.res.all.slice().reverse();
     $('stats').innerHTML = `<div><b>${st.total}</b><small>Setup</small></div><div><b>${st.filled}</b><small>Đã khớp</small></div>
@@ -247,7 +287,7 @@
       const ch = (last.c - prevDay.c) / prevDay.c * 100; $('chg').textContent = (ch >= 0 ? '+' : '') + ch.toFixed(2) + '% 24h'; $('chg').className = 'chip ' + (ch >= 0 ? 'buy' : 'sell');
       $('src').textContent = S.srcName; $('upd').textContent = 'Cập nhật ' + new Date().toLocaleTimeString('vi-VN');
       $('offNote').textContent = off ? `Đã căn theo giá Exness: chênh ${off >= 0 ? '+' : ''}${fx(off)} so với nguồn dữ liệu.` : '';
-      $('now').innerHTML = nowCard(); $('pBuy').innerHTML = progress('buy'); $('pSell').innerHTML = progress('sell');
+      $('now').innerHTML = nowCard(); $('proj').innerHTML = projCard(); $('pBuy').innerHTML = progress('buy'); $('pSell').innerHTML = progress('sell');
       statsHist(); renderChart(full); checkAlerts(!firstRun[sym]); firstRun[sym] = true;
     } catch (e) {
       console.error(e); $('src').textContent = 'Lỗi tải dữ liệu'; $('now').innerHTML = `<p class="err">Không tải được dữ liệu (${e.message}). Thử tải lại trang.</p>`;
@@ -291,6 +331,7 @@
     S.notif = !S.notif; LS.set('smc.notif', S.notif); setNB(); beep(); toast(S.notif ? 'Sẽ báo khi có setup mới / giá chạm Entry / TP / SL (khi trang đang mở)' : 'Đã tắt thông báo');
   };
   setNB();
+  document.querySelectorAll('[data-show]').forEach(cb => { cb.checked = !!SHOW[cb.dataset.show]; cb.onchange = () => { SHOW[cb.dataset.show] = cb.checked; LS.set('smc.show', SHOW); renderChart(false); }; });
 
   initChart(); refresh(true);
   setInterval(tick, 15000);

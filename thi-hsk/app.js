@@ -51,6 +51,36 @@
   const lab = (v) => v === 'Y' ? '√' : v === 'N' ? '×' : (v || '—');
   const PDF_PARTS = [[1, 5, 'Nghe – Phần 1'], [6, 10, 'Nghe – Phần 2'], [11, 15, 'Nghe – Phần 3'], [16, 20, 'Nghe – Phần 4'], [21, 25, 'Đọc – Phần 1'], [26, 30, 'Đọc – Phần 2'], [31, 35, 'Đọc – Phần 3'], [36, 40, 'Đọc – Phần 4']];
 
+  // ---------------- YouTube làm file nghe ----------------
+  function parseYT(u) {
+    u = String(u || '').trim(); if (!u) return null;
+    let id = null, t = 0;
+    const m = u.match(/(?:youtu\.be\/|v=|\/embed\/|\/shorts\/|\/live\/)([\w-]{11})/) || u.match(/^([\w-]{11})$/);
+    if (m) id = m[1];
+    const tm = u.match(/[?&#](?:t|start)=(\d+h)?(\d+m)?(\d+)s?/);
+    if (tm) t = (parseInt(tm[1]) || 0) * 3600 + (parseInt(tm[2]) || 0) * 60 + (parseInt(tm[3]) || 0);
+    return id ? { id, t } : null;
+  }
+  let ytApi = null;
+  function loadYTApi() {
+    if (!ytApi) ytApi = new Promise((res) => { window.onYouTubeIframeAPIReady = () => res(window.YT); const sc = document.createElement('script'); sc.src = 'https://www.youtube.com/iframe_api'; document.head.appendChild(sc); setTimeout(() => res(window.YT || null), 8000); });
+    return ytApi;
+  }
+  function ytEditor(s) {
+    overlay(`<h2 style="margin-top:0">File nghe từ YouTube · ${esc(s.name)}</h2>
+      <p class="muted small">Dán link video YouTube chứa phần nghe của đề này (VD https://youtu.be/… hoặc link có &t=… để bắt đầu từ giây đó). Khi thi, trang phát video bằng trình phát YouTube, cần có mạng.</p>
+      <input id="ytIn" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit" placeholder="https://www.youtube.com/watch?v=..." value="${s.yt ? 'https://youtu.be/' + s.yt.id + (s.yt.t ? '?t=' + s.yt.t : '') : ''}">
+      <p id="ytMsg" class="small muted"></p>
+      <div class="row" style="justify-content:flex-end">${s.yt ? '<button class="btn" id="ytDel">Bỏ link</button>' : ''}<button class="btn" id="ytCancel">Đóng</button><button class="btn pri" id="ytSave">Lưu</button></div>`);
+    $('#ytCancel').onclick = closeOv;
+    if ($('#ytDel')) $('#ytDel').onclick = async () => { delete s.yt; await DB.put(s); closeOv(); home(); };
+    $('#ytSave').onclick = async () => {
+      const v = parseYT($('#ytIn').value);
+      if (!v) { $('#ytMsg').textContent = 'Link chưa đúng. Hãy dán link video YouTube (có mã video 11 ký tự).'; return; }
+      s.yt = v; await DB.put(s); closeOv(); toast('Đã gắn file nghe YouTube'); home();
+    };
+  }
+
   // ---------------- giọng đọc tiếng Trung ----------------
   const TTS = {
     voices: [], off: null,
@@ -137,13 +167,13 @@
           <div class="drop" id="drop"><div>Kéo thả file vào đây</div><div class="muted small">Đề .pdf · Đáp án (tên có “答案”) · Lời thoại (“听力材料”) · File nghe .mp3</div>
           <div class="row" style="justify-content:center;margin-top:10px"><label class="btn sm">Chọn file<input type="file" id="fFiles" multiple accept=".pdf,.mp3,.m4a,.wav,audio/*,application/pdf" hidden></label>
           <label class="btn sm">Chọn cả thư mục<input type="file" id="fDir" webkitdirectory multiple hidden></label></div></div>
-          <p class="muted small" style="margin-bottom:0">Có thể tải nhiều bộ cùng lúc (web tự nhóm theo mã đề, VD H11003). Đề được lưu ngay trên máy/trình duyệt này.</p></div>
+          <p class="muted small" style="margin-bottom:0">Có thể tải nhiều bộ cùng lúc (web tự nhóm theo mã đề, VD H11003). Không có file mp3? Tải đề lên rồi bấm “Gắn link YouTube”. Đề được lưu ngay trên máy/trình duyệt này.</p></div>
       </div>
       <h2>Bộ đề của bạn</h2>
       ${mine.length ? '<div class="grid">' + mine.map(s => `<div class="card set"><h3>${esc(s.name)}</h3>
-          <div class="muted small">${s.pages.length} trang đề · ${s.audio ? '🔊 có file nghe' : '⚠ chưa có file nghe'} · ${s.key.filter(Boolean).length}/40 đáp án${s.transcript && s.transcript.length ? ' · có lời thoại' : ''}</div>
+          <div class="muted small">${s.pages.length} trang đề · ${s.yt ? '▶ nghe qua YouTube' : s.audio ? '🔊 có file nghe' : '⚠ chưa có file nghe'} · ${s.key.filter(Boolean).length}/40 đáp án${s.transcript && s.transcript.length ? ' · có lời thoại' : ''}</div>
           ${best(s.id) != null ? `<div style="margin-top:6px"><span class="badge ${best(s.id) >= 120 ? 'ok' : 'bad'}">Cao nhất: ${best(s.id)}/200</span> <span class="muted small">${(hist[s.id] || []).length} lần thi</span></div>` : ''}
-          <div class="row"><button class="btn pri sm" data-go="${s.id}">Bắt đầu thi</button><button class="btn sm" data-key="${s.id}">Đáp án</button>${s.transcript && s.transcript.length ? `<button class="btn sm" data-tr="${s.id}">Lời thoại</button>` : ''}<button class="btn sm" data-del="${s.id}">Xoá</button></div></div>`).join('') + '</div>'
+          <div class="row"><button class="btn pri sm" data-go="${s.id}">Bắt đầu thi</button><button class="btn sm" data-yt="${s.id}">${s.yt ? 'Đổi link YouTube' : 'Gắn link YouTube'}</button><button class="btn sm" data-key="${s.id}">Đáp án</button>${s.transcript && s.transcript.length ? `<button class="btn sm" data-tr="${s.id}">Lời thoại</button>` : ''}<button class="btn sm" data-del="${s.id}">Xoá</button></div></div>`).join('') + '</div>'
         : '<p class="muted">Chưa có bộ đề nào. Hãy tải lên 4 file của một bộ đề.</p>'}
       ${gens.length ? '<h2>Đề tự sinh đã làm</h2><div class="grid">' + gens.map(s => `<div class="card set"><h3>${esc(s.name)}</h3>${best(s.id) != null ? `<span class="badge ${best(s.id) >= 120 ? 'ok' : 'bad'}">${best(s.id)}/200</span>` : ''}<div class="row"><button class="btn sm" data-go="${s.id}">Làm lại</button><button class="btn sm" data-del="${s.id}">Xoá</button></div></div>`).join('') + '</div>' : ''}
       <p class="muted small" style="margin-top:28px">Điểm HSK1: mỗi câu 5 điểm, nghe 100 + đọc 100 = 200; đạt từ 120 điểm. Đề tải lên chỉ lưu trên trình duyệt này, không gửi đi đâu.</p>`;
@@ -157,6 +187,7 @@
     d.ondrop = async (e) => { e.preventDefault(); d.classList.remove('over'); take(await dropFiles(e.dataTransfer)); };
     app.querySelectorAll('[data-go]').forEach(b => b.onclick = async () => { const s = await DB.get(b.dataset.go); s.generated ? examGen(s) : examPdf(s); });
     app.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => { if (confirm('Xoá bộ đề này khỏi máy?')) { await DB.del(b.dataset.del); home(); } });
+    app.querySelectorAll('[data-yt]').forEach(b => b.onclick = async () => ytEditor(await DB.get(b.dataset.yt)));
     app.querySelectorAll('[data-key]').forEach(b => b.onclick = async () => keyEditor(await DB.get(b.dataset.key)));
     app.querySelectorAll('[data-tr]').forEach(b => b.onclick = async () => showTranscript(await DB.get(b.dataset.tr)));
   }
@@ -242,7 +273,7 @@
         <p class="muted small">Bấm “Bắt đầu” để chạy đồng hồ và phát file nghe. Chọn đáp án trên phiếu trả lời; bấm “Nộp bài” khi xong (hết giờ sẽ tự nộp).</p>
         <button class="btn pri" id="start">▶ Bắt đầu thi</button></div>
       <div class="exam hide" id="ex">
-        <div>${aUrl ? `<div class="audiobox"><div class="small muted" style="margin-bottom:4px">🔊 File nghe: ${esc(s.audioName)}</div><audio id="au" controls preload="auto" src="${aUrl}"></audio></div>` : '<p class="muted">⚠ Bộ đề chưa có file nghe.</p>'}
+        <div>${s.yt ? `<div class="audiobox"><div class="small muted" style="margin-bottom:6px">▶ File nghe từ YouTube${aUrl ? ' · <button class="btn sm" id="useMp3" type="button">Dùng file mp3</button>' : ''}</div><div style="aspect-ratio:16/5;max-height:140px;border-radius:10px;overflow:hidden;background:#000"><div id="ytp" style="width:100%;height:100%"></div></div></div>` : aUrl ? `<div class="audiobox"><div class="small muted" style="margin-bottom:4px">🔊 File nghe: ${esc(s.audioName)}</div><audio id="au" controls preload="auto" src="${aUrl}"></audio></div>` : '<p class="muted">⚠ Bộ đề chưa có file nghe.</p>'}
           <div class="pages">${s.pages.map((b, i) => `<img id="pg${i}" src="${objURL(b)}" alt="Trang ${i + 1}" loading="lazy">`).join('')}</div></div>
         <aside class="card sheet" id="sheet"><div class="handle" id="hdl"><span>📝 Phiếu trả lời <span id="cnt">0/40</span></span><span>▲</span></div>
           ${PDF_PARTS.map(([a, b, t]) => `<div class="ptitle">${t}</div>` + Array.from({ length: b - a + 1 }, (_, k) => a + k).map(n => `<div class="qrow"><b>${n}.</b>${OPTS[qType(n)].map(o => `<button class="op" data-n="${n}" data-v="${o}">${lab(o)}</button>`).join('')}</div>`).join('')).join('')}
@@ -256,12 +287,18 @@
       $('#cnt').textContent = ans.filter(Boolean).length + '/40';
     });
     const t0 = { v: 0 };
-    const submit = () => { const au = $('#au'); au && au.pause(); finish(s, ans, Date.now() - t0.v); };
+    let ytp = null;
+    if (s.yt) loadYTApi().then(YT => {
+      if (!YT || !$('#ytp')) { const el = $('#ytp'); if (el) el.outerHTML = `<iframe style="width:100%;height:100%;border:0" allow="autoplay; encrypted-media" src="https://www.youtube-nocookie.com/embed/${s.yt.id}?start=${s.yt.t || 0}&playsinline=1&rel=0"></iframe>`; return; }
+      ytp = new YT.Player('ytp', { videoId: s.yt.id, width: '100%', height: '100%', playerVars: { start: s.yt.t || 0, playsinline: 1, rel: 0, modestbranding: 1 } });
+    });
+    if ($('#useMp3')) $('#useMp3').onclick = () => { try { ytp && ytp.pauseVideo(); } catch (_) {} delete s.yt; examPdf(s); };
+    const submit = () => { const au = $('#au'); au && au.pause(); try { ytp && ytp.pauseVideo(); } catch (_) {} finish(s, ans, Date.now() - t0.v); };
     $('#sub2').onclick = () => confirm('Nộp bài?') && submit();
     $('#start').onclick = () => {
       $('#intro').classList.add('hide'); $('#ex').classList.remove('hide'); t0.v = Date.now();
       examChrome(true, () => confirm('Nộp bài?') && submit()); startTimer(40, submit);
-      const au = $('#au'); au && au.play().catch(() => toast('Bấm ▶ trên trình phát để nghe'));
+      const au = $('#au'); if (s.yt) { try { ytp && ytp.playVideo ? ytp.playVideo() : toast('Bấm ▶ trên video để nghe'); } catch (_) { toast('Bấm ▶ trên video để nghe'); } } else au && au.play().catch(() => toast('Bấm ▶ trên trình phát để nghe'));
     };
   }
 

@@ -82,15 +82,25 @@
       await this.off;
       for (const b of await ZhTTS.synth(text)) await new Promise(r => { const a = new Audio(URL.createObjectURL(b)); a.onended = r; a.onerror = r; a.play().catch(r); });
     },
+    // giọng AI thu sẵn (Giọng 1 nữ + giọng nam) cho mọi câu nghe của đề tự sinh
+    m: null, au: null, tok: 0,
+    loadClips() { if (!this._m) this._m = fetch('audio/manifest.json').then(r => r.json()).then(j => (this.m = j)).catch(() => (this.m = {})); return this._m; },
+    stop() { this.tok++; if (this.au) this.au.pause(); if ('speechSynthesis' in window) speechSynthesis.cancel(); },
+    file(src) { return new Promise(res => { const a = this.au; a.onended = res; a.onerror = res; a.src = src; a.play().catch(res); }); },
     async play(items) {
+      this.stop(); const my = ++this.tok;
+      if (!this.au) { this.au = new Audio(); this.au.preload = 'auto'; }
+      const m = this.m || await this.loadClips();
       for (const it of items) {
-        const t = typeof it === 'string' ? it : it.t, who = typeof it === 'string' ? '女' : it.who;
-        if (this.voices.length) await this.say(t, who); else await this.offline(t);
-        await sleep(600);
+        if (my !== this.tok) return;
+        const t = typeof it === 'string' ? it : it.t, who = typeof it === 'string' ? '女' : it.who, h = m[who + '|' + t];
+        if (h) await this.file('audio/' + h + '.mp3');
+        else if (this.voices.length) await this.say(t, who); else await this.offline(t);
+        await sleep(700);
       }
     },
   };
-  TTS.init();
+  TTS.init(); TTS.loadClips();
 
   // ---------------- tiện ích giao diện ----------------
   function toast(msg) { let t = $('#toast'); if (!t) { t = document.createElement('div'); t.id = 'toast'; t.style.cssText = 'position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:12px;z-index:80;max-width:92vw;font-size:14px'; document.body.appendChild(t); } t.textContent = msg; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 4000); }
@@ -112,7 +122,7 @@
   // ---------------- TRANG CHỦ ----------------
   async function home() {
     freeURLs(); examChrome(false); window.scrollTo(0, 0);
-    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    TTS.stop();
     let sets = []; try { sets = (await DB.all()).sort((a, b) => b.created - a.created); } catch (e) { console.error(e); }
     const hist = LS.get('hsk.hist', {});
     const best = (id) => { const h = hist[id] || []; return h.length ? Math.max(...h.map(x => x.score)) : null; };
@@ -121,7 +131,7 @@
       <h1>Thi thử HSK ngay trên web</h1>
       <p class="muted">Tải bộ đề (file đề PDF, đáp án, lời thoại, file nghe mp3) lên là thi được ngay, web tự chấm điểm. Hoặc để web tự soạn đề HSK1 mới đúng cấu trúc 40 câu.</p>
       <div class="grid" style="margin-top:14px">
-        <div class="card"><h2 style="margin-top:0">🎲 Đề HSK1 tự sinh</h2><p class="muted small">Mỗi lần bấm là một đề mới: 20 câu nghe (web đọc bằng giọng Trung) + 20 câu đọc, có tranh, pinyin và giải thích tiếng Việt.</p>
+        <div class="card"><h2 style="margin-top:0">🎲 Đề HSK1 tự sinh</h2><p class="muted small">Mỗi lần bấm là một đề mới: 20 câu nghe (giọng AI chuẩn, thu sẵn) + 20 câu đọc, có tranh, pinyin và giải thích tiếng Việt.</p>
           <button class="btn pri" id="genBtn">Tạo đề mới & thi</button></div>
         <div class="card"><h2 style="margin-top:0">📤 Tải bộ đề lên</h2>
           <div class="drop" id="drop"><div>Kéo thả file vào đây</div><div class="muted small">Đề .pdf · Đáp án (tên có “答案”) · Lời thoại (“听力材料”) · File nghe .mp3</div>
@@ -287,7 +297,7 @@
     $('#back').onclick = () => (review || confirm('Thoát bài thi?')) && home();
     $('#pyT').onchange = (e) => app.querySelectorAll('[data-py]').forEach(x => x.style.display = e.target.checked ? '' : 'none');
     app.querySelectorAll('[data-play]').forEach(b => b.onclick = async () => {
-      const q = Q[+b.dataset.play - 1]; if ('speechSynthesis' in window) speechSynthesis.cancel();
+      const q = Q[+b.dataset.play - 1];
       app.querySelectorAll('[data-play]').forEach(x => x.disabled = true); b.textContent = '🔊 Đang đọc…';
       const items = q.part === 'L1' || q.part === 'L2' ? q.audio : [...q.audio, ...q.audio];
       try { await TTS.play(items); } catch (e) { toast('Không phát được giọng đọc: ' + e.message); }
@@ -298,7 +308,7 @@
       const n = +b.dataset.n; ans[n - 1] = ans[n - 1] === b.dataset.v ? null : b.dataset.v;
       app.querySelectorAll(`[data-n="${n}"]`).forEach(x => x.classList.toggle('on', x.dataset.v === ans[n - 1]));
     });
-    const t0 = Date.now(), submit = () => { if ('speechSynthesis' in window) speechSynthesis.cancel(); finish(s, ans, Date.now() - t0); };
+    const t0 = Date.now(), submit = () => { TTS.stop(); finish(s, ans, Date.now() - t0); };
     $('#sub2').onclick = () => confirm('Nộp bài?') && submit();
     examChrome(true, () => confirm('Nộp bài?') && submit()); startTimer(40, submit);
   }

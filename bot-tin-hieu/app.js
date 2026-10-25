@@ -118,7 +118,7 @@
     plines.forEach(p => cs.removePriceLine(p)); plines = [];
     const add = (p, col, title, st = 0) => plines.push(cs.createPriceLine({ price: p, color: col, lineWidth: 2, lineStyle: st, axisLabelVisible: true, title }));
     const lives = S.strat === 'all' ? liveList().filter(x => x.s.avgR > 0).slice(0, 2) : (r.res[S.strat].live ? [{ k: S.strat, t: r.res[S.strat].live }] : []);
-    for (const { k, t } of lives) { const nm = BOT.S[k].short; add(t.entry, '#a855f7', nm + ' ENTRY'); add(t.sl, '#f43f5e', 'SL', 2); add(t.tp, '#22c55e', 'TP ' + S.cfg.rr + 'R', 2); }
+    for (const { k, t } of lives) { const nm = BOT.S[k].short; add(t.entry, '#a855f7', nm + ' ENTRY'); add(t.sl, '#f43f5e', 'SL', 2); add(t.tp, '#22c55e', 'TP ' + (+t.rr).toFixed(1) + 'R', 2); }
     if (fit) chart.timeScale().setVisibleLogicalRange({ from: c.length - 150, to: c.length + 6 });
   }
 
@@ -133,10 +133,10 @@
       const x = r.res[k], L = x.last, st = L ? STATE[L.state] : null;
       const lastTxt = L ? `<span class="chip ${sideCls(L.side)}">${sideTxt(L.side)}</span> ${ft(c[L.i].t)} <span class="${st[1]}">${st[0]}</span>` : '<span class="muted">—</span>';
       return `<tr data-k="${k}" class="${S.strat === k ? 'sel' : ''}"><td><b>${esc(BOT.S[k].name)}</b><br><span class="note">${esc(BOT.S[k].kind)}</span></td><td>${x.n}</td><td>${(x.winRate * 100).toFixed(0)}%</td>
-        <td class="${x.netR >= 0 ? 'win' : 'loss'}"><b>${x.netR >= 0 ? '+' : ''}${x.netR.toFixed(1)}R</b></td><td>${isFinite(x.pf) ? x.pf.toFixed(2) : '∞'}</td><td>${x.maxDD.toFixed(1)}R</td><td>${lastTxt}</td></tr>`;
+        <td class="${x.netR >= 0 ? 'win' : 'loss'}"><b>${x.netR >= 0 ? '+' : ''}${x.netR.toFixed(1)}R</b></td><td>${isFinite(x.pf) ? x.pf.toFixed(2) : '∞'}</td><td>${x.maxDD.toFixed(1)}R</td><td title="${esc(Object.entries(x.rej || {}).map(([w, n]) => n + ' × ' + w).join('\n'))}">${x.rejected}/${x.raw}</td><td>${lastTxt}</td></tr>`;
     }).join('');
     const days = (c[c.length - 1].t - c[0].t) / 864e5;
-    $('rankNote').textContent = `${c.length} nến ${TFN[S.tf]} (~${days.toFixed(days < 10 ? 1 : 0)} ngày). RR ${S.cfg.rr}, phí ${S.cfg.costPct}%/lệnh. Mẫu nhỏ (dưới ~30 lệnh) chưa đủ tin cậy; xem thêm ở khung khác. Bấm vào một dòng để xem riêng chiến lược đó trên chart.`;
+    $('rankNote').textContent = `${c.length} nến ${TFN[S.tf]} (~${days.toFixed(days < 10 ? 1 : 0)} ngày). Mọi tín hiệu đều qua bộ lọc cấu trúc: cùng chiều cấu trúc khung này và khung lớn, entry ở discount (BUY) / premium (SELL), SL ngoài đáy/đỉnh được bảo vệ, TP tại thanh khoản. Cột "Bị loại" = số tín hiệu gốc bị loại vì sai cấu trúc (rê chuột để xem lý do). Phí ${S.cfg.costPct}%/lệnh. Mẫu nhỏ (dưới ~30 lệnh) chưa đủ tin cậy; xem thêm ở khung khác. Bấm vào một dòng để xem riêng chiến lược đó trên chart.`;
     $('rank').querySelectorAll('tr').forEach(tr => tr.onclick = () => setStrat(S.strat === tr.dataset.k ? 'all' : tr.dataset.k));
   }
   function histTable() {
@@ -162,7 +162,7 @@
       return `<div class="sig ${sideCls(t.side)}"><div class="t"><span>${sideTxt(t.side)} ${t.limit ? 'LIMIT' : ''} · ${esc(BOT.S[k].short)}</span><span class="chip">${STATE[t.state][0]}</span></div>
         <div class="lv"><span>Entry</span><b>${fx(t.entry)}</b><span>${t.state === 'PENDING' ? 'cách ' + fx(Math.abs(last - t.entry)) : 'giá ' + fx(last)}</span>
         <span>Stop Loss</span><b class="loss">${fx(t.sl)}</b><span>−1R · ${fx(R)}</span>
-        <span>Take Profit</span><b class="win">${fx(t.tp)}</b><span>+${S.cfg.rr}R</span></div>
+        <span>Take Profit</span><b class="win">${fx(t.tp)}</b><span>+${(+t.rr).toFixed(2)}R</span></div>
         <p class="note" style="margin:6px 0 0">${ft(c[t.i].t)} · ${esc(t.note || '')}<br>Backtest: ${s.n} lệnh, thắng ${(s.winRate * 100).toFixed(0)}%, <span class="${s.netR >= 0 ? 'win' : 'loss'}">${s.netR >= 0 ? '+' : ''}${s.netR.toFixed(1)}R</span>${s.avgR <= 0 ? ' · <b class="loss">chiến lược này đang lỗ trên dữ liệu này</b>' : ''}</p></div>`;
     }).join('');
     else h += '<p class="note" style="margin:10px 0 0">Không có lệnh nào đang mở hoặc đang chờ khớp.</p>';

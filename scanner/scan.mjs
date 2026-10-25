@@ -136,7 +136,7 @@ async function broadcast(state, text) {
 function sigText(x, head) {
   const dp = SYM[x.sym].dp, R = Math.abs(x.entry - x.sl);
   return `${head}\n<b>${x.side > 0 ? '🟢 BUY' : '🔴 SELL'}${x.limit ? ' LIMIT' : ''} ${SYM[x.sym].name} · ${TFN[x.tf]}</b> — ${esc(x.stratName)}\n` +
-    `Entry: <code>${fx(x.entry, dp)}</code>\nSL: <code>${fx(x.sl, dp)}</code> (−1R · ${fx(R, dp)})\nTP: <code>${fx(x.tp, dp)}</code> (+${CFG.rr}R)\n` +
+    `Entry: <code>${fx(x.entry, dp)}</code>\nSL: <code>${fx(x.sl, dp)}</code> (−1R · ${fx(R, dp)})\nTP: <code>${fx(x.tp, dp)}</code> (+${(Math.abs(x.tp - x.entry) / R).toFixed(2)}R)\n` +
     `<i>${esc(x.note || '')}</i>\nNguồn giá: ${esc(PUB_NAME[x.src] || x.src)}${x.off ? ` (đã căn theo Exness ${x.off > 0 ? '+' : ''}${x.off})` : ''} · tín hiệu lúc ${vn(x.t)}\n` +
     `Backtest chiến lược này: ${x.bt.n} lệnh, thắng ${Math.round(x.bt.win * 100)}%, ${x.bt.netR >= 0 ? '+' : ''}${x.bt.netR.toFixed(1)}R`;
 }
@@ -233,7 +233,7 @@ async function main() {
         state.consSent[ck] = Date.now();
         alerts.push(`🔥 <b>${cs.n} chiến lược cùng ${cs.side > 0 ? 'BUY' : 'SELL'} ${SYM[sym].name} ${TFN[tf]}</b>\n${(cs.side > 0 ? cs.buy : cs.sell).map(k => esc(BOT.S[k].name)).join(', ')}\nGiá ${fx(c[n - 1].c, SYM[sym].dp)} · ${vn(c[n - 1].t)}`);
       }
-      runStatus[`${sym}|${tf}`] = { consensus: cs, price: c[n - 1].c, t: c[n - 1].t, src: d.src, off, ranking: Object.keys(a.res).map(k => ({ k, n: a.res[k].n, win: +a.res[k].winRate.toFixed(3), netR: +a.res[k].netR.toFixed(2) })) };
+      runStatus[`${sym}|${tf}`] = { consensus: cs, price: c[n - 1].c, t: c[n - 1].t, src: d.src, off, ranking: Object.keys(a.res).map(k => ({ k, n: a.res[k].n, win: +a.res[k].winRate.toFixed(3), netR: +a.res[k].netR.toFixed(2), raw: a.res[k].raw, rej: a.res[k].rej, noStruct: (() => { const b = BOT.backtest(c, BOT.S[k].run(c, a.P), CFG); return { n: b.n, win: +b.winRate.toFixed(3), netR: +b.netR.toFixed(2) }; })() })) };
     }
   }
 

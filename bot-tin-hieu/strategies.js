@@ -197,6 +197,90 @@
     },
   };
 
+
+  // ---------------- cấu trúc thị trường (dùng để lọc mọi tín hiệu) ----------------
+  // Xu hướng theo phá vỡ cấu trúc: đóng cửa trên đỉnh swing gần nhất → tăng (BOS/CHoCH), dưới đáy swing → giảm.
+  // Đáy được bảo vệ (protected low) = đáy thấp nhất của nhịp hồi trước cú phá đỉnh; ngược lại cho đỉnh được bảo vệ.
+  function marketStructure(c, L) {
+    const pv = pivots(c, L), n = c.length, trend = new Array(n).fill(0), prot = new Array(n).fill(NaN), protI = new Array(n).fill(-1), kind = new Array(n).fill('');
+    let hi = null, lo = null, hiB = true, loB = true, tr = 0, pP = NaN, pI = -1, ih = 0, il = 0;
+    for (let i = 0; i < n; i++) {
+      while (ih < pv.H.length && pv.H[ih].conf <= i) { hi = pv.H[ih++]; hiB = false; }
+      while (il < pv.L.length && pv.L[il].conf <= i) { lo = pv.L[il++]; loB = false; }
+      const x = c[i];
+      if (hi && !hiB && x.c > hi.p) {
+        hiB = true; kind[i] = tr === 1 ? 'BOS' : 'CHoCH'; tr = 1; pP = Infinity;
+        for (let j = hi.i; j <= i; j++) if (c[j].l < pP) { pP = c[j].l; pI = j; }
+      } else if (lo && !loB && x.c < lo.p) {
+        loB = true; kind[i] = tr === -1 ? 'BOS' : 'CHoCH'; tr = -1; pP = -Infinity;
+        for (let j = lo.i; j <= i; j++) if (c[j].h > pP) { pP = c[j].h; pI = j; }
+      } else if (tr === 1 && x.c < pP) { tr = -1; kind[i] = 'CHoCH'; pP = -Infinity; for (let j = pI; j <= i; j++) if (c[j].h > pP) { pP = c[j].h; pI = j; } }
+      else if (tr === -1 && x.c > pP) { tr = 1; kind[i] = 'CHoCH'; pP = Infinity; for (let j = pI; j <= i; j++) if (c[j].l < pP) { pP = c[j].l; pI = j; } }
+      trend[i] = tr; prot[i] = pP; protI[i] = pI;
+    }
+    return { trend, prot, protI, kind, pv };
+  }
+  function resample(c, ms) {
+    const out = [];
+    for (const x of c) {
+      const t = Math.floor(x.t / ms) * ms, b = out[out.length - 1];
+      if (b && b.t === t) { b.h = Math.max(b.h, x.h); b.l = Math.min(b.l, x.l); b.c = x.c; b.ct = x.ct; }
+      else out.push({ t, ct: x.ct, end: t + ms, o: x.o, h: x.h, l: x.l, c: x.c });
+    }
+    return out.filter(b => b.ct >= b.end); // chỉ giữ nến khung lớn đã đóng đủ
+  }
+  const HTF_OF = { 3e5: 36e5, 9e5: 36e5, 18e5: 144e5, 36e5: 144e5, 144e5: 864e5, 864e5: 6048e5 };
+  const TF_TXT = { 3e5: 'M5', 9e5: 'M15', 18e5: 'M30', 36e5: 'H1', 144e5: 'H4', 864e5: 'D1', 6048e5: 'W1' };
+  function htfTrend(c) { // xu hướng cấu trúc khung lớn tại từng nến (chỉ dùng nến khung lớn đã đóng)
+    const d = []; for (let i = 1; i < Math.min(c.length, 60); i++) d.push(c[i].t - c[i - 1].t); d.sort((a, b) => a - b);
+    const step = d[d.length >> 1] || 9e5, ms = HTF_OF[step] || step * 4;
+    if (c.length && c[0].ct == null) c = c.map(x => ({ ...x, ct: x.t + step }));
+    const H = resample(c, ms), HS = marketStructure(H, 2), out = new Array(c.length).fill(0);
+    let j = -1; for (let i = 0; i < c.length; i++) { while (j + 1 < H.length && H[j + 1].end <= c[i].ct) j++; out[i] = j >= 0 ? HS.trend[j] : 0; }
+    return { trend: out, txt: TF_TXT[ms] || 'khung lớn', ltf: TF_TXT[step] || '' };
+  }
+  // lọc 1 tín hiệu theo cấu trúc: cùng chiều cấu trúc khung hiện tại + khung lớn, entry ở discount/premium,
+  // SL ngoài đáy/đỉnh được bảo vệ, TP tại thanh khoản (đỉnh/đáy swing chưa bị lấy)
+  function structureGate(c, P, ST, HT, s, cfg) {
+    const d = s.side, tfx = HT.ltf, htx = HT.txt;
+    if (ST.trend[s.i] !== d) {
+      // cấu trúc khung hiện tại đang ngược (giá đang hồi): chờ tối đa 10 nến cho CHoCH/BOS cùng chiều rồi mới tính tín hiệu
+      let j = s.i + 1; while (j < c.length && j <= s.i + 10 && ST.trend[j] !== d) j++;
+      if (j >= c.length || j > s.i + 10) return { why: `ngược cấu trúc ${tfx}, chưa có CHoCH xác nhận` };
+      s = { ...s, i: j, entry: s.limit ? s.entry : c[j].c, note: (s.note || '') + ` → chờ ${ST.kind[j] || 'CHoCH'} ${tfx} xác nhận` };
+    }
+    const i = s.i, a = P.atr14[i];
+    if (HT.trend[i] !== d) return { why: `ngược cấu trúc ${htx}` };
+    const pl = ST.prot[i], pi = ST.protI[i]; if (!isFinite(pl) || pi < 0) return { why: 'chưa có đáy/đỉnh được bảo vệ' };
+    let ext = d > 0 ? -Infinity : Infinity; for (let j = pi; j <= i; j++) ext = d > 0 ? Math.max(ext, c[j].h) : Math.min(ext, c[j].l);
+    const rng = Math.abs(ext - pl), eq = (ext + pl) / 2, tol = 0.05 * rng;
+    if (!(rng > 0)) return { why: 'nhịp quá nhỏ' };
+    let wait = '';
+    if (d > 0 ? s.entry > eq + tol : s.entry < eq - tol) {
+      // giá đang ở premium (BUY) / discount (SELL): không đuổi giá, đặt lệnh chờ tại 50% nhịp (điểm cân bằng)
+      if (s.limit) return { why: d > 0 ? 'BUY ở vùng premium' : 'SELL ở vùng discount' };
+      s = { ...s, entry: eq, limit: true, expiry: 20 }; wait = ', chờ hồi về 50% nhịp';
+    }
+    const pos = d > 0 ? (s.entry - pl) / rng : (pl - s.entry) / rng; // 0 = sát đáy/đỉnh bảo vệ, 1 = đỉnh/đáy nhịp
+    const sSL = d > 0 ? pl - 0.2 * a : pl + 0.2 * a, sl = d > 0 ? Math.min(s.sl, sSL) : Math.max(s.sl, sSL), risk = Math.abs(s.entry - sl);
+    if (d > 0 ? sl >= s.entry : sl <= s.entry) return { why: 'SL sai phía' };
+    if (risk > 4 * a) return { why: 'SL cấu trúc quá xa (>4 ATR)' };
+    // TP: thanh khoản gần nhất còn nguyên, RR trong [minRR, maxRR]
+    let tp = null, tpTxt = '';
+    const arr = d > 0 ? ST.pv.H : ST.pv.L;
+    for (const p of arr) {
+      if (p.conf > i) break;
+      const beyond = d > 0 ? p.p > s.entry : p.p < s.entry; if (!beyond) continue;
+      let taken = false; for (let j = p.i + 1; j <= i; j++) if (d > 0 ? c[j].h > p.p : c[j].l < p.p) { taken = true; break; }
+      if (taken) continue;
+      const rr = Math.abs(p.p - s.entry) / risk;
+      if (rr >= cfg.minRR && rr <= cfg.maxRR && (tp == null || Math.abs(p.p - s.entry) < Math.abs(tp - s.entry))) { tp = p.p; tpTxt = (d > 0 ? 'BSL ' : 'SSL ') + p.p.toFixed(2); }
+    }
+    if (tp == null) { tp = s.entry + d * cfg.rr * risk; tpTxt = cfg.rr + 'R (không có thanh khoản phù hợp)'; }
+    const note = `${s.note || ''} · Cấu trúc ${tfx} & ${htx} ${d > 0 ? 'tăng' : 'giảm'}, entry ở ${(pos * 100).toFixed(0)}% nhịp (${d > 0 ? 'discount' : 'premium'}${wait}), SL ngoài ${d > 0 ? 'đáy' : 'đỉnh'} bảo vệ ${pl.toFixed(2)}, TP ${tpTxt}`;
+    return { sig: { ...s, sl, tp, note } };
+  }
+
   // ---------------- backtest ----------------
   // cfg: { rr, maxBars, cost (tỷ lệ giá, khứ hồi) }
   function backtest(c, sigs, cfg) {
@@ -204,7 +288,7 @@
     for (const s of sigs) {
       if (s.i <= busyUntil) continue; // mỗi chiến lược chỉ giữ 1 lệnh một lúc
       const risk = Math.abs(s.entry - s.sl); if (!(risk > 0)) continue;
-      const tp = s.entry + s.side * cfg.rr * risk, t = { ...s, tp, risk, state: 'OPEN', fill: null, exit: null, r: null };
+      const tp = s.tp != null ? s.tp : s.entry + s.side * cfg.rr * risk, rrT = Math.abs(tp - s.entry) / risk, t = { ...s, tp, rr: rrT, risk, state: 'OPEN', fill: null, exit: null, r: null };
       let k = s.i + 1;
       if (s.limit) { // chờ giá về entry
         t.state = 'PENDING';
@@ -222,7 +306,7 @@
         const x = c[j];
         const hitSL = s.side > 0 ? x.l <= s.sl : x.h >= s.sl, hitTP = s.side > 0 ? x.h >= tp : x.l <= tp;
         if (hitSL) { t.state = 'LOSS'; t.exit = j; t.r = -1 - costR; break; }
-        if (hitTP && !(j === t.fill && s.limit)) { t.state = 'WIN'; t.exit = j; t.r = cfg.rr - costR; break; }
+        if (hitTP && !(j === t.fill && s.limit)) { t.state = 'WIN'; t.exit = j; t.r = rrT - costR; break; }
         if (j - t.fill >= cfg.maxBars) { t.state = 'TIME'; t.exit = j; t.r = s.side * (x.c - s.entry) / risk - costR; break; }
       }
       trades.push(t); busyUntil = t.exit != null ? t.exit : c.length;
@@ -235,21 +319,24 @@
 
   // chạy tất cả chiến lược trên một bộ nến
   function analyze(c, cfg) {
-    const P = prep(c), res = {};
+    cfg = Object.assign({ minRR: 1.5, maxRR: 5, structure: true }, cfg);
+    const P = prep(c), res = {}, ST = marketStructure(c, 3), HT = htfTrend(c);
     for (const k in S) {
-      let sigs = [];
-      try { sigs = S[k].run(c, P); } catch (e) { console.warn(k, e); }
+      let sigs = [], raw = [], rej = {};
+      try { raw = S[k].run(c, P); } catch (e) { console.warn(k, e); }
+      if (cfg.structure) for (const s of raw) { const g = structureGate(c, P, ST, HT, s, cfg); if (g.sig) sigs.push(g.sig); else rej[g.why] = (rej[g.why] || 0) + 1; }
+      else sigs = raw;
       const bt = backtest(c, sigs, cfg), last = bt.trades[bt.trades.length - 1] || null, n = c.length;
       const live = last && (last.state === 'OPEN' || last.state === 'PENDING') ? last : null;
       const fresh = last && n - 1 - last.i <= cfg.freshBars ? last : null;
-      res[k] = { ...bt, live, fresh, last };
+      res[k] = { ...bt, live, fresh, last, raw: raw.length, rejected: raw.length - sigs.length, rej };
     }
     // đồng thuận: các chiến lược có tín hiệu mới cùng chiều, chỉ tính chiến lược có kỳ vọng dương trên dữ liệu này
     const votes = { 1: [], '-1': [] };
     for (const k in res) { const f = res[k].fresh; if (f && (f.state === 'OPEN' || f.state === 'PENDING') && res[k].n >= 5 && res[k].avgR > 0) votes[f.side].push(k); }
     const side = votes[1].length > votes[-1].length ? 1 : votes[-1].length > votes[1].length ? -1 : 0;
-    return { P, res, consensus: { side, buy: votes[1], sell: votes[-1], n: Math.max(votes[1].length, votes[-1].length) } };
+    return { P, ST, HT, res, consensus: { side, buy: votes[1], sell: votes[-1], n: Math.max(votes[1].length, votes[-1].length) } };
   }
 
-  root.BOT = { S, analyze, backtest, ema, atr };
+  root.BOT = { S, analyze, backtest, ema, atr, marketStructure, htfTrend };
 })(typeof window !== 'undefined' ? window : globalThis);

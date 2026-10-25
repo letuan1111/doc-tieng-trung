@@ -96,7 +96,7 @@
 
   // ---------------- chart ----------------
   let chart, cs, e24, e34, e89, plines = [];
-  const SHOW = Object.assign({ m15: true, h1: true, h4: true, liq: true, proj: true, e34: true }, LS.get('smc.show', {}));
+  const SHOW = Object.assign({ m15: true, h1: true, h4: true, liq: true, proj: true, e34: true, e24: false, bot: true }, LS.get('smc.show', {}));
   const TZ = -new Date().getTimezoneOffset() * 60;
   const tsec = (t) => Math.floor(t / 1000) + TZ;
   function initChart() {
@@ -129,7 +129,7 @@
     const r = S.res; if (!r || !chart) return;
     const tf = r.ind[S.tf], c = tf.c; viewBars = c;
     cs.setData(c.map(x => ({ time: tsec(x.t), open: x.o, high: x.h, low: x.l, close: x.c })));
-    e24.setData(c.map((x, i) => ({ time: tsec(x.t), value: tf.e1[i] })));
+    e24.setData(SHOW.e24 ? c.map((x, i) => ({ time: tsec(x.t), value: tf.e1[i] })) : []);
     e89.setData(c.map((x, i) => ({ time: tsec(x.t), value: tf.e2[i] })));
     e34.setData(SHOW.e34 ? c.map((x, i) => ({ time: tsec(x.t), value: tf.e3[i] })) : []);
     const t0 = c.length ? c[0].t : 0, snap = (t) => { // đưa thời điểm về nến của khung đang xem
@@ -154,6 +154,7 @@
     if (SHOW.proj && r.proj && r.proj.path.length) { const last = r.proj.path[r.proj.path.length - 1].t; fut = Math.min(220, Math.max(6, Math.ceil((last - c[c.length - 1].t) / TFMS[S.tf]) + 4)); }
     chart.timeScale().applyOptions({ rightOffset: Math.max(8, fut) });
     if (fit) chart.timeScale().setVisibleLogicalRange({ from: c.length - Math.max(80, 130 - fut), to: c.length + fut });
+    drawBotLines();
     drawOverlay();
   }
   function current() { const r = S.res; if (!r) return null; return [r.buy.live.active, r.sell.live.active].filter(Boolean).sort((a, b) => b.t - a.t)[0] || null; }
@@ -207,6 +208,19 @@
       path(r.proj.alt, 'rgba(148,163,184,.75)', [3, 4], 1.5, 'price');
       path(r.proj.path, r.proj.bias > 0 ? '#4ade80' : r.proj.bias < 0 ? '#fb7185' : '#e5e7eb', [], 2.4, 'wave');
       if (r.proj.inval) { const y = cs.priceToCoordinate(r.proj.inval.p), x = X(r.proj.path[0].t); if (y != null && x != null) { g.strokeStyle = 'rgba(245,158,11,.9)'; g.setLineDash([1, 3]); g.beginPath(); g.moveTo(x, y); g.lineTo(W - psW, y); g.stroke(); g.setLineDash([]); g.fillStyle = '#f59e0b'; g.font = '600 10px Be Vietnam Pro'; g.fillText('Vô hiệu ' + fx(r.proj.inval.p), x + 4, y - 4); } }
+    }
+    // setup mà bot MT5 đang theo dõi
+    const bs = SHOW.bot && botSym(), u = bs && bs.setup;
+    if (u) {
+      const PK = 'rgba(244,114,182,.95)';
+      if (u.zl > 0 && u.zh > u.zl) box(u.tZone || u.tMss || c[0].t, null, u.zl, u.zh, 'rgba(244,114,182,.15)', PK, `BOT ${u.zone} ${u.tf}`);
+      const hl = (t, p, label) => {
+        if (!(p > 0)) return; const y = cs.priceToCoordinate(p), x0 = xOf(t || c[0].t); if (y == null || x0 == null) return;
+        g.strokeStyle = PK; g.setLineDash([4, 3]); g.lineWidth = 1.2; g.beginPath(); g.moveTo(Math.max(0, x0), y); g.lineTo(W - psW, y); g.stroke(); g.setLineDash([]);
+        g.fillStyle = PK; g.font = '600 10px Be Vietnam Pro'; g.fillText(label, Math.max(2, x0 + 4), y - 3);
+      };
+      hl(u.tSweep, u.sweep, `BOT quét ${u.liqKind} ${fx(u.sweep)}`);
+      hl(u.tMss, u.brk, `BOT ${u.kind} ${fx(u.brk)}`);
     }
     // vùng FVG/OB của setup
     for (const s of r.all.slice(-8)) {
@@ -284,6 +298,62 @@
       : '<tr><td colspan="8" class="muted">Chưa có setup nào đạt đủ điều kiện trong dữ liệu đã tải.</td></tr>';
   }
 
+  // ---------------- Bot MT5 (EA v16.1 đẩy phân tích lên Firebase) ----------------
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  let botLines = [];
+  async function loadBot() {
+    if (!MT5.db) { S.bot = null; renderBot(); return; }
+    const base = MT5.db.replace(/\/+$/, '');
+    try {
+      if (!S.botLogin) { const l = await getJSON(base + '/bot.json?shallow=true'); S.botLogin = l ? Object.keys(l)[0] : null; }
+      S.bot = S.botLogin ? await getJSON(`${base}/bot/${encodeURIComponent(S.botLogin)}.json`) : null; S.botErr = '';
+    } catch (e) { S.botErr = e.message; }
+    renderBot();
+  }
+  function botSym() { const b = S.bot; if (!b || !b.symbols) return null; return Object.values(b.symbols).find(x => x.symbol === MT5[S.sym]) || null; }
+  function renderBot() { $('bot').innerHTML = botCard(); drawBotLines(); if (S.res && S.view === 'chart') drawOverlay(); }
+  function drawBotLines() {
+    if (!cs) return; botLines.forEach(p => cs.removePriceLine(p)); botLines = [];
+    if (!SHOW.bot || !S.bot) return;
+    const add = (p, col, t, st = 0) => p > 0 && botLines.push(cs.createPriceLine({ price: p, color: col, lineWidth: 2, lineStyle: st, axisLabelVisible: true, title: t }));
+    const s = botSym(), u = s && s.setup;
+    if (u) { add(u.entry, '#f472b6', 'BOT ENTRY'); add(u.sl, '#fb7185', 'BOT SL', 2); add(u.tp, '#4ade80', `BOT TP ${(+u.rr).toFixed(1)}R`, 2); }
+    for (const o of (S.bot.orders || []).filter(o => o.symbol === MT5[S.sym])) {
+      if (u && Math.abs(o.price - u.entry) < 1e-6) continue;
+      add(o.price, '#e879f9', `BOT ${o.side} ${o.kind === 'position' ? 'ĐANG CHẠY' : 'LIMIT'}`);
+      add(o.sl, '#fb7185', 'SL lệnh bot', 2); add(o.tp, '#4ade80', 'TP lệnh bot', 2);
+    }
+  }
+  function botCard() {
+    if (!MT5.db) return '<p class="note">Nhập địa chỉ Firebase ở ô <b>Nguồn MT5</b> bên dưới và bật <code>InpWebEnable</code> trong EA v16.1 để xem bot phân tích tại đây.</p>';
+    const b = S.bot;
+    if (!b) return `<p class="note">Chưa có dữ liệu bot${S.botErr ? ' (' + esc(S.botErr) + ')' : ''}. Kiểm tra EA v16.1 đang chạy với <code>InpWebEnable = true</code>, cùng địa chỉ Firebase, và quy tắc Firebase có mục <code>bot</code>.</p>`;
+    const age = Math.max(0, (Date.now() - b.updated) / 1000), live = age < 90;
+    const head = `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="chip ${live ? 'buy' : 'warn'}">${live ? 'TRỰC TIẾP' : 'MẤT KẾT NỐI ' + Math.round(age / 60) + ' phút'}</span>
+      <span class="chip">v${esc(b.version)}</span>${b.today && b.today.stop ? `<span class="chip sell">DỪNG: ${esc(b.today.stop)}</span>` : `<span class="chip ${b.trading ? 'buy' : ''}">${b.trading ? 'Đang cho phép giao dịch' : 'Không giao dịch'}</span>`}</div>`;
+    const s = botSym();
+    if (!s) return head + `<p class="note">Bot không theo dõi mã <b>${esc(MT5[S.sym])}</b>.</p>`;
+    const tfs = ['M5', 'M15', 'H1', 'H4'].map(k => { const x = s.tfs && s.tfs[k]; if (!x) return `<span class="chip">${k} —</span>`;
+      return `<span class="chip ${x.trend > 0 ? 'buy' : x.trend < 0 ? 'sell' : ''}" title="EMA34 ${fx(x.e34)} · EMA89 ${fx(x.e89)}">${k} ${x.trend > 0 ? '▲ 34>89' : x.trend < 0 ? '▼ 34<89' : '↔ đan xen'}</span>`; }).join('');
+    const u = s.setup;
+    let mid;
+    if (u) {
+      const buy = u.side === 'BUY';
+      const why = String(u.reason || '').split('; ').filter(Boolean).slice(0, 10).map(x => `<li>${esc(x)}</li>`).join('');
+      mid = `<div class="sig ${buy ? 'buy' : 'sell'}" style="margin-top:10px"><div class="t">${buy ? 'BUY' : 'SELL'} LIMIT <span class="chip ${buy ? 'buy' : 'sell'}">${esc(u.method)} · ${esc(u.tf)}</span></div>
+        <div class="lv"><span>Entry</span><b>${fx(u.entry)}</b><span>${esc(u.zone)} ${fx(u.zl)}–${fx(u.zh)}</span>
+        <span>Stop Loss</span><b class="loss">${fx(u.sl)}</b><span>−1R · ${fx(Math.abs(u.entry - u.sl))}</span>
+        <span>Take Profit</span><b class="win">${fx(u.tp)}</b><span>${(+u.rr).toFixed(2)}R · thanh khoản ${esc(u.tfTarget)}</span></div>
+        <p class="note" style="margin:8px 0 0">${esc(u.name)} · ${u.reversal ? 'Đảo chiều' : 'Thuận xu hướng'} · Quét ${esc(u.liqKind)} ${fx(u.sweep)} → ${esc(u.kind)} tại ${fx(u.brk)} · Q${u.q} · ${(+u.lot).toFixed(2)} lot</p>
+        <details style="margin-top:6px"><summary class="note" style="cursor:pointer">Lý do bot chọn setup này</summary><ul class="ck">${why}</ul></details></div>`;
+    } else mid = `<p class="note" style="margin-top:10px"><b>Chưa có setup đạt đủ điều kiện.</b></p>`;
+    const ords = (b.orders || []).filter(o => o.symbol === MT5[S.sym]).map(o => `<li><span class="chip ${o.side === 'BUY' ? 'buy' : 'sell'}">${o.side} ${o.kind === 'position' ? 'đang chạy' : 'limit'}</span> ${fx(o.price)} · SL ${fx(o.sl)} · TP ${fx(o.tp)}${o.profit != null ? ` · <b class="${o.profit >= 0 ? 'win' : 'loss'}">${o.profit >= 0 ? '+' : ''}${(+o.profit).toFixed(2)} USD</b>` : ''}</li>`).join('');
+    return head + `<p class="note" style="margin:10px 0 4px">Xu hướng EMA34/89 theo bot:</p><div style="display:flex;gap:6px;flex-wrap:wrap">${tfs}</div>` + mid +
+      `<ul class="ck" style="margin-top:8px"><li><b>Trạng thái quét:</b>&nbsp;${esc(s.scan || '—')}</li><li><b>ScalpPro:</b>&nbsp;${esc(s.scalp || '—')}</li><li><b>Thị trường:</b>&nbsp;${esc(s.regime || '—')}</li></ul>` +
+      (ords ? `<p class="note" style="margin:8px 0 2px">Lệnh của bot:</p><ul class="ck">${ords}</ul>` : '') +
+      `<p class="note" style="margin:8px 0 0">Hôm nay: ${b.today ? `${b.today.pl >= 0 ? '+' : ''}${(+b.today.pl).toFixed(2)} USD · ${b.today.trades} lệnh` : '—'} · <a href="bot.html" style="color:var(--blue)">Bảng theo dõi bot đầy đủ</a></p>`;
+  }
+
   // ---------------- cảnh báo ----------------
   function beep() { try { const A = new (window.AudioContext || window.webkitAudioContext)(), o = A.createOscillator(), g = A.createGain(); o.frequency.value = 880; o.connect(g); g.connect(A.destination); g.gain.setValueAtTime(.2, A.currentTime); g.gain.exponentialRampToValueAtTime(.001, A.currentTime + .6); o.start(); o.stop(A.currentTime + .6); } catch (_) {} }
   function toast(msg) { const t = $('toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 7000); }
@@ -348,7 +418,7 @@
 
   // ---------------- sự kiện ----------------
   function seg(id, attr, fn) { $(id).addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; [...$(id).children].forEach(x => x.classList.toggle('on', x === b)); fn(b.dataset[attr]); }); }
-  seg('symSeg', 's', (s) => { S.sym = s; LS.set('smc.sym', s); S.res = null; $('px').textContent = '—'; $('src').textContent = 'đang tải…'; $('cEx').value = ''; if (S.view === 'tv') renderTV(); refresh(true); });
+  seg('symSeg', 's', (s) => { S.sym = s; LS.set('smc.sym', s); S.res = null; renderBot(); $('px').textContent = '—'; $('src').textContent = 'đang tải…'; $('cEx').value = ''; if (S.view === 'tv') renderTV(); refresh(true); });
   seg('tfSeg', 'tf', (tf) => { S.tf = tf; if (S.view === 'tv') renderTV(); else renderChart(true); });
   seg('viewSeg', 'v', (v) => { S.view = v; $('chartWrap').classList.toggle('hide', v !== 'chart'); $('tv').classList.toggle('hide', v !== 'tv'); if (v === 'tv') renderTV(); else setTimeout(() => renderChart(false), 50); });
   [...$('symSeg').children].forEach(b => b.classList.toggle('on', b.dataset.s === S.sym));
@@ -356,7 +426,7 @@
   $('mDb').value = MT5.db; $('mX').value = MT5.XAU; $('mB').value = MT5.BTC;
   $('mSave').onclick = () => {
     MT5.db = $('mDb').value.trim(); MT5.XAU = $('mX').value.trim() || 'XAUUSDm'; MT5.BTC = $('mB').value.trim() || 'BTCUSDm';
-    LS.set('smc.mt5', MT5); S.srcIdx = {}; S.raw = {}; toast(MT5.db ? 'Đã lưu – đang lấy dữ liệu từ MT5…' : 'Đã tắt nguồn MT5'); refresh(true);
+    LS.set('smc.mt5', MT5); S.srcIdx = {}; S.raw = {}; S.botLogin = null; loadBot(); toast(MT5.db ? 'Đã lưu – đang lấy dữ liệu từ MT5…' : 'Đã tắt nguồn MT5'); refresh(true);
   };
   $('cApply').onclick = () => {
     S.cfg = { mode: $('cMode').value, entry: $('cEntry').value, minRR: +$('cRR').value || 1.5, minScore: +$('cScore').value || 85 }; LS.set('smc.cfg', S.cfg);
@@ -374,7 +444,7 @@
   setNB();
   document.querySelectorAll('[data-show]').forEach(cb => { cb.checked = !!SHOW[cb.dataset.show]; cb.onchange = () => { SHOW[cb.dataset.show] = cb.checked; LS.set('smc.show', SHOW); renderChart(false); }; });
 
-  initChart(); refresh(true);
-  setInterval(tick, 15000);
+  initChart(); refresh(true); loadBot();
+  setInterval(tick, 15000); setInterval(loadBot, 15000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(false); });
 })();

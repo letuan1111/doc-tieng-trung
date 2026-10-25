@@ -65,6 +65,13 @@ pre{background:#0b0f14;border:1px solid var(--line);border-radius:10px;padding:1
 <li>Trên điện thoại cũng nhập địa chỉ này 1 lần (mỗi trình duyệt lưu riêng).</li>
 </ol></div>
 
+<h2><span>5</span>Xem bot ICT/SMC phân tích ngay trên chart</h2>
+<div class="card"><ol>
+<li>Chạy EA <b>ICT_SMC_ScalpPro_v16_1_Safe_Web</b> (bot giao dịch) trên một chart khác, tab Inputs: <code>InpWebEnable = true</code>, <code>InpWebDbUrl</code> = cùng địa chỉ Firebase ở bước 1.</li>
+<li>Giữ EA <b>MT5_Bridge_Firebase</b> chạy song song: EA này gửi nến M5/M15/H1/H4 để web vẽ chart, bot gửi phân tích của nó.</li>
+<li>Mở trang tín hiệu: thẻ <b>Bot MT5 đang phân tích</b> hiện xu hướng EMA34/89 từng khung, setup bot đang theo dõi (Entry/SL/TP, vùng FVG/OB, mức quét thanh khoản, MSS) và lý do bot bị chặn. Trên chart, màu hồng là của bot.</li>
+</ol></div>
+
 <h2><span>!</span>Lưu ý</h2>
 <div class="card">
 <p class="warn">Web chỉ có dữ liệu MT5 khi máy tính đang bật và MT5 đang chạy EA. Khi MT5 tắt (hoặc cuối tuần sàn vàng đóng), trang tự quay về nguồn Binance và hiện nhãn vàng "MT5 chưa kết nối". Muốn chạy 24/7 thì dùng VPS cho MT5.</p>

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bot ICT/SMC · Theo dõi</title>
+<meta name="theme-color" content="#0d1117">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d1117;--panel:#151b23;--panel2:#1c2430;--line:#2a3441;--ink:#e6edf3;--muted:#8b98a8;--buy:#22c55e;--sell:#f43f5e;--warn:#f59e0b;--blue:#3b82f6}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 'Be Vietnam Pro',system-ui,sans-serif}
+.mono{font-family:'JetBrains Mono',monospace}
+header{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.bar{max-width:1180px;margin:0 auto;padding:10px max(16px,env(safe-area-inset-left));display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.bar b{font-weight:800;margin-right:auto}.bar a{color:var(--muted);text-decoration:none;font-size:13px}
+main{max-width:1180px;margin:0 auto;padding:14px max(16px,env(safe-area-inset-left)) 60px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px}#view{min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;min-width:0}
+.card h3{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpis div{background:var(--panel2);border-radius:12px;padding:10px 12px}.kpis small{color:var(--muted);display:block}.kpis b{font:600 20px 'JetBrains Mono',monospace}
+.chip{display:inline-block;font-size:12px;padding:2px 9px;border-radius:99px;background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+.ok{color:var(--buy)}.bad{color:var(--sell)}.warn{color:var(--warn)}
+.syms{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:14px}
+.sym .px{font:600 26px 'JetBrains Mono',monospace}
+.line{font-size:13.5px;padding:6px 0;border-top:1px dashed var(--line);word-break:break-word}.line span{color:var(--muted);display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{color:var(--muted);font-size:12px}
+.ev{display:grid;gap:8px}.ev div{background:var(--panel2);border-radius:10px;padding:8px 10px;font-size:13.5px;white-space:pre-line}.ev time{color:var(--muted);font-size:12px;display:block}
+.setup{display:grid;gap:8px;grid-template-columns:1fr auto}input{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px;font:inherit;min-width:0}
+button{background:var(--blue);color:#fff;border:0;border-radius:10px;padding:10px 14px;font:600 14px inherit;font-family:inherit;cursor:pointer}
+.note{color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<header><div class="bar"><b>🤖 Bot ICT/SMC v16</b><span id="upd" class="chip">đang tải…</span><a href="./">Trang tín hiệu</a><a href="HUONG-DAN-MT5.html">Hướng dẫn</a></div></header>
+<main>
+  <div class="card" id="cfg" hidden>
+    <h3>Kết nối</h3>
+    <p class="note" style="margin-top:0">Nhập địa chỉ Firebase Realtime Database (giống ô InpWebDbUrl trong EA). Trang nhớ địa chỉ này trên máy, chung với trang tín hiệu.</p>
+    <div class="setup"><input id="db" placeholder="https://ten-du-an-default-rtdb.asia-southeast1.firebasedatabase.app"><button id="save">Kết nối</button></div>
+    <p id="err" class="bad note"></p>
+  </div>
+  <div id="view" hidden>
+    <div class="card"><div class="kpis" id="kpis"></div><p class="note" id="last" style="margin:10px 0 0"></p></div>
+    <div class="syms" id="syms" style="margin-top:14px"></div>
+    <div class="card" style="margin-top:14px"><h3>Lệnh của bot</h3><div class="tw"><table><thead><tr><th>Loại</th><th>Mã</th><th>Lệnh</th><th>Giá</th><th>SL</th><th>TP</th><th>Lot</th><th>Lãi/lỗ</th></tr></thead><tbody id="ords"></tbody></table></div></div>
+    <div class="card" style="margin-top:14px"><h3>Nhật ký (mới nhất trước)</h3><div class="ev" id="ev"></div></div>
+    <p class="note">Dữ liệu do EA trong MT5 gửi lên mỗi 15 giây. Khi MT5 tắt, trang hiện cảnh báo “MT5 không gửi dữ liệu”. <a href="#" id="chg" style="color:var(--blue)">Đổi địa chỉ Firebase</a></p>
+  </div>
+</main>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const get=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}};
+  const set=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+  const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  let cfg=get('smc.mt5',{}),login=null,timer=null;
+  const base=()=>String(cfg.db||'').replace(/\/+$/,'');
+  const money=v=>(v>0?'+':'')+Number(v||0).toFixed(2);
+  function showCfg(msg){$('cfg').hidden=false;$('view').hidden=true;$('db').value=cfg.db||'';$('err').textContent=msg||'';$('upd').textContent='chưa kết nối';}
+  $('save').onclick=()=>{cfg.db=$('db').value.trim();set('smc.mt5',cfg);login=null;start();};
+  $('chg').onclick=e=>{e.preventDefault();clearInterval(timer);showCfg('');};
+  async function j(path){const r=await fetch(base()+path,{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}
+  async function load(){
+    try{
+      if(!login){const ks=await j('/bot.json?shallow=true');if(!ks){showCfg('Chưa có dữ liệu bot. Kiểm tra EA đã bật InpWebEnable và cho phép WebRequest tới địa chỉ Firebase.');return;}login=Object.keys(ks)[0];}
+      const st=await j('/bot/'+login+'.json');const ev=await j('/botev/'+login+'.json?orderBy=%22$key%22&limitToLast=40')||{};
+      render(st,ev);
+    }catch(e){showCfg('Không đọc được dữ liệu ('+e.message+'). Kiểm tra địa chỉ và quy tắc Rules của Firebase.');}
+  }
+  function render(st,ev){
+    $('cfg').hidden=true;$('view').hidden=false;
+    const age=Math.round((Date.now()-st.updated)/1000);
+    $('upd').textContent=age<90?'cập nhật '+age+' giây trước':'⚠ MT5 không gửi dữ liệu ('+Math.round(age/60)+' phút)';
+    $('upd').className='chip '+(age<90?'ok':'warn');
+    const t=st.today||{},lim=st.limits||{};
+    $('kpis').innerHTML=`<div><small>Tài khoản</small><b style="font-size:15px">${esc(login)}</b><small>${esc(st.server)}</small></div>
+      <div><small>Số dư / Equity</small><b>${Number(st.balance).toFixed(2)}</b><small>${Number(st.equity).toFixed(2)}</small></div>
+      <div><small>Hôm nay</small><b class="${t.pl>=0?'ok':'bad'}">${money(t.pl)}</b><small>đã chốt ${money(t.closed)} · giới hạn lỗ ${lim.loss||'—'}</small></div>
+      <div><small>Lệnh hôm nay</small><b>${t.trades||0}${lim.trades?'/'+lim.trades:''}</b><small>thua liên tiếp tối đa ${lim.streak||'—'}</small></div>
+      <div><small>Trạng thái</small><b class="${t.stop?'bad':(st.trading?'ok':'warn')}" style="font-size:15px">${t.stop?'⛔ Dừng hôm nay':(st.trading?'● Đang giao dịch':'○ Chỉ phân tích')}</b><small>${esc(t.stop||'')}</small></div>`;
+    $('last').textContent='Hoạt động gần nhất: '+(st.last||'—');
+    const sy=st.symbols||{};
+    $('syms').innerHTML=Object.values(sy).map(s=>{
+      const scan=String(s.scan||''),cls=/PLACED/.test(scan)?'ok':(/chặn|blocked|rejected/.test(scan)?'warn':'');
+      return `<div class="card sym"><h3>${esc(s.symbol)}</h3><div class="px">${s.bid}</div><div class="note">Ask ${s.ask} · spread ${(s.ask-s.bid).toFixed(2)}</div>
+        <div class="line"><span>Trạng thái thị trường</span>${esc(s.regime)}</div>
+        <div class="line"><span>Scalp Pro v2 (xu hướng khung lớn + xác nhận)</span>${esc(s.scalp||'—')}</div>
+        <div class="line ${cls}"><span>Quét setup ICT/SMC</span>${esc(scan||'—')}</div>
+        <div class="line"><span>Sóng / trendline</span>${esc(s.wave||'—')}</div></div>`;}).join('')||'<p class="note">Chưa có mã nào.</p>';
+    const o=st.orders||[];
+    $('ords').innerHTML=o.length?o.map(x=>`<tr><td>${x.kind==='position'?'Đang mở':'Lệnh chờ'}</td><td>${esc(x.symbol)}</td><td class="${x.side==='BUY'?'ok':'bad'}">${x.side}</td><td class="mono">${x.price}</td><td class="mono">${x.sl}</td><td class="mono">${x.tp}</td><td>${x.lot}</td><td class="${(x.profit||0)>=0?'ok':'bad'}">${x.profit!=null?money(x.profit):''}</td></tr>`).join(''):'<tr><td colspan="8" class="note">Không có lệnh nào của bot.</td></tr>';
+    const evs=Object.values(ev).sort((a,b)=>b.t-a.t);
+    $('ev').innerHTML=evs.length?evs.map(e=>`<div><time>${new Date(e.t).toLocaleString('vi-VN')}</time>${esc(e.text)}</div>`).join(''):'<p class="note">Chưa có sự kiện. Bot sẽ ghi khi đặt lệnh, khớp lệnh, chạm SL/TP hoặc dừng trong ngày.</p>';
+  }
+  function start(){clearInterval(timer);if(!cfg.db)return showCfg('');load();timer=setInterval(load,10000);}
+  start();
+})();
+</script>
+</body>
+</html>

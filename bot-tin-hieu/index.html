@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bot tín hiệu</title>
+<meta name="description" content="Bot tín hiệu 7 chiến lược học từ các bot/indicator phổ biến (UT Bot, SuperTrend, Squeeze Momentum, WaveTrend, SMC, EMA 34/89, Bollinger+RSI), tự backtest và báo tín hiệu cho vàng và crypto, dữ liệu công khai.">
+<meta name="theme-color" content="#0d1117">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d1117;--panel:#151b23;--panel2:#1c2430;--line:#2a3441;--ink:#e6edf3;--muted:#8b98a8;--buy:#22c55e;--sell:#f43f5e;--warn:#f59e0b;--blue:#60a5fa;--violet:#a855f7}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--bg:#f6f7f9;--panel:#fff;--panel2:#eef1f4;--line:#dde2e8;--ink:#17202b;--muted:#5b6675;--blue:#2563eb}}
+:root[data-theme="light"]{--bg:#f6f7f9;--panel:#fff;--panel2:#eef1f4;--line:#dde2e8;--ink:#17202b;--muted:#5b6675;--blue:#2563eb}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 'Be Vietnam Pro',system-ui,sans-serif}
+header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.bar{max-width:1320px;margin:0 auto;padding:10px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.brand{font-weight:800;font-size:17px;margin-right:auto;letter-spacing:-.01em}.brand small{color:var(--muted);font-weight:500;font-size:12px;margin-left:6px}
+main{max-width:1320px;margin:0 auto;padding:16px;display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px}
+@media(max-width:1000px){main{grid-template-columns:minmax(0,1fr)}}
+.col{display:grid;gap:14px;align-content:start;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;min-width:0}
+h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;color:var(--muted);font:600 13px inherit;font-family:inherit;padding:6px 10px;border-radius:7px;cursor:pointer}
+.seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 0 #0003}
+.btn{border:1px solid var(--line);background:var(--panel2);color:var(--ink);border-radius:10px;padding:7px 12px;font:600 13px inherit;font-family:inherit;cursor:pointer}
+.btn.pri{background:var(--buy);border-color:var(--buy);color:#04120a}
+select,input{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:6px 8px;font:inherit;font-size:14px;min-width:0}
+.price{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}.price b{font:700 30px 'JetBrains Mono',monospace;letter-spacing:-.02em}
+.chip{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);white-space:nowrap}
+.chip.buy{color:var(--buy);border-color:color-mix(in srgb,var(--buy) 45%,transparent)}.chip.sell{color:var(--sell);border-color:color-mix(in srgb,var(--sell) 45%,transparent)}.chip.warn{color:var(--warn)}
+.muted{color:var(--muted)}.note{color:var(--muted);font-size:13px}.mono{font-family:'JetBrains Mono',monospace}
+.win{color:var(--buy)}.loss{color:var(--sell)}
+.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+#chartWrap{position:relative;height:460px}#chart{position:absolute;inset:0}
+@media(max-width:600px){#chartWrap{height:360px}}
+.legend{display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{color:var(--muted);font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+tr.sel td{background:color-mix(in srgb,var(--violet) 12%,transparent)}tbody tr{cursor:pointer}
+.sig{border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:10px;background:var(--panel2)}
+.sig.buy{border-color:color-mix(in srgb,var(--buy) 50%,transparent)}.sig.sell{border-color:color-mix(in srgb,var(--sell) 50%,transparent)}
+.sig .t{display:flex;justify-content:space-between;gap:8px;align-items:center;font-weight:800}
+.lv{display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;margin-top:8px;font-size:13.5px}.lv b{font-family:'JetBrains Mono',monospace}.lv span:nth-child(3n){color:var(--muted);text-align:right}
+.big{font-size:22px;font-weight:800;letter-spacing:-.01em}
+.radar td,.radar th{text-align:center;padding:6px 4px}.radar td:first-child,.radar th:first-child{text-align:left}
+.cell{display:inline-block;min-width:44px;padding:3px 6px;border-radius:8px;font-weight:700;font-size:12px;background:var(--panel2);color:var(--muted)}
+.cell.buy{background:color-mix(in srgb,var(--buy) 18%,transparent);color:var(--buy)}.cell.sell{background:color-mix(in srgb,var(--sell) 18%,transparent);color:var(--sell)}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.grid2 label{display:grid;gap:3px;font-size:12px;color:var(--muted)}.grid2 input{width:100%}
+.strat{border-top:1px solid var(--line);padding:9px 0}.strat:first-of-type{border-top:0}.strat b{font-size:14px}.strat p{margin:3px 0 0;font-size:13px;color:var(--muted)}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);padding:10px 14px;border-radius:12px;box-shadow:0 8px 30px #0008;z-index:50;max-width:92vw;display:none}
+.err{color:var(--sell);font-size:13px}
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <div class="brand">Bot tín hiệu <small>7 chiến lược · tự backtest · dữ liệu công khai</small></div>
+  <div class="seg" id="symSeg"></div>
+  <button class="btn" id="notifBtn">🔕 Bật thông báo</button>
+</div></header>
+
+<main>
+  <div class="col">
+    <div class="card">
+      <div class="price"><b id="px">—</b><span id="chg" class="chip">—</span><span id="src" class="chip">đang tải…</span><span id="upd" class="note"></span></div>
+    </div>
+    <div class="card">
+      <div class="tools">
+        <div class="seg" id="tfSeg"><button data-v="m5">M5</button><button data-v="m15" class="on">M15</button><button data-v="h1">H1</button><button data-v="h4">H4</button></div>
+        <select id="stratSel" aria-label="Chiến lược hiển thị"></select>
+      </div>
+      <div id="chartWrap"><div id="chart"></div></div>
+      <div class="legend"><span><i style="background:#06b6d4"></i>EMA 34</span><span><i style="background:#eab308"></i>EMA 89</span><span><i style="background:#94a3b8"></i>EMA 200</span><span>▲ BUY · ▼ SELL (chế độ "tất cả" chỉ vẽ chiến lược đang có lãi)</span><span>■ TP / SL của lệnh đã đóng</span></div>
+    </div>
+    <div class="card">
+      <h3>Xếp hạng chiến lược (backtest trên dữ liệu đang xem)</h3>
+      <div class="tw"><table><thead><tr><th>Chiến lược</th><th>Lệnh</th><th>Thắng</th><th>Tổng R</th><th>PF</th><th>Sụt giảm</th><th>Tín hiệu gần nhất</th></tr></thead><tbody id="rank"></tbody></table></div>
+      <p class="note" id="rankNote"></p>
+    </div>
+    <div class="card">
+      <h3 id="histTitle">Lịch sử tín hiệu</h3>
+      <div class="tw"><table><thead><tr><th>Thời gian</th><th>Lệnh</th><th>Entry</th><th>SL</th><th>TP</th><th>Kết quả</th><th>Lý do</th></tr></thead><tbody id="hist"></tbody></table></div>
+    </div>
+  </div>
+
+  <aside class="col">
+    <div class="card"><h3>Tín hiệu bây giờ</h3><div id="now"></div></div>
+    <div class="card">
+      <h3>Radar tất cả các mã</h3>
+      <div class="tw"><table class="radar"><thead><tr><th>Mã</th><th>M5</th><th>M15</th><th>H1</th><th>H4</th></tr></thead><tbody id="radar"></tbody></table></div>
+      <div class="tools" style="margin:10px 0 0"><button class="btn" id="scanBtn">Quét lại</button><span class="note" id="radarNote">Tự quét mỗi 5 phút</span></div>
+      <p class="note" style="margin:6px 0 0">Ô hiện số chiến lược (có lãi khi backtest) đang cùng báo BUY/SELL trong 3 nến gần nhất. Bấm vào ô để mở mã và khung đó.</p>
+    </div>
+    <div class="card">
+      <h3>Cài đặt</h3>
+      <div class="grid2">
+        <label>Tỷ lệ RR (TP = RR × rủi ro)<input id="cRR" type="number" step="0.1" min="0.5" max="6"></label>
+        <label>Giữ lệnh tối đa (nến)<input id="cMax" type="number" step="1" min="5" max="500"></label>
+        <label>Phí + spread khứ hồi (%)<input id="cCost" type="number" step="0.01" min="0" max="1"></label>
+        <label>Tín hiệu "mới" trong (nến)<input id="cFresh" type="number" step="1" min="1" max="20"></label>
+      </div>
+      <button class="btn pri" id="cApply" style="margin-top:10px;width:100%">Áp dụng</button>
+    </div>
+    <div class="card">
+      <h3>Học từ đâu</h3>
+      <div id="strats"></div>
+      <p class="note">Logic lấy từ mã nguồn công khai của các indicator này trên TradingView. Các nhóm "bot tín hiệu" trả phí trên Telegram không công khai cách tính và kết quả, nên không đưa vào.</p>
+    </div>
+  </aside>
+</main>
+<p class="note" style="max-width:1320px;margin:0 auto;padding:0 16px 30px">Dữ liệu: Binance Futures (dự phòng OKX, Bybit), chỉ dùng nến đã đóng nên tín hiệu không vẽ lại. Kết quả backtest đã trừ phí và spread theo cài đặt, khớp SL trước nếu SL và TP chạm trong cùng nến. Đây là công cụ nghiên cứu, không phải khuyến nghị đầu tư.</p>
+<div id="toast"></div>
+
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="strategies.js?v=1"></script>
+<script src="app.js?v=1"></script>
+</body>
+</html>

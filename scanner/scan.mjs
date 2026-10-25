@@ -180,6 +180,7 @@ async function handleCommands(state, log, status) {
 
 // ---------------- vòng quét ----------------
 async function main() {
+  console.log(`Telegram token: ${TOKEN ? 'có (' + TOKEN.length + ' ký tự)' : 'KHÔNG CÓ'} · chat id cố định: ${FIXED_CHAT ? 'có' : 'không'} · Firebase: ${FB ? 'có' : 'không'}`);
   const state = Object.assign({ srcPref: {}, offset: {}, owner: null, tgOffset: 0, lastRun: 0, consSent: {} }, readJSON('state.json', {}));
   let log = readJSON('signals.json', { signals: [] }).signals || [];
   const runStatus = { at: Date.now(), sources: {}, errors: [] };

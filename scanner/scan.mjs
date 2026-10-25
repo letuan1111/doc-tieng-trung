@@ -1,4 +1,4 @@
-// Máy quét tín hiệu chạy trên GitHub Actions (miễn phí) mỗi ~5–10 phút.
+// Máy quét tín hiệu chạy trên GitHub Actions (miễn phí) mỗi ~5–15 phút.
 // - Dữ liệu: MT5 (Exness) qua Firebase nếu máy tính đang bật, nếu không thì OKX → Bybit → Binance → Kraken.
 // - Tín hiệu: 7 chiến lược trong bot-tin-hieu/strategies.js (dùng chung với web).
 // - Lưu nhật ký + trạng thái vào thư mục DATA_DIR (nhánh bot-data), web đọc file signals.json.

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kết nối Telegram</title>
+<meta name="description" content="Hướng dẫn tạo bot Telegram và nối với máy quét tín hiệu chạy miễn phí trên GitHub Actions.">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d1117;--panel:#151b23;--line:#2a3441;--ink:#e6edf3;--muted:#8b98a8;--accent:#22c55e;--blue:#60a5fa;--warn:#fcd9a0}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--bg:#f6f7f9;--panel:#fff;--line:#dde2e8;--ink:#17202b;--muted:#5b6675;--blue:#2563eb;--warn:#92400e}}
+:root[data-theme="light"]{--bg:#f6f7f9;--panel:#fff;--line:#dde2e8;--ink:#17202b;--muted:#5b6675;--blue:#2563eb;--warn:#92400e}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 'Be Vietnam Pro',system-ui,sans-serif}
+main{max-width:760px;margin:0 auto;padding:24px 16px 60px}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:-.02em}h2{font-size:18px;margin:28px 0 8px;display:flex;gap:10px;align-items:center}
+h2 span{background:var(--accent);color:#04120a;border-radius:99px;width:28px;height:28px;display:inline-grid;place-items:center;font-size:14px;flex:none}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+ol,ul{padding-left:20px;margin:6px 0}li{margin:5px 0}
+code{font-family:'JetBrains Mono',monospace;font-size:13.5px;background:color-mix(in srgb,var(--line) 45%,transparent);border:1px solid var(--line);border-radius:6px;padding:1px 6px;word-break:break-all}
+.muted{color:var(--muted)}a{color:var(--blue)}
+.btn{display:inline-block;background:var(--accent);color:#04120a;font-weight:800;border-radius:10px;padding:9px 14px;text-decoration:none;margin:4px 6px 4px 0}
+.btn.alt{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.warn{border-left:3px solid #f59e0b;padding-left:10px;color:var(--warn)}
+table{border-collapse:collapse;width:100%;font-size:14px}td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+</style>
+</head>
+<body><main>
+<h1>Kết nối bot Telegram</h1>
+<p class="muted">Máy quét tín hiệu chạy miễn phí trên GitHub (GitHub Actions) khoảng 5–15 phút một lần, kể cả khi máy tính và trình duyệt của bạn đều tắt. Nó gửi tín hiệu mới, báo khi giá chạm Entry, TP hoặc SL vào Telegram của bạn. Bạn chỉ cần làm 3 bước dưới đây, khoảng 5 phút.</p>
+<p><a class="btn alt" href="./">← Về trang tín hiệu</a></p>
+
+<h2><span>1</span>Tạo bot trên Telegram</h2>
+<div class="card"><ol>
+<li>Mở Telegram, tìm <b>@BotFather</b> (có dấu tích xanh) → bấm <b>Start</b>.</li>
+<li>Gửi <code>/newbot</code>.</li>
+<li>Đặt tên hiển thị, ví dụ <code>Tín hiệu Letuan</code>.</li>
+<li>Đặt username, bắt buộc kết thúc bằng <code>bot</code>, ví dụ <code>letuan_tinhieu_bot</code>.</li>
+<li>BotFather trả về một <b>token</b> dạng <code>1234567890:AAH...</code>. Sao chép token này.</li>
+</ol>
+<p class="warn">Token giống như mật khẩu của bot: không gửi cho ai, không dán lên web hay vào chat. Chỉ dán vào GitHub ở bước 2.</p></div>
+
+<h2><span>2</span>Dán token vào GitHub (Secret)</h2>
+<div class="card"><ol>
+<li>Đăng nhập GitHub, mở <a href="https://github.com/letuan1111/doc-tieng-trung/settings/secrets/actions/new" target="_blank" rel="noopener">trang thêm Secret của repo</a> (Settings → Secrets and variables → Actions → New repository secret).</li>
+<li><b>Name:</b> <code>TELEGRAM_BOT_TOKEN</code> · <b>Secret:</b> dán token ở bước 1 → <b>Add secret</b>.</li>
+<li><i>Tuỳ chọn, để máy chủ dùng giá Exness khi máy tính bật:</i> thêm một Secret nữa tên <code>FIREBASE_URL</code>, giá trị là địa chỉ Firebase bạn đã dùng cho MT5.</li>
+</ol>
+<p class="muted">Secret được mã hoá, không ai xem lại được, kể cả trong nhật ký chạy.</p></div>
+
+<h2><span>3</span>Bấm Start với bot của bạn</h2>
+<div class="card"><ol>
+<li>Trong Telegram, mở bot vừa tạo (link <code>t.me/username_bot</code> BotFather gửi) → bấm <b>Start</b>.</li>
+<li>Muốn chạy ngay, không chờ lịch: mở <a href="https://github.com/letuan1111/doc-tieng-trung/actions/workflows/bot-tin-hieu.yml" target="_blank" rel="noopener">trang workflow "Bot tín hiệu (Telegram)"</a> → <b>Run workflow</b> → <b>Run workflow</b>.</li>
+<li>Khoảng 1–15 phút sau, bot trả lời <b>"✅ Đã kết nối!"</b>. Từ đó tín hiệu sẽ tự gửi về.</li>
+</ol>
+<p class="warn">Người đầu tiên bấm Start sẽ trở thành chủ bot; sau đó bot từ chối người khác. Hãy bấm Start ngay sau khi thêm token.</p></div>
+
+<h2><span>✓</span>Các lệnh trong Telegram</h2>
+<div class="card"><table>
+<tr><td><code>/tinhieu</code></td><td>Các tín hiệu đang mở hoặc chờ khớp</td></tr>
+<tr><td><code>/thongke</code></td><td>Thống kê thắng/thua 7 và 30 ngày, theo từng chiến lược</td></tr>
+<tr><td><code>/trangthai</code></td><td>Nguồn dữ liệu đang dùng (MT5 hay công khai), lần quét cuối</td></tr>
+</table>
+<p class="muted">Bot chạy theo lịch nên trả lời lệnh chậm 5–15 phút, không tức thì.</p></div>
+
+<h2><span>⚙</span>Tuỳ chỉnh (không bắt buộc)</h2>
+<div class="card">
+<p>Vào Settings → Secrets and variables → Actions → tab <b>Variables</b> → New repository variable:</p>
+<table>
+<tr><td><code>SYMBOLS</code></td><td>Mã cần quét, mặc định <code>XAU,BTC</code>. Hỗ trợ thêm <code>ETH</code>, <code>SOL</code>.</td></tr>
+<tr><td><code>TFS</code></td><td>Khung, mặc định <code>m15,h1,h4</code>. Thêm <code>m5</code> sẽ có nhiều tín hiệu hơn nhưng báo trễ do lịch chạy 5–15 phút.</td></tr>
+<tr><td><code>RR</code></td><td>Tỷ lệ TP/SL, mặc định <code>2</code>.</td></tr>
+</table></div>
+
+<h2><span>!</span>Lưu ý</h2>
+<div class="card"><ul>
+<li>Tín hiệu từ máy chủ chỉ gửi khi chiến lược đó <b>đang có lãi khi backtest</b> trên chính mã và khung đó, kèm thống kê để bạn tự đánh giá. Đây là công cụ nghiên cứu, không phải khuyến nghị đầu tư.</li>
+<li>Khi máy tính tắt, giá lấy từ OKX/Bybit/Binance (vàng có thể dùng PAXG của Kraken nếu các sàn kia lỗi) và được dời theo chênh lệch với Exness đo được lần gần nhất.</li>
+<li>GitHub tự tắt lịch chạy nếu repo không có hoạt động 60 ngày. Nếu bot im lặng lâu, mở trang workflow ở bước 3 và bấm <b>Enable workflow</b>.</li>
+<li>Bot giao dịch MT5 (EA v16.1) có Telegram riêng trong phần Inputs của EA; có thể dùng chung bot và chat này: điền token vào <code>InpTgToken</code> và Chat ID (bot gửi kèm trong tin "Đã kết nối") vào <code>InpTgChatId</code>.</li>
+</ul></div>
+</main></body></html>

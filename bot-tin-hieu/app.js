@@ -30,11 +30,42 @@
     { n: 'Bybit', f: async (s, tf) => { const j = await getJSON(`https://api.bybit.com/v5/market/kline?category=linear&symbol=${s.by}&interval=${BY_IV[tf]}&limit=1000`); return (j.result.list || []).reverse().map(k => ({ t: +k[0], ct: +k[0] + MS[tf], o: +k[1], h: +k[2], l: +k[3], c: +k[4] })); } },
   ];
   const srcPref = {};
+  // ---- MT5 (Exness) qua Firebase: dùng khi máy tính bật và EA MT5_Bridge_Firebase đang chạy ----
+  const MT5 = Object.assign({ db: '', root: 'mt5', XAU: 'XAUUSDm', BTC: 'BTCUSDm' }, LS.get('smc.mt5', {}));
+  const mt5Name = (sym) => (MT5.db && MT5[sym]) || '';
+  async function mt5Load(sym, tf) {
+    const j = await getJSON(`${MT5.db.replace(/\/+$/, '')}/${MT5.root || 'mt5'}/${encodeURIComponent(mt5Name(sym))}/${tf}.json?orderBy=%22$key%22&limitToLast=${BARS}`);
+    if (!j) throw new Error('MT5 chưa gửi dữ liệu');
+    const c = Object.entries(j).map(([k, v]) => ({ t: +k * 1000, ct: +k * 1000 + MS[tf], o: +v[0], h: +v[1], l: +v[2], c: +v[3] })).sort((a, b) => a.t - b.t);
+    if (!c.length || Date.now() - c[c.length - 1].t > MS[tf] + 20 * 60e3) throw new Error('MT5 không cập nhật (máy tắt hoặc thị trường đóng)');
+    return c;
+  }
+  // chênh lệch giá MT5 − nguồn công khai, đo khi MT5 bật (30 phút/lần), dùng lại khi MT5 tắt
+  const OFF = LS.get('bot.off', {}), calibAt = {};
+  async function calibrate(sym) {
+    if (calibAt[sym] && Date.now() - calibAt[sym] < 30 * 60e3) return; calibAt[sym] = Date.now();
+    try {
+      const m = await mt5Load(sym, 'm15'), last = m[m.length - 2] || m[m.length - 1];
+      for (const src of SRC) {
+        try { const p = await src.f(SYMS[sym], 'm15'), q = p.find(x => x.t === last.t); if (q) { OFF[sym + '|' + src.n] = { v: +(last.c - q.c).toFixed(5), t: Date.now() }; } } catch (_) {}
+      }
+      LS.set('bot.off', OFF);
+    } catch (_) {}
+  }
   async function load(sym, tf) {
+    if (mt5Name(sym)) {
+      try { const c = await mt5Load(sym, tf); if (c.length >= 300) { calibrate(sym); S.mt5live = true; return { c, src: 'MT5 Exness', code: mt5Name(sym), mt5: true, off: 0 }; } throw new Error('MT5 mới có ' + c.length + ' nến'); }
+      catch (e) { S.mt5err = e.message; }
+    }
     const s = SYMS[sym], first = srcPref[sym] || 0, order = [first, 0, 1, 2].filter((v, i, a) => a.indexOf(v) === i);
     let err;
     for (const k of order) {
-      try { const d = await SRC[k].f(s, tf); if (d.length < 300) throw new Error('ít dữ liệu'); srcPref[sym] = k; return { c: d, src: SRC[k].n }; } catch (e) { err = e; }
+      try {
+        const d = await SRC[k].f(s, tf); if (d.length < 300) throw new Error('ít dữ liệu'); srcPref[sym] = k;
+        const o = OFF[sym + '|' + SRC[k].n], off = o && Date.now() - o.t < 7 * 864e5 ? o.v : 0;
+        const c = off ? d.map(x => ({ ...x, o: x.o + off, h: x.h + off, l: x.l + off, c: x.c + off })) : d;
+        return { c, src: SRC[k].n, code: k === 1 ? s.okx : s.bn, mt5: false, off };
+      } catch (e) { err = e; }
     }
     throw err || new Error('không tải được');
   }
@@ -176,6 +207,40 @@
     if (changed) { const cut = Date.now() - 7 * 864e5; for (const x in S.seen) if (S.seen[x] < cut) delete S.seen[x]; LS.set('bot.seen', S.seen); }
   }
 
+  // ---------------- nhật ký máy chủ (GitHub Actions + Telegram) ----------------
+  const RAW = 'https://raw.githubusercontent.com/letuan1111/doc-tieng-trung/bot-data/signals.json';
+  const STATE2 = { WIN: ['TP ✓', 'win'], LOSS: ['SL ✗', 'loss'], TIME: ['Hết giờ', 'muted'], OPEN: ['Đang chạy', ''], PENDING: ['Chờ khớp', ''], EXPIRED: ['Hết hạn', 'muted'], MISSED: ['Lỡ', 'muted'], STALE: ['Quá cũ', 'muted'] };
+  const symName = (k) => (SYMS[k] && SYMS[k].name) || k;
+  async function loadServer() {
+    let j; try { j = await getJSON(RAW + '?t=' + Math.floor(Date.now() / 6e4)); } catch (e) { $('srv').innerHTML = `<p class="note">Máy chủ chưa chạy lần nào hoặc chưa tải được nhật ký (${esc(e.message)}). GitHub Actions thường chạy lần đầu sau 5–15 phút. <a href="huong-dan-telegram.html" style="color:var(--blue)">Hướng dẫn kết nối Telegram</a></p>`; return; }
+    const age = (Date.now() - j.updated) / 6e4, sg = j.signals || [];
+    const tgTxt = !j.telegram || !j.telegram.configured ? '<span class="chip warn">Telegram: chưa thêm token</span>' : j.telegram.connected ? '<span class="chip buy">Telegram: đã kết nối</span>' : '<span class="chip warn">Telegram: gửi /start cho bot</span>';
+    const mtTxt = !j.mt5 || !j.mt5.configured ? '<span class="chip">MT5: chưa cấu hình</span>' : j.mt5.live ? '<span class="chip buy">MT5: đang dùng</span>' : '<span class="chip">MT5: tắt → nguồn công khai</span>';
+    const st = (days) => { const d = sg.filter(x => x.r != null && x.t >= Date.now() - days * 864e5), w = d.filter(x => x.r > 0).length, R = d.reduce((s, x) => s + x.r, 0);
+      return `<div><b class="${R >= 0 ? 'win' : 'loss'}">${R >= 0 ? '+' : ''}${R.toFixed(1)}R</b><br><span class="note">${days} ngày · ${d.length} lệnh · thắng ${d.length ? Math.round(w / d.length * 100) : 0}%</span></div>`; };
+    const rows = sg.slice().reverse().slice(0, 15).map(x => { const s2 = STATE2[x.state] || [x.state, ''], dpx = (SYMS[x.sym] || { dp: 2 }).dp, f = (v) => Number(v).toFixed(dpx);
+      return `<tr><td>${ft(x.t)}</td><td>${symName(x.sym)} ${TFN[x.tf] || x.tf}</td><td><span class="chip ${sideCls(x.side)}">${sideTxt(x.side)}</span> ${esc(x.stratShort)}</td><td class="mono">${f(x.entry)}</td><td class="mono">${f(x.sl)}</td><td class="mono">${f(x.tp)}</td><td class="${s2[1]}">${s2[0]}${x.r != null ? ` (${x.r >= 0 ? '+' : ''}${x.r.toFixed(2)}R)` : ''}</td></tr>`; }).join('');
+    $('srv').innerHTML = `<div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip ${age < 30 ? 'buy' : 'warn'}">Quét ${age < 1 ? 'vừa xong' : Math.round(age) + ' phút trước'}</span>${tgTxt}${mtTxt}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0">${st(7)}${st(30)}</div>
+      <p class="note" style="margin:0 0 6px">Máy chủ quét ${esc((j.symbols || []).map(symName).join(', '))} khung ${esc((j.tfs || []).map(x => TFN[x] || x).join(', '))}, gửi Telegram khi có tín hiệu mới, chạm entry, TP/SL.</p>
+      ${rows ? `<div class="tw"><table><thead><tr><th>Thời gian</th><th>Mã</th><th>Lệnh</th><th>Entry</th><th>SL</th><th>TP</th><th>Kết quả</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="note">Chưa có tín hiệu nào được gửi.</p>'}`;
+  }
+
+  // ---------------- bot MT5 (EA v16.1) ----------------
+  async function loadBotMT5() {
+    const el = $('mt5bot');
+    if (!MT5.db) { el.innerHTML = '<p class="note">Nhập địa chỉ Firebase ở ô <b>Nguồn MT5</b> để xem bot MT5 và dùng giá Exness.</p>'; return; }
+    try {
+      const base = MT5.db.replace(/\/+$/, ''); if (!S.botLogin) { const l = await getJSON(base + '/bot.json?shallow=true'); S.botLogin = l ? Object.keys(l)[0] : null; }
+      if (!S.botLogin) { el.innerHTML = '<p class="note">Bot MT5 chưa gửi dữ liệu (bật <code>InpWebEnable</code> trong EA v16.1).</p>'; return; }
+      const b = await getJSON(`${base}/bot/${encodeURIComponent(S.botLogin)}.json`); if (!b) throw new Error('trống');
+      const age = (Date.now() - b.updated) / 1000, s = b.symbols && Object.values(b.symbols).find(x => x.symbol === MT5[S.sym]), u = s && s.setup;
+      el.innerHTML = `<div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip ${age < 90 ? 'buy' : 'warn'}">${age < 90 ? 'Bot đang chạy' : 'Mất kết nối ' + Math.round(age / 60) + ' phút'}</span>${b.today && b.today.stop ? `<span class="chip sell">Dừng: ${esc(b.today.stop)}</span>` : ''}<span class="chip">Hôm nay ${b.today ? (b.today.pl >= 0 ? '+' : '') + (+b.today.pl).toFixed(2) : '—'} USD</span></div>` +
+        (s ? `<p class="note" style="margin:8px 0 0">${u ? `<b class="${u.side === 'BUY' ? 'win' : 'loss'}">${u.side} ${esc(u.method)}</b> Entry ${fx(u.entry)} · SL ${fx(u.sl)} · TP ${fx(u.tp)} (${(+u.rr).toFixed(2)}R)<br>` : ''}${esc(s.scan || '')}</p>` : `<p class="note" style="margin:8px 0 0">Bot không theo dõi ${esc(SYMS[S.sym].name)}.</p>`) +
+        `<p class="note" style="margin:6px 0 0"><a href="../tin-hieu/bot.html" style="color:var(--blue)">Bảng theo dõi bot đầy đủ</a></p>`;
+    } catch (e) { el.innerHTML = `<p class="note">Không đọc được dữ liệu bot MT5 (${esc(e.message)}).</p>`; }
+  }
+
   // ---------------- vòng lặp ----------------
   let busy = false, firstLoad = true;
   async function refresh(fit) {
@@ -184,11 +249,11 @@
     try {
       const d = await load(sym, tf); if (sym !== S.sym || tf !== S.tf) return;
       const c = closed(d.c), live = d.c[d.c.length - 1];
-      S.data = { c, src: d.src }; S.res = BOT.analyze(c, engCfg());
+      S.data = { c, src: d.src }; S.res = BOT.analyze(c, engCfg()); if (sym === S.sym && !d.mt5 && mt5Name(sym)) S.mt5live = false;
       $('px').textContent = fx(live.c);
       const day = d.c.find(x => x.t >= live.t - 864e5) || d.c[0], ch = (live.c - day.o) / day.o * 100;
       $('chg').textContent = (ch >= 0 ? '+' : '') + ch.toFixed(2) + '% 24h'; $('chg').className = 'chip ' + (ch >= 0 ? 'buy' : 'sell');
-      $('src').textContent = d.src + ' · ' + SYMS[sym].bn; $('upd').textContent = 'Cập nhật ' + new Date().toLocaleTimeString('vi-VN');
+      $('src').textContent = d.src + ' · ' + d.code + (d.off ? ` (căn theo Exness ${d.off > 0 ? '+' : ''}${fx(d.off)})` : '') + (!d.mt5 && mt5Name(sym) ? ' · MT5 không hoạt động' : ''); $('src').className = 'chip ' + (d.mt5 ? 'buy' : mt5Name(sym) ? 'warn' : ''); $('upd').textContent = 'Cập nhật ' + new Date().toLocaleTimeString('vi-VN');
       renderChart(fit); rankTable(); histTable(); nowCard();
       S.radar[sym + tf] = radarCell(S.res); radarTable();
       checkAlerts(sym, tf, S.res, c, firstLoad); firstLoad = false;
@@ -224,7 +289,7 @@
   }
   const markSym = segInit('symSeg', Object.keys(SYMS).map(k => [k, SYMS[k].name]), S.sym, (v) => setSym(v));
   const markTf = segInit('tfSeg', null, S.tf, (v) => setTf(v));
-  function setSym(v) { if (v === S.sym) return; S.sym = v; LS.set('bot.sym', v); markSym(v); $('px').textContent = '—'; $('src').textContent = 'đang tải…'; refresh(true); }
+  function setSym(v) { if (v === S.sym) return; S.sym = v; LS.set('bot.sym', v); markSym(v); $('px').textContent = '—'; $('src').textContent = 'đang tải…'; refresh(true); loadBotMT5(); }
   function setTf(v) { if (v === S.tf) return; S.tf = v; LS.set('bot.tf', v); markTf(v); refresh(true); }
   function setStrat(v) { S.strat = v; LS.set('bot.strat', v); $('stratSel').value = v; if (S.res) { renderChart(false); rankTable(); histTable(); } }
   $('stratSel').onchange = (e) => setStrat(e.target.value);
@@ -240,7 +305,13 @@
     S.notif = !S.notif; LS.set('bot.notif', S.notif); setNB(); beep();
     toast(S.notif ? 'Sẽ báo khi có tín hiệu mới hoặc nhiều chiến lược đồng thuận (khi trang đang mở)' : 'Đã tắt thông báo');
   };
-  setNB(); stratList(); radarTable(); initChart(); refresh(true);
+  $('mDb').value = MT5.db; $('mX').value = MT5.XAU; $('mB').value = MT5.BTC;
+  $('mSave').onclick = () => {
+    MT5.db = $('mDb').value.trim(); MT5.XAU = $('mX').value.trim() || 'XAUUSDm'; MT5.BTC = $('mB').value.trim() || 'BTCUSDm';
+    LS.set('smc.mt5', MT5); S.botLogin = null; S.radar = {}; radarTable(); toast(MT5.db ? 'Đã lưu – thử lấy dữ liệu MT5…' : 'Đã tắt nguồn MT5'); refresh(false); loadBotMT5(); scan();
+  };
+  setNB(); stratList(); radarTable(); initChart(); refresh(true); loadServer(); loadBotMT5();
+  setInterval(loadServer, 2 * 60e3); setInterval(loadBotMT5, 30e3);
   setTimeout(scan, 1500);
   setInterval(() => refresh(false), 60e3); setInterval(scan, 5 * 60e3);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(false); });

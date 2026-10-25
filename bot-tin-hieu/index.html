@@ -50,11 +50,14 @@ tr.sel td{background:color-mix(in srgb,var(--violet) 12%,transparent)}tbody tr{c
 .strat{border-top:1px solid var(--line);padding:9px 0}.strat:first-of-type{border-top:0}.strat b{font-size:14px}.strat p{margin:3px 0 0;font-size:13px;color:var(--muted)}
 #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);padding:10px 14px;border-radius:12px;box-shadow:0 8px 30px #0008;z-index:50;max-width:92vw;display:none}
 .err{color:var(--sell);font-size:13px}
+.nav{display:flex;gap:4px;flex-wrap:wrap;width:100%;order:9}.nav a{color:var(--muted);text-decoration:none;font-size:13px;font-weight:600;padding:4px 10px;border-radius:8px;border:1px solid var(--line)}.nav a.on{color:var(--ink);background:var(--panel2)}
+.grid2 label.full{grid-column:1/-1}
 </style>
 </head>
 <body>
 <header><div class="bar">
-  <div class="brand">Bot tín hiệu <small>7 chiến lược · tự backtest · dữ liệu công khai</small></div>
+  <div class="brand">Bot tín hiệu <small>MT5 khi máy bật · nguồn công khai khi máy tắt · Telegram 24/7</small></div>
+  <nav class="nav"><a href="./" class="on">Tín hiệu</a><a href="../tin-hieu/">ICT/SMC chi tiết</a><a href="../tin-hieu/bot.html">Bot MT5</a><a href="huong-dan-telegram.html">Kết nối Telegram</a></nav>
   <div class="seg" id="symSeg"></div>
   <button class="btn" id="notifBtn">🔕 Bật thông báo</button>
 </div></header>
@@ -85,11 +88,23 @@ tr.sel td{background:color-mix(in srgb,var(--violet) 12%,transparent)}tbody tr{c
 
   <aside class="col">
     <div class="card"><h3>Tín hiệu bây giờ</h3><div id="now"></div></div>
+    <div class="card"><h3>Máy chủ 24/7 + Telegram</h3><div id="srv"><p class="note">Đang tải nhật ký…</p></div></div>
+    <div class="card"><h3>Bot MT5</h3><div id="mt5bot"></div></div>
     <div class="card">
       <h3>Radar tất cả các mã</h3>
       <div class="tw"><table class="radar"><thead><tr><th>Mã</th><th>M5</th><th>M15</th><th>H1</th><th>H4</th></tr></thead><tbody id="radar"></tbody></table></div>
       <div class="tools" style="margin:10px 0 0"><button class="btn" id="scanBtn">Quét lại</button><span class="note" id="radarNote">Tự quét mỗi 5 phút</span></div>
       <p class="note" style="margin:6px 0 0">Ô hiện số chiến lược (có lãi khi backtest) đang cùng báo BUY/SELL trong 3 nến gần nhất. Bấm vào ô để mở mã và khung đó.</p>
+    </div>
+    <div class="card">
+      <h3>Nguồn MT5 (Exness)</h3>
+      <div class="grid2">
+        <label class="full">Địa chỉ Firebase Realtime Database<input id="mDb" placeholder="https://ten-du-an-default-rtdb.asia-southeast1.firebasedatabase.app"></label>
+        <label>Mã vàng trên MT5<input id="mX" value="XAUUSDm"></label>
+        <label>Mã BTC trên MT5<input id="mB" value="BTCUSDm"></label>
+      </div>
+      <button class="btn" id="mSave" style="margin-top:10px;width:100%">Lưu & dùng giá MT5</button>
+      <p class="note" style="margin:8px 0 0">Khi máy tính bật và EA <b>MT5_Bridge_Firebase</b> chạy, web dùng giá Exness. Máy tắt thì tự chuyển sang Binance/OKX/Bybit và dời giá theo chênh lệch đo được lần gần nhất. <a href="../tin-hieu/HUONG-DAN-MT5.html" style="color:var(--blue)">Hướng dẫn MT5</a></p>
     </div>
     <div class="card">
       <h3>Cài đặt</h3>
@@ -113,6 +128,6 @@ tr.sel td{background:color-mix(in srgb,var(--violet) 12%,transparent)}tbody tr{c
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script src="strategies.js?v=1"></script>
-<script src="app.js?v=1"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>

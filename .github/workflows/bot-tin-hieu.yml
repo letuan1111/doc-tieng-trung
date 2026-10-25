@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: "*/5 * * * *"   # GitHub thường chạy trễ, thực tế khoảng 5–15 phút/lần
   workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "scanner/**"
+      - "bot-tin-hieu/strategies.js"
+      - ".github/workflows/bot-tin-hieu.yml"
 
 permissions:
   contents: write

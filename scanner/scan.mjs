@@ -240,7 +240,13 @@ async function main() {
   log = log.slice(-600);
   for (const k in state.consSent) if (Date.now() - state.consSent[k] > 2 * 864e5) delete state.consSent[k];
 
+  let tgInfo = { configured: !!TOKEN, connected: chats(state).length > 0 };
+  if (TOKEN && !MOCK) {
+    try { const me = await getJSON(`https://api.telegram.org/bot${TOKEN}/getMe`); tgInfo.bot = me.result && me.result.username; tgInfo.ok = !!me.ok; }
+    catch (e) { tgInfo.ok = false; tgInfo.error = e.message === 'HTTP 401' ? 'token sai (Telegram từ chối)' : e.message; }
+  }
   await handleCommands(state, log, status);
+  tgInfo.connected = chats(state).length > 0;
   if (alerts.length) {
     if (!chats(state).length) console.log('Chưa có người nhận Telegram (gửi /start cho bot). Bỏ qua', alerts.length, 'tin.');
     for (const m of alerts.slice(0, 15)) await broadcast(state, m);
@@ -248,8 +254,8 @@ async function main() {
   }
 
   state.lastRun = Date.now();
-  writeJSON('state.json', { ...state, telegram: { configured: !!TOKEN, connected: chats(state).length > 0 } });
-  writeJSON('signals.json', { updated: Date.now(), cfg: CFG, symbols: SYMBOLS, tfs: TFS, telegram: { configured: !!TOKEN, connected: chats(state).length > 0 }, mt5: { configured: !!FB, live: Object.values(runStatus.sources).includes('mt5') }, status: runStatus, signals: log });
+  writeJSON('state.json', { ...state, telegram: tgInfo });
+  writeJSON('signals.json', { updated: Date.now(), cfg: CFG, symbols: SYMBOLS, tfs: TFS, telegram: tgInfo, mt5: { configured: !!FB, live: Object.values(runStatus.sources).includes('mt5') }, status: runStatus, signals: log });
   console.log(`Xong: ${alerts.length} thông báo, ${log.length} tín hiệu trong nhật ký, lỗi: ${runStatus.errors.join(' | ') || 'không'}`);
 }
 

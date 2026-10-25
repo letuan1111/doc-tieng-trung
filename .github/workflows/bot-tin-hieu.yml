@@ -1,0 +1,56 @@
+name: Bot tín hiệu (Telegram)
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # GitHub thường chạy trễ, thực tế khoảng 5–15 phút/lần
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bot-tin-hieu
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Lấy nhật ký cũ (nhánh bot-data)
+        run: |
+          mkdir -p botdata
+          if git fetch -q --depth=1 origin bot-data; then
+            git show FETCH_HEAD:state.json > botdata/state.json 2>/dev/null || true
+            git show FETCH_HEAD:signals.json > botdata/signals.json 2>/dev/null || true
+          fi
+
+      - name: Quét tín hiệu + gửi Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
+          SYMBOLS: ${{ vars.SYMBOLS }}
+          TFS: ${{ vars.TFS }}
+          RR: ${{ vars.RR }}
+          DATA_DIR: botdata
+        run: node scanner/scan.mjs
+
+      - name: Lưu nhật ký (giữ nhánh bot-data chỉ 1 commit)
+        run: |
+          cd botdata
+          git init -q -b bot-data
+          git config user.name "bot-tin-hieu"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          printf '# Dữ liệu bot tín hiệu\nTự động cập nhật bởi GitHub Actions. Web đọc signals.json.\n' > README.md
+          git add -A
+          git commit -qm "Cập nhật tín hiệu $(date -u +%FT%TZ)"
+          git push -q -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:bot-data
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

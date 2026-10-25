@@ -159,8 +159,10 @@ function openText(log) {
 
 async function handleCommands(state, log, status) {
   if (!TOKEN || MOCK) return;
-  const j = await tg('getUpdates', { offset: (state.tgOffset || 0) + 1, timeout: 0, allowed_updates: ['message'] });
-  if (!j || !j.ok) return;
+  let j = await tg('getUpdates', { offset: (state.tgOffset || 0) + 1, timeout: 0, allowed_updates: ['message'] });
+  if (!j || !j.ok) { await tg('deleteWebhook', { drop_pending_updates: false }); j = await tg('getUpdates', { offset: (state.tgOffset || 0) + 1, timeout: 0, allowed_updates: ['message'] }); }
+  if (!j || !j.ok) { state.tgUpdErr = 'getUpdates lỗi'; return; }
+  state.tgUpdErr = ''; state.tgUpdates = (state.tgUpdates || 0) + j.result.length;
   for (const u of j.result) {
     state.tgOffset = u.update_id;
     const m = u.message; if (!m || !m.text) continue;

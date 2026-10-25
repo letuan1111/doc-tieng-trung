@@ -1,5 +1,5 @@
 /* =====================================================================
-   SMC ENGINE — Chiến lược EMA 24/89 + ICT + SMC  (H4 → H1 → M15 → M5)
+   SMC ENGINE — Chiến lược EMA 34/89 + ICT + SMC  (H4 → H1 → M15 → M5)
    Mọi điều kiện tính trên NẾN ĐÃ ĐÓNG, không repaint:
    - Swing (pivot L/R) chỉ được dùng sau khi đủ R nến bên phải.
    - BOS/MSS xác nhận bằng giá đóng cửa.
@@ -10,7 +10,7 @@
   'use strict';
 
   const DEF = {
-    emaFast: 24, emaSlow: 89, emaMid: 34, atrLen: 14,
+    emaFast: 34, emaSlow: 89, emaMid: 34, atrLen: 14,
     pivotL: 3, pivotR: 3,             // pivot M5 3/3
     pivotHTF: 3,                      // pivot cho M15/H1/H4
     gapMin: 0.20, slopeMin: 0.10, slopeBack: 5,

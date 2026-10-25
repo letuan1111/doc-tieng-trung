@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cut">
 <title>Tín hiệu EMA·SMC</title>
-<meta name="description" content="Tín hiệu EMA 24/89 + ICT/SMC đa khung H4→H1→M15→M5 cho XAUUSD và BTCUSD: Entry, SL, TP theo cấu trúc.">
+<meta name="description" content="Tín hiệu EMA 34/89 + ICT/SMC đa khung H4→H1→M15→M5 cho XAUUSD và BTCUSD: Entry, SL, TP theo cấu trúc.">
 <meta name="theme-color" content="#0d1117">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -60,7 +60,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 </head>
 <body>
 <header><div class="bar">
-  <div class="brand">EMA 24/89 · ICT · SMC <small>H4 → H1 → M15 → M5</small></div>
+  <div class="brand">EMA 34/89 · ICT · SMC <small>H4 → H1 → M15 → M5</small></div>
   <div class="seg" id="symSeg"><button data-s="XAU" class="on">XAUUSD</button><button data-s="BTC">BTCUSD</button></div>
   <button class="btn" id="notifBtn">🔔 Bật thông báo</button>
 </div></header>
@@ -76,11 +76,11 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
         <div class="seg" id="viewSeg"><button data-v="chart" class="on">Biểu đồ tín hiệu</button><button data-v="tv">TradingView</button></div>
         <div class="seg" id="tfSeg"><button data-tf="m5" class="on">M5</button><button data-tf="m15">M15</button><button data-tf="h1">H1</button><button data-tf="h4">H4</button></div>
       </div>
-      <div class="toggles"><label><input type="checkbox" data-show="m15"> Vùng M15</label><label><input type="checkbox" data-show="h1"> Vùng H1</label><label><input type="checkbox" data-show="h4"> Vùng H4</label><label><input type="checkbox" data-show="liq"> Thanh khoản BSL/SSL</label><label><input type="checkbox" data-show="proj"> Đường dự kiến</label><label><input type="checkbox" data-show="e34"> EMA 34</label><label><input type="checkbox" data-show="e24"> EMA 24</label><label><input type="checkbox" data-show="bot"> Bot MT5</label></div>
+      <div class="toggles"><label><input type="checkbox" data-show="m15"> Vùng M15</label><label><input type="checkbox" data-show="h1"> Vùng H1</label><label><input type="checkbox" data-show="h4"> Vùng H4</label><label><input type="checkbox" data-show="liq"> Thanh khoản BSL/SSL</label><label><input type="checkbox" data-show="proj"> Đường dự kiến</label><label><input type="checkbox" data-show="bot"> Bot MT5</label></div>
       <div id="chartWrap"><div id="chart"></div><canvas id="ov"></canvas></div>
       <div id="tv" class="hide"></div>
       <div class="legend" id="legend">
-        <span><i style="background:#3b82f6"></i>EMA 24</span><span><i style="background:#06b6d4"></i>EMA 34</span><span><i style="background:#eab308"></i>EMA 89</span>
+        <span><i style="background:#06b6d4"></i>EMA 34</span><span><i style="background:#eab308"></i>EMA 89</span>
         <span><i style="background:#22c55e66;height:8px"></i>OB/FVG tăng</span><span><i style="background:#f43f5e66;height:8px"></i>OB/FVG giảm</span>
         <span><i style="background:#a855f7"></i>MSS / Entry</span><span><i style="background:#f472b6"></i>Setup bot MT5</span><span>▲▼ BOS · CHoCH</span><span><i style="background:#4ade80"></i>Dự kiến</span><span><i style="background:#94a3b8"></i>Kịch bản phụ</span>
       </div>
@@ -126,7 +126,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 <div id="toast"></div>
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
-<script src="engine.js?v=12"></script>
-<script src="app.js?v=12"></script>
+<script src="engine.js?v=13"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>

@@ -108,7 +108,7 @@
     });
     cs = chart.addCandlestickSeries({ upColor: '#22c55e', downColor: '#f43f5e', borderVisible: false, wickUpColor: '#22c55e', wickDownColor: '#f43f5e' });
     e24 = chart.addLineSeries({ color: '#3b82f6', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-    e34 = chart.addLineSeries({ color: '#06b6d4', lineWidth: 1, lineStyle: 0, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    e34 = chart.addLineSeries({ color: '#06b6d4', lineWidth: 2, lineStyle: 0, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
     e89 = chart.addLineSeries({ color: '#eab308', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
     // vẽ lại lớp vùng/nhãn mỗi khi khung nhìn hoặc thang giá thay đổi (phóng to, kéo, tự co giãn giá)
     let ovSig = '';
@@ -129,9 +129,9 @@
     const r = S.res; if (!r || !chart) return;
     const tf = r.ind[S.tf], c = tf.c; viewBars = c;
     cs.setData(c.map(x => ({ time: tsec(x.t), open: x.o, high: x.h, low: x.l, close: x.c })));
-    e24.setData(SHOW.e24 ? c.map((x, i) => ({ time: tsec(x.t), value: tf.e1[i] })) : []);
+    e24.setData([]);
     e89.setData(c.map((x, i) => ({ time: tsec(x.t), value: tf.e2[i] })));
-    e34.setData(SHOW.e34 ? c.map((x, i) => ({ time: tsec(x.t), value: tf.e3[i] })) : []);
+    e34.setData(c.map((x, i) => ({ time: tsec(x.t), value: tf.e3[i] })));
     const t0 = c.length ? c[0].t : 0, snap = (t) => { // đưa thời điểm về nến của khung đang xem
       let lo = 0, hi = c.length - 1, b = 0; while (lo <= hi) { const m = (lo + hi) >> 1; if (c[m].t <= t) { b = m; lo = m + 1; } else hi = m - 1; } return tsec(c[b].t);
     };
@@ -204,7 +204,7 @@
           g.fillStyle = col; g.font = '700 10px JetBrains Mono'; g.fillText(t1, bx + 4, by + 11);
           if (t2) { g.fillStyle = '#cbd5e1'; g.font = '600 9.5px Be Vietnam Pro'; g.fillText(t2, bx + 4, by + 22); } });
       };
-      if (SHOW.e34 && r.proj.ema34) { path(r.proj.ema34, 'rgba(6,182,212,.7)', [2, 3], 1.4, false); path(r.proj.ema89, 'rgba(234,179,8,.7)', [2, 3], 1.4, false); }
+      if (r.proj.ema34) { path(r.proj.ema34, 'rgba(6,182,212,.7)', [2, 3], 1.4, false); path(r.proj.ema89, 'rgba(234,179,8,.7)', [2, 3], 1.4, false); }
       path(r.proj.alt, 'rgba(148,163,184,.75)', [3, 4], 1.5, 'price');
       path(r.proj.path, r.proj.bias > 0 ? '#4ade80' : r.proj.bias < 0 ? '#fb7185' : '#e5e7eb', [], 2.4, 'wave');
       if (r.proj.inval) { const y = cs.priceToCoordinate(r.proj.inval.p), x = X(r.proj.path[0].t); if (y != null && x != null) { g.strokeStyle = 'rgba(245,158,11,.9)'; g.setLineDash([1, 3]); g.beginPath(); g.moveTo(x, y); g.lineTo(W - psW, y); g.stroke(); g.setLineDash([]); g.fillStyle = '#f59e0b'; g.font = '600 10px Be Vietnam Pro'; g.fillText('Vô hiệu ' + fx(r.proj.inval.p), x + 4, y - 4); } }
@@ -239,8 +239,8 @@
     if (!t1 || !t4) return '<p class="note">Chưa đủ dữ liệu.</p>';
     const z = L.zones[0];
     return stepsHTML(L.stage) + `<ul class="ck">
-      <li>${y(!L.h4Bear)} H4 ${buy ? 'không giảm mạnh' : 'không tăng mạnh'} <em>${t4.dir === 1 ? 'BOS ' + (buy ? '↑' : '↓') : t4.dir === -1 ? 'BOS ' + (buy ? '↓' : '↑') : '—'} · EMA ${t4.emaUp === buy || !buy && !t4.emaUp ? '' : ''}${t4.emaUp ? (buy ? '24>89' : '24<89') : (buy ? '24<89' : '24>89')}</em></li>
-      <li>${y(t1.emaUp)} H1 EMA 24 ${buy ? 'trên' : 'dưới'} EMA 89</li>
+      <li>${y(!L.h4Bear)} H4 ${buy ? 'không giảm mạnh' : 'không tăng mạnh'} <em>${t4.dir === 1 ? 'BOS ' + (buy ? '↑' : '↓') : t4.dir === -1 ? 'BOS ' + (buy ? '↓' : '↑') : '—'} · EMA ${t4.emaUp === buy || !buy && !t4.emaUp ? '' : ''}${t4.emaUp ? (buy ? '34>89' : '34<89') : (buy ? '34<89' : '34>89')}</em></li>
+      <li>${y(t1.emaUp)} H1 EMA 34 ${buy ? 'trên' : 'dưới'} EMA 89</li>
       <li>${y(t1.gap >= S.res.cfg.gapMin)} Khoảng cách EMA ≥ ${S.res.cfg.gapMin} ATR <em>${t1.gap.toFixed(2)}</em></li>
       <li>${y(t1.slope >= S.res.cfg.slopeMin)} Độ dốc EMA 89 ${buy ? '≥ +' : '≤ −'}${S.res.cfg.slopeMin} ATR <em>${(buy ? t1.slope : -t1.slope).toFixed(2)}</em></li>
       <li>${y(t1.dir === 1)} BOS H1 ${buy ? 'tăng' : 'giảm'} gần nhất <em>${t1.hhhl ? (buy ? 'HH/HL' : 'LH/LL') : ''}</em></li>

@@ -1,19 +1,19 @@
 //@version=6
 // =====================================================================
-//  EMA 24/89 + ICT/SMC — H4 → H1 → M15 → M5   (Letuan)
+//  EMA 34/89 + ICT/SMC — H4 → H1 → M15 → M5   (Letuan)
 //  • Vùng cản OB/FVG + thanh khoản BSL/SSL của M15, H1, H4
-//  • EMA 24 / 34 / 89
+//  • EMA 34 / 89
 //  • Tín hiệu BUY/SELL LIMIT: H1 hợp lệ + POI M15 + Sweep + MSS M5 (+FVG)
 //    kèm Entry, SL, TP1/2/3, điểm hợp lưu 100
 //  • Đường giá dự kiến theo EMA 34/89 + SMC
 //  Mọi dữ liệu khung lớn lấy từ nến ĐÃ ĐÓNG (không repaint).
 //  Dùng tốt nhất trên chart M5.
 // =====================================================================
-indicator("EMA 24/89 + ICT/SMC (Letuan)", shorttitle = "EMA·SMC", overlay = true, max_boxes_count = 300, max_lines_count = 400, max_labels_count = 300, max_bars_back = 1000)
+indicator("EMA 34/89 + ICT/SMC (Letuan)", shorttitle = "EMA·SMC", overlay = true, max_boxes_count = 300, max_lines_count = 400, max_labels_count = 300, max_bars_back = 1000)
 
 // ---------------- Cài đặt ----------------
 grpE = "EMA"
-emaF   = input.int(24, "EMA nhanh", group = grpE)
+emaF   = input.int(34, "EMA nhanh", group = grpE)
 emaM   = input.int(34, "EMA dự kiến", group = grpE)
 emaS   = input.int(89, "EMA chậm", group = grpE)
 atrLen = input.int(14, "ATR", group = grpE)
@@ -47,8 +47,7 @@ cBull = color.new(#22c55e, 0)
 cBear = color.new(#f43f5e, 0)
 
 // ---------------- EMA ----------------
-plot(showE ? ta.ema(close, emaF) : na, "EMA 24", color = #3b82f6, linewidth = 2)
-plot(showE ? ta.ema(close, emaM) : na, "EMA 34", color = #06b6d4, linewidth = 1)
+plot(showE ? ta.ema(close, emaF) : na, "EMA 34", color = #06b6d4, linewidth = 2)
 plot(showE ? ta.ema(close, emaS) : na, "EMA 89", color = #eab308, linewidth = 2)
 
 // ---------------- Bối cảnh khung lớn (giá trị nến đã đóng) ----------------

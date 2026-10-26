@@ -1,0 +1,23 @@
+name: Build lại GitHub Pages
+
+# Commit đẩy từ ứng dụng (không phải từ máy cá nhân) không tự kích hoạt bản build Pages "deploy from branch".
+# Workflow này gọi API yêu cầu build lại sau mỗi lần push lên main.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  pages: write
+  contents: read
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Yêu cầu build Pages
+        run: |
+          curl -sS -X POST -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages/builds"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

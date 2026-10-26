@@ -99,17 +99,32 @@
     return { ...d, c, off, offTxt, tv, diff, raw: live.c };
   }
   const closed = (c) => { const now = Date.now(); return c.filter(x => x.ct <= now); };
+  // bộ nhớ đệm nến theo mã/khung để dùng chung cho chart, đồng thuận và radar
+  const CACHE = {}, TTL = { m5: 50e3, m15: 110e3, h1: 290e3, h4: 590e3 };
+  async function loadC(sym, tf, bars = BARS) {
+    const k = sym + '|' + tf, x = CACHE[k];
+    if (x && Date.now() - x.at < TTL[tf] && x.bars >= bars && x.align === S.cfg.align) return x.d;
+    const d = await load(sym, tf, bars); CACHE[k] = { d, at: Date.now(), bars, align: S.cfg.align }; return d;
+  }
+  // hướng lệnh: đồng thuận EMA34/89 của M5 + M15 + H1
+  const CONS_TF = ['m5', 'm15', 'h1'];
+  async function consFor(sym, c, tf, bars) {
+    if (S.cfg.dirMode !== 'cons') return null;
+    const sets = [];
+    for (const t of CONS_TF) sets.push({ name: TFN[t], c: t === tf ? c : closed((await loadC(sym, t, bars)).c) });
+    return ICT.consensus(c, sets);
+  }
 
   // ---------------- trạng thái ----------------
   const S = {
     sym: LS.get('bot.sym', 'XAU'), tf: LS.get('bot.tf', 'm15'),
-    cfg: Object.assign({ minRR: 1.5, rr: 2, expiry: 20, costPct: 0.04, minGrade: 'B', htf: 'grade', align: 'tv' }, LS.get('bot.cfg2', {})),
+    cfg: Object.assign({ minRR: 1.5, rr: 2, expiry: 20, costPct: 0.04, minGrade: 'B', htf: 'grade', align: 'tv', dirMode: 'cons' }, LS.get('bot.cfg2', {})),
     tvMap: LS.get('bot.tvmap', {}),
     layers: Object.assign({ range: true, struct: true, ob: true, fvg: true, liq: true, sig: true }, LS.get('bot.layers', {})),
     notif: LS.get('bot.notif', false), seen: LS.get('bot.seen2', {}), data: null, res: null, radar: {}, server: null,
   };
   if (!SYMS[S.sym]) S.sym = 'XAU';
-  const engCfg = () => ({ minRR: S.cfg.minRR, rr: S.cfg.rr, expiry: S.cfg.expiry, maxBars: 48, cost: S.cfg.costPct / 100, freshBars: 2, minGrade: S.cfg.minGrade, htf: S.cfg.htf });
+  const engCfg = (cons) => ({ minRR: S.cfg.minRR, rr: S.cfg.rr, expiry: S.cfg.expiry, maxBars: 48, cost: S.cfg.costPct / 100, freshBars: 2, minGrade: S.cfg.minGrade, htf: S.cfg.htf, cons });
   const dp = (sym) => SYMS[sym || S.sym].dp;
   const fx = (v, d = dp()) => v == null || !isFinite(v) ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
   const sgn = (v, d) => (v >= 0 ? '+' : '−') + fx(Math.abs(v), d);
@@ -252,12 +267,14 @@
   }
   function ctxCard() {
     const r = S.res, x = r.ctx, c = S.data.c, last = c[c.length - 1].c, rg = x.range, le = x.lastEvent;
-    const dir = x.bias > 0 && (S.cfg.htf !== 'require' || x.htf > 0) ? 'Chỉ tìm BUY' : x.bias < 0 && (S.cfg.htf !== 'require' || x.htf < 0) ? 'Chỉ tìm SELL' : 'Đứng ngoài';
-    $('biasTxt').innerHTML = `EMA34/89 ${x.tfTxt}: ${biasTxt(x.bias)} · ${esc(x.htfTxt)}: ${biasTxt(x.htf)} → <b>${dir}</b>`;
+    const dir = x.cons ? (x.dir > 0 ? 'Chỉ tìm BUY' : x.dir < 0 ? 'Chỉ tìm SELL' : 'Đứng ngoài (chưa đồng thuận)')
+      : x.bias > 0 && (S.cfg.htf !== 'require' || x.htf > 0) ? 'Chỉ tìm BUY' : x.bias < 0 && (S.cfg.htf !== 'require' || x.htf < 0) ? 'Chỉ tìm SELL' : 'Đứng ngoài';
+    const dirLine = x.cons ? Object.entries(x.cons).map(([k, v]) => `${esc(k)} ${biasTxt(v)}`).join(' · ') : `${esc(x.tfTxt)} ${biasTxt(x.bias)} · ${esc(x.htfTxt)} ${biasTxt(x.htf)}`;
+    $('biasTxt').innerHTML = `EMA34/89 ${dirLine} → <b class="${x.dir > 0 && x.cons ? 'win' : x.dir < 0 && x.cons ? 'loss' : ''}">${dir}</b>`;
     const zoneTxt = x.zone ? (x.zone === 'discount' ? '<b class="win">DISCOUNT</b>' : '<b class="loss">PREMIUM</b>') : '—';
-    const actOB = r.obs.filter(o => o.end == null && o.side === x.bias).slice(-1)[0], actF = r.fvgs.filter(f => f.end == null && f.side === x.bias).slice(-1)[0];
+    const D = x.cons ? x.dir : x.bias, actOB = r.obs.filter(o => o.end == null && o.side === D).slice(-1)[0], actF = r.fvgs.filter(f => f.end == null && f.side === D).slice(-1)[0];
     $('ctx').innerHTML = [
-      ['Hướng EMA 34/89', `${esc(x.tfTxt)} ${biasTxt(x.bias)} · ${esc(x.htfTxt)} ${biasTxt(x.htf)} → <b>${dir}</b>`],
+      ['Hướng EMA 34/89', `${dirLine} → <b>${dir}</b>`],
       ['Cấu trúc', `${x.trend > 0 ? '<b class="win">tăng</b>' : x.trend < 0 ? '<b class="loss">giảm</b>' : '—'}${le ? ` · gần nhất <b>${le.type}</b> ${le.d > 0 ? '▲' : '▼'} ${fx(le.p)} lúc ${ft(c[le.i].t)}` : ''}`],
       ['Nhịp hiện tại', rg ? `${fx(Math.min(rg.pl, rg.ext))} → ${fx(Math.max(rg.pl, rg.ext))} · EQ ${fx((rg.pl + rg.ext) / 2)} · giá đang ở ${zoneTxt}` : '—'],
       ['Thanh khoản trên', x.bsl ? `BSL ${fx(x.bsl.p)}${x.bsl.eq ? ' (EQH)' : ''} · cách ${fx(x.bsl.p - last)}` : '—'],
@@ -273,7 +290,8 @@
       `<div><b class="${b.netR >= 0 ? 'win' : 'loss'}">${b.netR >= 0 ? '+' : ''}${b.netR.toFixed(1)}R</b><span>tổng lãi/lỗ</span></div><div><b>${isFinite(b.pf) ? b.pf.toFixed(2) : '∞'}</b><span>profit factor</span></div>`;
     const days = (c[c.length - 1].t - c[0].t) / 864e5, rj = Object.entries(r.rej).sort((a, b2) => b2[1] - a[1]).map(([w, k]) => `${k} × ${w}`).join(' · ');
     const miss = b.trades.filter(t => t.state === 'MISSED' || t.state === 'EXPIRED').length;
-    $('statNote').innerHTML = `${c.length} nến ${TFN[S.tf]} (~${days.toFixed(days < 10 ? 1 : 0)} ngày) · ${r.sigs.length} setup hợp lệ, ${miss} lệnh chờ không khớp (huỷ). Quét + MSS: ${by('sweep')}. BOS + hồi OB: ${by('bos')}.<br>Bị loại: ${esc(rj || 'không')}. Mẫu dưới ~30 lệnh chưa đủ tin cậy.`;
+    const cv = S.data.cons ? `Hướng lệnh = đồng thuận EMA34/89 M5+M15+H1; chỉ tính được từ ${ft(S.data.cons.from)} (giới hạn dữ liệu M5). ` : '';
+    $('statNote').innerHTML = cv + `${c.length} nến ${TFN[S.tf]} (~${days.toFixed(days < 10 ? 1 : 0)} ngày) · ${r.sigs.length} setup hợp lệ, ${miss} lệnh chờ không khớp (huỷ). Quét + MSS: ${by('sweep')}. BOS + hồi OB: ${by('bos')}.<br>Bị loại: ${esc(rj || 'không')}. Mẫu dưới ~30 lệnh chưa đủ tin cậy.`;
   }
   function histTable() {
     const r = S.res, c = S.data.c, rows = r.bt.trades.slice().reverse().slice(0, 30);
@@ -294,7 +312,8 @@
         <p class="note" style="margin:6px 0 0">${ft(c[t.i].t)} · ${esc(t.note)}${t.state === 'PENDING' ? `<br>Huỷ nếu giá chạm TP trước khi khớp hoặc sau ${t.expiry} nến chưa khớp.` : ''}</p></div>`;
     }).join('');
     else {
-      const why = x.bias === 0 ? 'EMA34 và EMA89 đang quấn nhau, chưa rõ hướng.' : `EMA34/89 ${x.bias > 0 ? 'tăng → chờ BUY' : 'giảm → chờ SELL'}. Cần ${x.bias > 0 ? 'quét SSL rồi phá đỉnh, hoặc BOS tăng' : 'quét BSL rồi phá đáy, hoặc BOS giảm'} có FVG/displacement, sau đó đặt LIMIT tại OB/FVG ở ${x.bias > 0 ? 'discount' : 'premium'}.`;
+      const B = x.cons ? x.dir : x.bias;
+      const why = B === 0 ? (x.cons ? 'EMA34/89 của M5, M15, H1 chưa cùng chiều → đứng ngoài, chờ cả ba khung đồng thuận.' : 'EMA34 và EMA89 đang quấn nhau, chưa rõ hướng.') : `EMA34/89 ${x.cons ? 'M5+M15+H1 đồng thuận ' : ''}${B > 0 ? 'tăng → chờ BUY' : 'giảm → chờ SELL'}. Cần ${B > 0 ? 'quét SSL rồi phá đỉnh, hoặc BOS tăng' : 'quét BSL rồi phá đáy, hoặc BOS giảm'} có FVG/displacement, sau đó đặt LIMIT tại OB/FVG ở ${B > 0 ? 'discount' : 'premium'}.`;
       h += `<div class="sig"><div class="t"><span class="big">Chưa có lệnh</span><span class="chip">${TFN[S.tf]}</span></div><p class="note" style="margin:6px 0 0">${why}</p></div>`;
     }
     $('now').innerHTML = h;
@@ -306,11 +325,11 @@
       if (x.err) return '<td><span class="cell" title="lỗi tải">×</span></td>';
       const side = x.live ? x.live.side : x.bias, cl = x.live ? sideCls(side) : '';
       const txt = x.live ? (side > 0 ? '▲ ' : '▼ ') + x.live.grade : x.bias > 0 ? '▲' : x.bias < 0 ? '▼' : '—';
-      return `<td><span class="cell ${cl}" data-s="${sym}" data-t="${tf}" style="cursor:pointer" title="${x.live ? esc(x.live.note) : 'EMA34/89 ' + (x.bias > 0 ? 'tăng' : x.bias < 0 ? 'giảm' : 'đi ngang') + ', chưa có lệnh'}">${txt}</span></td>`;
+      return `<td><span class="cell ${cl}" data-s="${sym}" data-t="${tf}" style="cursor:pointer" title="${x.live ? esc(x.live.note) : 'Hướng EMA34/89: ' + (x.bias > 0 ? 'BUY' : x.bias < 0 ? 'SELL' : 'chưa đồng thuận') + ', chưa có lệnh'}">${txt}</span></td>`;
     }).join('') + '</tr>').join('');
     $('radar').querySelectorAll('[data-s]').forEach(el => el.onclick = () => { setSym(el.dataset.s); setTf(el.dataset.t); });
   }
-  const radarCell = (a) => ({ bias: a.ctx.bias, live: a.live.length ? a.live[a.live.length - 1] : null });
+  const radarCell = (a) => ({ bias: a.ctx.dir, live: a.live.length ? a.live[a.live.length - 1] : null });
 
   // ---------------- thông báo ----------------
   function beep() { try { const A = new (window.AudioContext || window.webkitAudioContext)(), o = A.createOscillator(), g = A.createGain(); o.frequency.value = 880; o.connect(g); g.connect(A.destination); g.gain.setValueAtTime(.2, A.currentTime); g.gain.exponentialRampToValueAtTime(.001, A.currentTime + .6); o.start(); o.stop(A.currentTime + .6); } catch (_) {} }
@@ -365,9 +384,9 @@
     if (busy) return; busy = true;
     const sym = S.sym, tf = S.tf;
     try {
-      const d = await load(sym, tf); if (sym !== S.sym || tf !== S.tf) return;
-      const c = closed(d.c), live = d.c[d.c.length - 1];
-      S.data = { ...d, c }; S.res = ICT.analyze(c, engCfg());
+      const d = await loadC(sym, tf); if (sym !== S.sym || tf !== S.tf) return;
+      const c = closed(d.c), live = d.c[d.c.length - 1], cons = await consFor(sym, c, tf, BARS); if (sym !== S.sym || tf !== S.tf) return;
+      S.data = { ...d, c, cons }; S.res = ICT.analyze(c, engCfg(cons));
       $('px').textContent = fx(live.c);
       const day = d.c.find(x => x.t >= live.t - 864e5) || d.c[0], ch = (live.c - day.o) / day.o * 100;
       $('chg').textContent = (ch >= 0 ? '+' : '') + ch.toFixed(2) + '% 24h'; $('chg').className = 'chip ' + (ch >= 0 ? 'buy' : 'sell');
@@ -383,12 +402,14 @@
   let scanning = false, firstScan = true;
   async function scan() {
     if (scanning) return; scanning = true; $('radarNote').textContent = 'Đang quét…';
-    const jobs = []; for (const sym of Object.keys(SYMS)) for (const tf of TFS) jobs.push([sym, tf]);
+    const jobs = Object.keys(SYMS);
     let idx = 0;
-    const worker = async () => { while (idx < jobs.length) { const [sym, tf] = jobs[idx++];
-      try { const d = await load(sym, tf, 800), c = closed(d.c), a = ICT.analyze(c, engCfg()); await new Promise(r => setTimeout(r, 400)); S.radar[sym + tf] = radarCell(a); checkAlerts(sym, tf, a, c, firstScan); }
-      catch (_) { S.radar[sym + tf] = { err: true }; }
-      radarTable(); } };
+    const worker = async () => { while (idx < jobs.length) { const sym = jobs[idx++];
+      for (const tf of TFS) {
+        try { const d = await loadC(sym, tf, 800), c = closed(d.c), cons = await consFor(sym, c, tf, 800), a = ICT.analyze(c, engCfg(cons)); S.radar[sym + tf] = radarCell(a); checkAlerts(sym, tf, a, c, firstScan); }
+        catch (_) { S.radar[sym + tf] = { err: true }; }
+        radarTable(); await new Promise(r => setTimeout(r, 300));
+      } } };
     await Promise.all([worker(), worker()]);
     firstScan = false; scanning = false; $('radarNote').textContent = 'Quét lúc ' + new Date().toLocaleTimeString('vi-VN') + ' · tự quét mỗi 5 phút';
   }
@@ -405,9 +426,9 @@
   const markTf = segInit('tfSeg', null, S.tf, (v) => setTf(v));
   function setSym(v) { if (v === S.sym) return; S.sym = v; LS.set('bot.sym', v); markSym(v); $('cTv').value = tvSym(v); $('px').textContent = '—'; $('src').textContent = 'đang tải…'; refresh(true); loadBotMT5(); }
   function setTf(v) { if (v === S.tf) return; S.tf = v; LS.set('bot.tf', v); markTf(v); refresh(true); }
-  const setIn = () => { $('cGrade').value = S.cfg.minGrade; $('cHtf').value = S.cfg.htf; $('cMinRR').value = S.cfg.minRR; $('cRR').value = S.cfg.rr; $('cExp').value = S.cfg.expiry; $('cCost').value = S.cfg.costPct; $('cAlign').value = S.cfg.align; $('cTv').value = tvSym(S.sym); };
+  const setIn = () => { $('cGrade').value = S.cfg.minGrade; $('cHtf').value = S.cfg.dirMode === 'cons' ? 'cons' : S.cfg.htf; $('cMinRR').value = S.cfg.minRR; $('cRR').value = S.cfg.rr; $('cExp').value = S.cfg.expiry; $('cCost').value = S.cfg.costPct; $('cAlign').value = S.cfg.align; $('cTv').value = tvSym(S.sym); };
   $('cApply').onclick = () => {
-    S.cfg = { minGrade: $('cGrade').value, htf: $('cHtf').value, minRR: Math.min(5, Math.max(1, +$('cMinRR').value || 1.5)), rr: Math.min(6, Math.max(1, +$('cRR').value || 2)), expiry: Math.max(3, +$('cExp').value || 20), costPct: Math.max(0, +$('cCost').value || 0), align: $('cAlign').value };
+    S.cfg = { minGrade: $('cGrade').value, dirMode: $('cHtf').value === 'cons' ? 'cons' : 'tf', htf: $('cHtf').value === 'cons' ? 'grade' : $('cHtf').value, minRR: Math.min(5, Math.max(1, +$('cMinRR').value || 1.5)), rr: Math.min(6, Math.max(1, +$('cRR').value || 2)), expiry: Math.max(3, +$('cExp').value || 20), costPct: Math.max(0, +$('cCost').value || 0), align: $('cAlign').value };
     const tv = $('cTv').value.trim().toUpperCase(); if (tv && tv !== SYMS[S.sym].tv) S.tvMap[S.sym] = tv; else delete S.tvMap[S.sym];
     LS.set('bot.cfg2', S.cfg); LS.set('bot.tvmap', S.tvMap); delete TV[S.sym]; S.radar = {}; radarTable(); refresh(false); scan(); toast('Đã áp dụng cài đặt, đang tính lại');
   };

@@ -19,9 +19,11 @@ const TOKEN = (ENV.TELEGRAM_BOT_TOKEN || '').trim();
 const FIXED_CHAT = (ENV.TELEGRAM_CHAT_ID || '').trim();
 const FB = (ENV.FIREBASE_URL || '').trim().replace(/\/+$/, '');
 const SYMBOLS = (ENV.SYMBOLS || 'XAU,BTC').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-const TFS = (ENV.TFS || 'm15,h1,h4').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+const TFS = (ENV.TFS || 'm5,m15,h1').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 const CFG = { rr: +(ENV.RR || 2), minRR: +(ENV.MIN_RR || 1.5), expiry: +(ENV.EXPIRY || 20), maxBars: +(ENV.MAX_BARS || 48), cost: +(ENV.COST_PCT || 0.04) / 100, freshBars: 2,
   minGrade: ENV.MIN_GRADE || 'A', htf: ENV.HTF_EMA || 'grade', align: ENV.ALIGN || 'tv' };
+// hướng lệnh = đồng thuận EMA34/89 của các khung này (đặt DIR=tf để chỉ dùng khung đang quét)
+const CONS_TF = (ENV.CONS_TFS || 'm5,m15,h1').split(',').map(s => s.trim().toLowerCase()).filter(Boolean), DIR = ENV.DIR || 'cons';
 const MOCK = ENV.MOCK === '1';
 const WEB = ENV.WEB_URL || 'https://letuan1111.github.io/doc-tieng-trung/bot-tin-hieu/';
 
@@ -32,7 +34,7 @@ const SYM = {
   SOL: { name: 'SOLUSD', mt5: '', okx: 'SOL-USDT-SWAP', by: 'SOLUSDT', bn: 'SOLUSDT', kr: 'SOLUSD', dp: 3, tv: ENV.TV_SOL || 'COINBASE:SOLUSD' },
 };
 const MS = { m5: 3e5, m15: 9e5, h1: 36e5, h4: 144e5 }, TFN = { m5: 'M5', m15: 'M15', h1: 'H1', h4: 'H4' };
-const NEED = 1000;
+const NEED = 1000, NEED_TF = { m5: 2000 }; // M5 nhiều hơn để đồng thuận M5+M15+H1 phủ ~7 ngày
 
 // ---------------- tiện ích ----------------
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -61,9 +63,9 @@ const SOURCES = {
     return c;
   },
   async okx(s, tf) {
-    const bar = { m5: '5m', m15: '15m', h1: '1H', h4: '4H' }[tf];
+    const bar = { m5: '5m', m15: '15m', h1: '1H', h4: '4H' }[tf], need = NEED_TF[tf] || NEED;
     let out = (await getJSON(`https://www.okx.com/api/v5/market/candles?instId=${s.okx}&bar=${bar}&limit=300`)).data || [];
-    for (let p = 0; p < 8 && out.length && out.length < NEED; p++) {
+    for (let p = 0; p < 20 && out.length && out.length < need; p++) {
       const a = (await getJSON(`https://www.okx.com/api/v5/market/history-candles?instId=${s.okx}&bar=${bar}&limit=100&after=${out[out.length - 1][0]}`)).data || [];
       if (!a.length) break; out = out.concat(a);
     }
@@ -75,7 +77,7 @@ const SOURCES = {
     return (j.result && j.result.list || []).reverse().map(k => ({ t: +k[0], ct: +k[0] + MS[tf], o: +k[1], h: +k[2], l: +k[3], c: +k[4] }));
   },
   async binance(s, tf) {
-    const a = await getJSON(`https://fapi.binance.com/fapi/v1/klines?symbol=${s.bn}&interval=${{ m5: '5m', m15: '15m', h1: '1h', h4: '4h' }[tf]}&limit=${NEED}`);
+    const a = await getJSON(`https://fapi.binance.com/fapi/v1/klines?symbol=${s.bn}&interval=${{ m5: '5m', m15: '15m', h1: '1h', h4: '4h' }[tf]}&limit=${Math.min(1500, NEED_TF[tf] || NEED)}`);
     return a.map(k => ({ t: k[0], ct: k[6] + 1, o: +k[1], h: +k[2], l: +k[3], c: +k[4] }));
   },
   async kraken(s, tf) {
@@ -220,9 +222,13 @@ async function main() {
     await measureOffset(sym, state);
     const tvPx = await tvPrice(SYM[sym].tv), tvAt = Date.now();
     tvInfo[sym] = { code: SYM[sym].tv, price: tvPx, at: tvAt, diff: {} };
+    // nạp một lần mọi khung cần cho mã này (khung quét + khung đồng thuận)
+    const need = [...new Set([...TFS, ...(DIR === 'cons' ? CONS_TF : [])])], data = {};
+    for (const tf of need) { try { data[tf] = await loadCandles(sym, tf, state); } catch (e) { runStatus.errors.push(`${sym} ${tf}: ${e.message}`); } }
+    const consOk = DIR === 'cons' && CONS_TF.every(t => data[t]);
+    if (DIR === 'cons' && !consOk) runStatus.errors.push(`${sym}: thiếu dữ liệu để tính đồng thuận ${CONS_TF.map(t => TFN[t]).join('+')}`);
     for (const tf of TFS) {
-      let d;
-      try { d = await loadCandles(sym, tf, state); } catch (e) { runStatus.errors.push(`${sym} ${tf}: ${e.message}`); continue; }
+      const d = data[tf]; if (!d) continue;
       runStatus.sources[`${SYM[sym].name} ${TFN[tf]}`] = d.src;
       const liveC = d.c[d.c.length - 1].c, tvDiff = tvPx != null ? +(tvPx - liveC).toFixed(5) : null; // TradingView − nguồn
       if (tvDiff != null) tvInfo[sym].diff[WEB_KEY[d.src] || d.src] = tvDiff;
@@ -233,7 +239,9 @@ async function main() {
       }
       const c = d.c.filter(x => x.ct <= Date.now()).map(x => off ? { ...x, o: x.o + off, h: x.h + off, l: x.l + off, c: x.c + off } : x);
       if (c.length < 300) { runStatus.errors.push(`${sym} ${tf}: ít nến`); continue; }
-      const a = ICT.analyze(c, CFG), n = c.length, bt = a.bt;
+      if (DIR === 'cons' && !consOk) continue;
+      const cons = DIR === 'cons' ? ICT.consensus(c, CONS_TF.map(t => ({ name: TFN[t], c: data[t].c.filter(x => x.ct <= Date.now()) }))) : null;
+      const a = ICT.analyze(c, { ...CFG, cons }), n = c.length, bt = a.bt;
       const btInfo = { n: bt.n, win: +bt.winRate.toFixed(3), netR: +bt.netR.toFixed(2), pf: isFinite(bt.pf) ? +bt.pf.toFixed(2) : 99 };
       for (const t of bt.trades) {
         if (t.i < n - 300) continue;
@@ -259,7 +267,7 @@ async function main() {
           src: d.src, off: +off.toFixed(5), aligned, tvCode: SYM[sym].tv, tvPx, tvDiff, bt: btInfo };
         log.push(x); alerts.push(sigText(x, t.state === 'OPEN' ? '🆕 <b>TÍN HIỆU MỚI (đã khớp entry)</b>' : '🆕 <b>TÍN HIỆU MỚI</b>'));
       }
-      runStatus[`${sym}|${tf}`] = { price: c[n - 1].c, t: c[n - 1].t, src: d.src, off, aligned, tvDiff, ctx: { bias: a.ctx.bias, htf: a.ctx.htf, trend: a.ctx.trend, zone: a.ctx.zone },
+      runStatus[`${sym}|${tf}`] = { price: c[n - 1].c, t: c[n - 1].t, src: d.src, off, aligned, tvDiff, ctx: { dir: a.ctx.dir, cons: a.ctx.cons, bias: a.ctx.bias, htf: a.ctx.htf, trend: a.ctx.trend, zone: a.ctx.zone },
         setups: a.sigs.length, bt: btInfo, rej: a.rej, live: a.live.map(t => ({ side: t.side, grade: t.grade, state: t.state, entry: t.entry, t: c[t.i].t })) };
     }
   }
@@ -284,7 +292,7 @@ async function main() {
 
   state.lastRun = Date.now();
   writeJSON('state.json', { ...state, telegram: tgInfo });
-  writeJSON('signals.json', { updated: Date.now(), cfg: CFG, symbols: SYMBOLS, tfs: TFS, telegram: tgInfo, mt5: { configured: !!FB, live: Object.values(runStatus.sources).includes('mt5') }, status: runStatus, tv: tvInfo, signals: log });
+  writeJSON('signals.json', { updated: Date.now(), cfg: { ...CFG, dir: DIR, consTfs: CONS_TF }, symbols: SYMBOLS, tfs: TFS, telegram: tgInfo, mt5: { configured: !!FB, live: Object.values(runStatus.sources).includes('mt5') }, status: runStatus, tv: tvInfo, signals: log });
   console.log(`Xong: ${alerts.length} thông báo, ${log.length} tín hiệu trong nhật ký, lỗi: ${runStatus.errors.join(' | ') || 'không'}`);
 }
 

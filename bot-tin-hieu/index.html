@@ -105,14 +105,14 @@ ol.rules{margin:0;padding-left:18px;font-size:13px;color:var(--muted)}ol.rules l
       <h3>Radar các mã</h3>
       <div class="tw"><table class="radar"><thead><tr><th>Mã</th><th>M5</th><th>M15</th><th>H1</th><th>H4</th></tr></thead><tbody id="radar"></tbody></table></div>
       <div class="tools" style="margin:10px 0 0"><button class="btn" id="scanBtn">Quét lại</button><span class="note" id="radarNote">Tự quét mỗi 5 phút</span></div>
-      <p class="note" style="margin:6px 0 0">Mũi tên = hướng EMA 34/89. Có hạng (A+/A/B) = đang có lệnh chờ hoặc đang chạy. Bấm vào ô để mở mã và khung đó.</p>
+      <p class="note" style="margin:6px 0 0">Mũi tên = hướng đồng thuận EMA 34/89 (M5+M15+H1), — = chưa đồng thuận. Có hạng (A+/A/B) = đang có lệnh chờ hoặc đang chạy. Bấm vào ô để mở mã và khung đó.</p>
     </div>
     <div class="card"><h3>Bot MT5</h3><div id="mt5bot"></div></div>
     <div class="card">
       <h3>Cài đặt</h3>
       <div class="grid2">
         <label>Hạng tín hiệu tối thiểu<select id="cGrade"><option value="A+">A+ (chặt nhất)</option><option value="A">A</option><option value="B">B (tất cả)</option></select></label>
-        <label>EMA 34/89 khung lớn<select id="cHtf"><option value="grade">Chỉ để xếp hạng</option><option value="require">Bắt buộc cùng chiều</option></select></label>
+        <label>Hướng lệnh (EMA 34/89)<select id="cHtf"><option value="cons">Đồng thuận M5 + M15 + H1</option><option value="grade">Chỉ khung đang xem</option><option value="require">Khung đang xem + khung lớn</option></select></label>
         <label>RR tối thiểu tới TP<input id="cMinRR" type="number" step="0.1" min="1" max="5"></label>
         <label>RR dự phòng<input id="cRR" type="number" step="0.1" min="1" max="6"></label>
         <label>Lệnh chờ hết hạn sau (nến)<input id="cExp" type="number" step="1" min="3" max="100"></label>
@@ -135,13 +135,13 @@ ol.rules{margin:0;padding-left:18px;font-size:13px;color:var(--muted)}ol.rules l
     <div class="card">
       <h3>Luật vào lệnh</h3>
       <ol class="rules">
-        <li><b>Hướng:</b> EMA34 trên EMA89 và giá trên EMA89 → chỉ BUY. EMA34 dưới EMA89 và giá dưới EMA89 → chỉ SELL. Hai đường quấn nhau → đứng ngoài.</li>
+        <li><b>Hướng:</b> xét EMA 34/89 trên cả M5, M15, H1. Cả ba khung EMA34 trên EMA89 và giá trên EMA89 → chỉ BUY. Cả ba ngược lại → chỉ SELL. Ba khung chưa cùng chiều → đứng ngoài.</li>
         <li><b>Cấu trúc:</b> cần BOS/CHoCH (đóng cửa qua đỉnh/đáy swing) cùng chiều EMA, nhịp phá vỡ có displacement hoặc FVG.</li>
         <li><b>Mô hình "Quét + MSS":</b> giá quét SSL (BUY) / BSL (SELL) rồi phá cấu trúc ngược lại → LIMIT tại 50% FVG hoặc OB, SL ngoài đáy/đỉnh quét.</li>
         <li><b>Mô hình "BOS + hồi OB":</b> BOS cùng xu hướng → LIMIT tại OB (hoặc FVG) của nhịp phá vỡ, SL ngoài OB.</li>
         <li><b>Vị trí:</b> entry phải nằm ở discount (BUY) / premium (SELL) của nhịp. Không đuổi giá.</li>
         <li><b>TP:</b> thanh khoản đối diện gần nhất (BSL/SSL, đỉnh/đáy nhịp) đạt RR tối thiểu. Huỷ lệnh chờ nếu giá chạy tới TP trước khi khớp hoặc quá hạn.</li>
-        <li><b>Hạng:</b> A+ = có quét thanh khoản, FVG trùng OB, EMA khung lớn cùng chiều. A = EMA khung lớn cùng chiều. B = khung lớn ngược chiều.</li>
+        <li><b>Hạng:</b> A+ = có quét thanh khoản và FVG trùng OB. A = các setup đạt điều kiện còn lại.</li>
       </ol>
     </div>
   </aside>
@@ -150,7 +150,7 @@ ol.rules{margin:0;padding-left:18px;font-size:13px;color:var(--muted)}ol.rules l
 <div id="toast"></div>
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
-<script src="ict.js?v=1"></script>
-<script src="app.js?v=5"></script>
+<script src="ict.js?v=2"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

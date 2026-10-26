@@ -62,6 +62,30 @@
 
   const GRADE_RANK = { 'A+': 3, A: 2, B: 1 };
 
+  // ---------------- đồng thuận EMA 34/89 nhiều khung (mặc định M5 + M15 + H1) ----------------
+  // sets: [{ name: 'M5', c: nến }, ...]. Với mỗi nến của khung đang xem, lấy nến ĐÃ ĐÓNG gần nhất của từng khung,
+  // hướng khung = EMA34 > EMA89 và giá trên EMA89 (tăng) / ngược lại (giảm) / còn lại 0. Đồng thuận = tất cả cùng chiều.
+  function emaBias(c) {
+    const cl = c.map(x => x.c), a = ema(cl, 34), b = ema(cl, 89);
+    return cl.map((x, i) => i < 89 ? 0 : a[i] > b[i] && x > b[i] ? 1 : a[i] < b[i] && x < b[i] ? -1 : 0);
+  }
+  function consensus(c, sets) {
+    const step = stepOf(c), n = c.length, dir = new Array(n).fill(0), per = {}, now = {};
+    const cols = sets.map(s => { const st = stepOf(s.c), cc = s.c.map(x => x.ct == null ? { ...x, ct: x.t + st } : x); return { name: s.name, c: cc, b: emaBias(cc) }; });
+    for (const s of cols) { per[s.name] = new Array(n).fill(0); now[s.name] = s.b[s.b.length - 1] || 0; }
+    const ptr = cols.map(() => -1);
+    for (let i = 0; i < n; i++) {
+      const T = c[i].ct != null ? c[i].ct : c[i].t + step; let v = null, ok = true;
+      cols.forEach((s, k) => {
+        while (ptr[k] + 1 < s.c.length && s.c[ptr[k] + 1].ct <= T) ptr[k]++;
+        const b = ptr[k] >= 89 ? s.b[ptr[k]] : 0; per[s.name][i] = b;
+        if (!b) ok = false; else if (v == null) v = b; else if (v !== b) ok = false;
+      });
+      dir[i] = ok && v ? v : 0;
+    }
+    return { dir, per, now, names: cols.map(s => s.name), from: cols.reduce((m, s) => Math.max(m, s.c.length > 89 ? s.c[89].ct : Infinity), 0) };
+  }
+
   // ---------------- phân tích ----------------
   function analyze(c, cfg) {
     cfg = Object.assign({ swing: 3, minRR: 1.5, maxRR: 6, rr: 2, expiry: 20, maxBars: 48, cost: 0.0004, freshBars: 2, sweepWin: 20, dispATR: 1.0, slBuf: 0.15, htf: 'grade', minGrade: 'B' }, cfg);
@@ -70,6 +94,8 @@
     const cl = c.map(x => x.c), e34 = ema(cl, 34), e89 = ema(cl, 89), e200 = ema(cl, 200), A = atr(c, 14);
     const bias = cl.map((x, i) => i < 89 ? 0 : e34[i] > e89[i] && x > e89[i] ? 1 : e34[i] < e89[i] && x < e89[i] ? -1 : 0);
     const HT = htfBias(c, step), tfTxt = TF_TXT[step] || '';
+    // hướng lệnh: đồng thuận nhiều khung (cfg.cons từ consensus()) hoặc EMA của khung đang xem
+    const CONS = cfg.cons || null, dirArr = CONS ? CONS.dir : bias, dirTxt = CONS ? CONS.names.join('+') : tfTxt;
     const pv = pivots(c, cfg.swing);
     const fmt = (v) => { const a = Math.abs(v); return v.toFixed(a >= 1000 ? 2 : a >= 10 ? 2 : 4); };
 
@@ -142,8 +168,8 @@
         const model = swOk ? 'sweep' : type === 'BOS' ? 'bos' : null;
         if (!disp) R('nhịp phá vỡ không có displacement/FVG');
         else if (!model) R('CHoCH chưa quét thanh khoản');
-        else if (bias[i] !== d) R(d > 0 ? 'EMA34/89 không ủng hộ BUY' : 'EMA34/89 không ủng hộ SELL');
-        else if (cfg.htf === 'require' && HT.ok && HT.bias[i] !== d) R('EMA34/89 khung lớn ngược chiều');
+        else if (dirArr[i] !== d) R(CONS ? `EMA34/89 ${dirTxt} chưa đồng thuận ${d > 0 ? 'BUY' : 'SELL'}` : `EMA34/89 không ủng hộ ${d > 0 ? 'BUY' : 'SELL'}`);
+        else if (!CONS && cfg.htf === 'require' && HT.ok && HT.bias[i] !== d) R('EMA34/89 khung lớn ngược chiều');
         else {
           const eq = (ext + pl) / 2, rng = Math.abs(ext - pl), tol = 0.05 * rng;
           const inDisc = (p) => d > 0 ? p <= eq + tol : p >= eq - tol;
@@ -165,14 +191,14 @@
               let tp = null, tpT = '';
               for (const g of tg) { const rr = (g.p - entry) * d / risk; if (rr >= cfg.minRR && rr <= cfg.maxRR && (tp == null || (g.p - entry) * d < (tp - entry) * d)) { tp = g.p; tpT = g.t; } }
               if (tp == null) { tp = entry + d * cfg.rr * risk; tpT = cfg.rr + 'R (chưa có thanh khoản phù hợp)'; }
-              const htfOk = !HT.ok || HT.bias[i] === d;
+              const htfOk = CONS ? true : !HT.ok || HT.bias[i] === d;
               const overlap = fvg && (d > 0 ? fvg.bot <= OB.top && fvg.top >= OB.bot : fvg.top >= OB.bot && fvg.bot <= OB.top);
               const grade = !htfOk ? 'B' : model === 'sweep' && overlap ? 'A+' : 'A';
               if (GRADE_RANK[grade] >= GRADE_RANK[cfg.minGrade]) {
                 const pos = Math.abs(entry - pl) / (rng || 1);
                 const note = (model === 'sweep' ? `Quét ${d > 0 ? 'SSL' : 'BSL'} ${fmt(sw.lvl)} → ${type} ${fmt(brk.piv.p)}` : `${type} ${fmt(brk.piv.p)} cùng xu hướng → hồi về ${poi}`) +
                   ` · Entry ${poi} ${poi === 'FVG' ? '50%' : d > 0 ? 'đỉnh' : 'đáy'} (${(pos * 100).toFixed(0)}% nhịp, ${d > 0 ? 'discount' : 'premium'})` +
-                  ` · EMA34/89 ${tfTxt} ${d > 0 ? 'tăng' : 'giảm'}${HT.ok ? `, ${HT.txt} ${htfOk ? 'cùng chiều' : 'ngược chiều'}` : ''} · SL ${model === 'sweep' ? 'ngoài đáy quét' : 'ngoài OB'} · TP ${tpT}`;
+                  (CONS ? ` · EMA34/89 ${dirTxt} đồng thuận ${d > 0 ? 'tăng' : 'giảm'}` : ` · EMA34/89 ${tfTxt} ${d > 0 ? 'tăng' : 'giảm'}${HT.ok ? `, ${HT.txt} ${htfOk ? 'cùng chiều' : 'ngược chiều'}` : ''}`) + ` · SL ${model === 'sweep' ? 'ngoài đáy quét' : 'ngoài OB'} · TP ${tpT}`;
                 sigs.push({ i, side: d, entry, sl, tp, limit: true, expiry: cfg.expiry, model, poi, grade, type,
                   zone: poi === 'FVG' ? { top: fvg.top, bot: fvg.bot, i: fvg.i } : { top: OB.top, bot: OB.bot, i: OB.i },
                   sweep: model === 'sweep' ? { i: sw.i, p: sw.lvl } : null, mss: { i, p: brk.piv.p, from: brk.piv.i }, note });
@@ -199,6 +225,7 @@
     const px = cl[n - 1];
     const ctx = {
       bias: bias[n - 1], htf: HT.ok ? HT.bias[n - 1] : 0, htfTxt: HT.txt, tfTxt, trend: structAt[n - 1],
+      dir: dirArr[n - 1], dirTxt, cons: CONS ? CONS.now : null,
       lastEvent: events[events.length - 1] || null, range,
       zone: range ? ((px - range.pl) / (range.ext - range.pl || 1) > 0.5 ? (range.d > 0 ? 'premium' : 'discount') : (range.d > 0 ? 'discount' : 'premium')) : null,
       bsl: open.filter(q => q.side > 0 && q.p > px).sort((a, b) => a.p - b.p)[0] || null,
@@ -238,5 +265,5 @@
     return { trades, n: done.length, wins: wins.length, winRate: done.length ? wins.length / done.length : 0, netR: eq, pf: gl ? gw / gl : (gw ? Infinity : 0), maxDD: dd, avgR: done.length ? eq / done.length : 0 };
   }
 
-  root.ICT = { analyze, backtest, ema, atr, GRADE_RANK };
+  root.ICT = { analyze, backtest, consensus, ema, atr, GRADE_RANK };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -2,13 +2,13 @@ name: Bot tín hiệu (Telegram)
 
 on:
   schedule:
-  - cron: "2-59/5 * * * *"  # GitHub thường chạy trễ, thực tế khoảng 5–15 phút/lần
+  - cron: "4,34 * * * *"  # mỗi job tự quét lặp 5 phút/lần trong ~50 phút; GitHub hay trễ lịch nên đặt 2 lần/giờ
   workflow_dispatch: {}
   push:
     branches: [main]
     paths:
       - "scanner/**"
-      - "bot-tin-hieu/strategies.js"
+      - "bot-tin-hieu/ict.js"
       - ".github/workflows/bot-tin-hieu.yml"
 
 permissions:
@@ -21,7 +21,7 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 58
     steps:
       - uses: actions/checkout@v4
 
@@ -37,7 +37,7 @@ jobs:
             git show FETCH_HEAD:signals.json > botdata/signals.json 2>/dev/null || true
           fi
 
-      - name: Quét tín hiệu + gửi Telegram
+      - name: Quét tín hiệu (lặp 5 phút/lần) + gửi Telegram + lưu nhật ký
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -45,18 +45,12 @@ jobs:
           SYMBOLS: ${{ vars.SYMBOLS }}
           TFS: ${{ vars.TFS }}
           RR: ${{ vars.RR }}
+          MIN_GRADE: ${{ vars.MIN_GRADE }}
+          HTF_EMA: ${{ vars.HTF_EMA }}
+          ALIGN: ${{ vars.ALIGN }}
+          TV_XAU: ${{ vars.TV_XAU }}
+          TV_BTC: ${{ vars.TV_BTC }}
           DATA_DIR: botdata
-        run: node scanner/scan.mjs
-
-      - name: Lưu nhật ký (giữ nhánh bot-data chỉ 1 commit)
-        run: |
-          cd botdata
-          git init -q -b bot-data
-          git config user.name "bot-tin-hieu"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          printf '# Dữ liệu bot tín hiệu\nTự động cập nhật bởi GitHub Actions. Web đọc signals.json.\n' > README.md
-          git add -A
-          git commit -qm "Cập nhật tín hiệu $(date -u +%FT%TZ)"
-          git push -q -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:bot-data
-        env:
+          LOOP_MIN: 50
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scanner/loop.sh

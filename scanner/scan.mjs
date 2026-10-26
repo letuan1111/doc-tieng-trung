@@ -1,6 +1,7 @@
 // Máy quét tín hiệu chạy trên GitHub Actions (miễn phí) mỗi ~5–15 phút.
 // - Dữ liệu: MT5 (Exness) qua Firebase nếu máy tính đang bật, nếu không thì OKX → Bybit → Binance → Kraken.
-// - Tín hiệu: 7 chiến lược trong bot-tin-hieu/strategies.js (dùng chung với web).
+// - Tín hiệu: engine ICT/SMC trong bot-tin-hieu/ict.js (dùng chung với web). EMA 34/89 chọn hướng BUY/SELL.
+// - So sánh giá với TradingView (OANDA:XAUUSD, BITSTAMP:BTCUSD…), ghi chênh lệch và căn giá theo TradingView.
 // - Lưu nhật ký + trạng thái vào thư mục DATA_DIR (nhánh bot-data), web đọc file signals.json.
 // - Telegram: gửi tín hiệu mới, chạm entry, TP/SL; trả lời lệnh /start /tinhieu /thongke /trangthai.
 import fs from 'node:fs';
@@ -9,8 +10,8 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const __dir = path.dirname(fileURLToPath(import.meta.url));
-createRequire(import.meta.url)(path.join(__dir, '..', 'bot-tin-hieu', 'strategies.js'));
-const BOT = globalThis.BOT;
+createRequire(import.meta.url)(path.join(__dir, '..', 'bot-tin-hieu', 'ict.js'));
+const ICT = globalThis.ICT;
 
 const ENV = process.env;
 const DATA_DIR = ENV.DATA_DIR || path.join(__dir, '..', 'botdata');
@@ -19,15 +20,16 @@ const FIXED_CHAT = (ENV.TELEGRAM_CHAT_ID || '').trim();
 const FB = (ENV.FIREBASE_URL || '').trim().replace(/\/+$/, '');
 const SYMBOLS = (ENV.SYMBOLS || 'XAU,BTC').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
 const TFS = (ENV.TFS || 'm15,h1,h4').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-const CFG = { rr: +(ENV.RR || 2), maxBars: +(ENV.MAX_BARS || 48), cost: +(ENV.COST_PCT || 0.04) / 100, freshBars: +(ENV.FRESH_BARS || 2) };
+const CFG = { rr: +(ENV.RR || 2), minRR: +(ENV.MIN_RR || 1.5), expiry: +(ENV.EXPIRY || 20), maxBars: +(ENV.MAX_BARS || 48), cost: +(ENV.COST_PCT || 0.04) / 100, freshBars: 2,
+  minGrade: ENV.MIN_GRADE || 'A', htf: ENV.HTF_EMA || 'grade', align: ENV.ALIGN || 'tv' };
 const MOCK = ENV.MOCK === '1';
 const WEB = ENV.WEB_URL || 'https://letuan1111.github.io/doc-tieng-trung/bot-tin-hieu/';
 
 const SYM = {
-  XAU: { name: 'XAUUSD', mt5: ENV.MT5_XAU || 'XAUUSDm', okx: 'XAU-USDT-SWAP', by: 'XAUUSDT', bn: 'XAUUSDT', kr: 'PAXGUSD', dp: 2 },
-  BTC: { name: 'BTCUSD', mt5: ENV.MT5_BTC || 'BTCUSDm', okx: 'BTC-USDT-SWAP', by: 'BTCUSDT', bn: 'BTCUSDT', kr: 'XBTUSD', dp: 1 },
-  ETH: { name: 'ETHUSD', mt5: ENV.MT5_ETH || 'ETHUSDm', okx: 'ETH-USDT-SWAP', by: 'ETHUSDT', bn: 'ETHUSDT', kr: 'ETHUSD', dp: 2 },
-  SOL: { name: 'SOLUSD', mt5: '', okx: 'SOL-USDT-SWAP', by: 'SOLUSDT', bn: 'SOLUSDT', kr: 'SOLUSD', dp: 3 },
+  XAU: { name: 'XAUUSD', mt5: ENV.MT5_XAU || 'XAUUSDm', okx: 'XAU-USDT-SWAP', by: 'XAUUSDT', bn: 'XAUUSDT', kr: 'PAXGUSD', dp: 2, tv: ENV.TV_XAU || 'OANDA:XAUUSD' },
+  BTC: { name: 'BTCUSD', mt5: ENV.MT5_BTC || 'BTCUSDm', okx: 'BTC-USDT-SWAP', by: 'BTCUSDT', bn: 'BTCUSDT', kr: 'XBTUSD', dp: 1, tv: ENV.TV_BTC || 'BITSTAMP:BTCUSD' },
+  ETH: { name: 'ETHUSD', mt5: ENV.MT5_ETH || 'ETHUSDm', okx: 'ETH-USDT-SWAP', by: 'ETHUSDT', bn: 'ETHUSDT', kr: 'ETHUSD', dp: 2, tv: ENV.TV_ETH || 'BITSTAMP:ETHUSD' },
+  SOL: { name: 'SOLUSD', mt5: '', okx: 'SOL-USDT-SWAP', by: 'SOLUSDT', bn: 'SOLUSDT', kr: 'SOLUSD', dp: 3, tv: ENV.TV_SOL || 'COINBASE:SOLUSD' },
 };
 const MS = { m5: 3e5, m15: 9e5, h1: 36e5, h4: 144e5 }, TFN = { m5: 'M5', m15: 'M15', h1: 'H1', h4: 'H4' };
 const NEED = 1000;
@@ -83,7 +85,19 @@ const SOURCES = {
   },
 };
 const PUBLIC = ['okx', 'bybit', 'binance', 'kraken'];
-const PUB_NAME = { mt5: 'MT5 Exness', okx: 'OKX', bybit: 'Bybit', binance: 'Binance', kraken: 'Kraken' };
+const PUB_NAME = { mt5: 'MT5 Exness', okx: 'OKX', bybit: 'Bybit', binance: 'Binance', kraken: 'Kraken', mock: 'mock' };
+const WEB_KEY = { mt5: 'mt5', okx: 'OKX', bybit: 'Bybit', binance: 'Binance Futures', kraken: 'Kraken', mock: 'mock' }; // tên nguồn trên web
+
+// ---------------- giá TradingView ----------------
+async function tvPrice(code) {
+  if (MOCK) return null;
+  const tries = [
+    async () => (await getJSON(`https://scanner.tradingview.com/symbol?symbol=${encodeURIComponent(code)}&fields=close`)).close,
+    async () => { const j = await getJSON('https://scanner.tradingview.com/global/scan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ symbols: { tickers: [code], query: { types: [] } }, columns: ['close'] }) }); return j.data && j.data[0] && j.data[0].d[0]; },
+  ];
+  for (const f of tries) { try { const v = +(await f()); if (isFinite(v) && v > 0) return v; } catch (e) { console.log('  TradingView lỗi', code, e.message); } }
+  return null;
+}
 
 function mockCandles(sym, tf) {
   let seed = [...(sym + tf)].reduce((a, c) => a * 31 + c.charCodeAt(0), 7) % 2147483647 || 1;
@@ -133,28 +147,35 @@ async function broadcast(state, text) {
   for (const id of chats(state)) { await tg('sendMessage', { chat_id: id, text, parse_mode: 'HTML', disable_web_page_preview: true }); await sleep(350); }
 }
 
+const MODEL = { sweep: 'Quét thanh khoản + MSS', bos: 'BOS + hồi về OB/FVG' };
+function tvLine(x) {
+  if (x.tvPx == null || x.tvDiff == null) return 'TradingView: chưa lấy được giá để so sánh';
+  const dp = SYM[x.sym].dp, srcN = PUB_NAME[x.src] || x.src, d = -x.tvDiff; // nguồn − TradingView
+  return `TradingView ${esc(x.tvCode)}: <code>${fx(x.tvPx, dp)}</code> · ${esc(srcN)} ${d > 0 ? 'cao hơn' : d < 0 ? 'thấp hơn' : 'bằng'} TV <b>${fx(Math.abs(d), dp)}</b>` +
+    (x.aligned ? '\nGiá Entry/SL/TP ở trên đã <b>căn theo TradingView</b>' : x.src === 'mt5' ? '\nGiá Entry/SL/TP theo <b>MT5 Exness</b>' : '');
+}
 function sigText(x, head) {
   const dp = SYM[x.sym].dp, R = Math.abs(x.entry - x.sl);
-  return `${head}\n<b>${x.side > 0 ? '🟢 BUY' : '🔴 SELL'}${x.limit ? ' LIMIT' : ''} ${SYM[x.sym].name} · ${TFN[x.tf]}</b> — ${esc(x.stratName)}\n` +
+  return `${head}\n<b>${x.side > 0 ? '🟢 BUY' : '🔴 SELL'} LIMIT ${SYM[x.sym].name} · ${TFN[x.tf]}</b> — hạng <b>${esc(x.grade)}</b>\n${esc(MODEL[x.model] || x.model)} · POI ${esc(x.poi)}\n` +
     `Entry: <code>${fx(x.entry, dp)}</code>\nSL: <code>${fx(x.sl, dp)}</code> (−1R · ${fx(R, dp)})\nTP: <code>${fx(x.tp, dp)}</code> (+${(Math.abs(x.tp - x.entry) / R).toFixed(2)}R)\n` +
-    `<i>${esc(x.note || '')}</i>\nNguồn giá: ${esc(PUB_NAME[x.src] || x.src)}${x.off ? ` (đã căn theo Exness ${x.off > 0 ? '+' : ''}${x.off})` : ''} · tín hiệu lúc ${vn(x.t)}\n` +
-    `Backtest chiến lược này: ${x.bt.n} lệnh, thắng ${Math.round(x.bt.win * 100)}%, ${x.bt.netR >= 0 ? '+' : ''}${x.bt.netR.toFixed(1)}R`;
+    `<i>${esc(x.note || '')}</i>\n${tvLine(x)}\nTín hiệu lúc ${vn(x.t)} · huỷ nếu sau ${x.expiry} nến chưa khớp hoặc giá chạm TP trước\n` +
+    `Backtest mô hình trên ${TFN[x.tf]}: ${x.bt.n} lệnh, thắng ${Math.round(x.bt.win * 100)}%, ${x.bt.netR >= 0 ? '+' : ''}${x.bt.netR.toFixed(1)}R`;
 }
 
 function statsText(log, days) {
-  const since = Date.now() - days * 864e5, done = log.filter(x => x.t >= since && x.r != null);
+  const since = Date.now() - days * 864e5, done = log.filter(x => x.engine === 'ict' && x.t >= since && x.r != null);
   if (!done.length) return `Chưa có lệnh nào kết thúc trong ${days} ngày qua.`;
   const by = {};
-  for (const x of done) { const k = x.stratName; (by[k] = by[k] || { n: 0, w: 0, r: 0 }); by[k].n++; if (x.r > 0) by[k].w++; by[k].r += x.r; }
+  for (const x of done) { const k = MODEL[x.model] || x.stratName || '?'; (by[k] = by[k] || { n: 0, w: 0, r: 0 }); by[k].n++; if (x.r > 0) by[k].w++; by[k].r += x.r; }
   const tot = done.reduce((s, x) => s + x.r, 0), w = done.filter(x => x.r > 0).length;
   return `<b>📊 Thống kê ${days} ngày</b>\nTổng: ${done.length} lệnh · thắng ${Math.round(w / done.length * 100)}% · <b>${tot >= 0 ? '+' : ''}${tot.toFixed(1)}R</b>\n` +
     Object.entries(by).sort((a, b) => b[1].r - a[1].r).map(([k, v]) => `• ${esc(k)}: ${v.n} lệnh, thắng ${Math.round(v.w / v.n * 100)}%, ${v.r >= 0 ? '+' : ''}${v.r.toFixed(1)}R`).join('\n');
 }
 
 function openText(log) {
-  const open = log.filter(x => x.state === 'OPEN' || x.state === 'PENDING');
+  const open = log.filter(x => x.engine === 'ict' && (x.state === 'OPEN' || x.state === 'PENDING'));
   if (!open.length) return 'Hiện không có tín hiệu nào đang mở hoặc chờ khớp.';
-  return '<b>📌 Tín hiệu đang mở / chờ khớp</b>\n\n' + open.slice(-10).map(x => { const dp = SYM[x.sym].dp; return `${x.side > 0 ? '🟢 BUY' : '🔴 SELL'}${x.limit ? ' LIMIT' : ''} ${SYM[x.sym].name} ${TFN[x.tf]} · ${esc(x.stratShort)} · ${x.state === 'OPEN' ? 'đang chạy' : 'chờ khớp'}\nEntry ${fx(x.entry, dp)} · SL ${fx(x.sl, dp)} · TP ${fx(x.tp, dp)}`; }).join('\n\n');
+  return '<b>📌 Tín hiệu đang mở / chờ khớp</b>\n\n' + open.slice(-10).map(x => { const dp = SYM[x.sym].dp; return `${x.side > 0 ? '🟢 BUY' : '🔴 SELL'}${x.limit ? ' LIMIT' : ''} ${SYM[x.sym].name} ${TFN[x.tf]} · hạng ${esc(x.grade)} · ${x.state === 'OPEN' ? 'đang chạy' : 'chờ khớp'}\nEntry ${fx(x.entry, dp)} · SL ${fx(x.sl, dp)} · TP ${fx(x.tp, dp)}`; }).join('\n\n');
 }
 
 async function handleCommands(state, log, status) {
@@ -189,58 +210,64 @@ async function main() {
   const status = () => `<b>⚙️ Trạng thái</b>\nQuét lúc ${vn(runStatus.at)} (giờ VN)\n` +
     Object.entries(runStatus.sources).map(([k, v]) => `• ${k}: ${esc(PUB_NAME[v] || v)}`).join('\n') +
     (FB ? `\nMT5: ${Object.values(runStatus.sources).includes('mt5') ? '🟢 đang gửi dữ liệu' : '⚪ không hoạt động (' + esc(state.mt5err || '') + ')'}` : '\nMT5: chưa cấu hình FIREBASE_URL') +
-    `\nĐang mở: ${log.filter(x => x.state === 'OPEN' || x.state === 'PENDING').length} tín hiệu`;
+    `\nĐang mở: ${log.filter(x => x.engine === 'ict' && (x.state === 'OPEN' || x.state === 'PENDING')).length} tín hiệu`;
 
-  const alerts = [];
+  const alerts = [], tvInfo = {};
+  // tín hiệu phát sinh từ lần quét trước vẫn được báo (GitHub có thể chạy trễ hàng giờ)
+  const since = state.lastRun ? state.lastRun - 60e3 : 0;
   for (const sym of SYMBOLS) {
     if (!SYM[sym]) { runStatus.errors.push('mã không hỗ trợ ' + sym); continue; }
     await measureOffset(sym, state);
+    const tvPx = await tvPrice(SYM[sym].tv), tvAt = Date.now();
+    tvInfo[sym] = { code: SYM[sym].tv, price: tvPx, at: tvAt, diff: {} };
     for (const tf of TFS) {
       let d;
       try { d = await loadCandles(sym, tf, state); } catch (e) { runStatus.errors.push(`${sym} ${tf}: ${e.message}`); continue; }
       runStatus.sources[`${SYM[sym].name} ${TFN[tf]}`] = d.src;
-      const offRec = d.src !== 'mt5' && state.offset[sym + '|' + d.src], off = offRec && Date.now() - offRec.t < 7 * 864e5 ? offRec.v : 0;
+      const liveC = d.c[d.c.length - 1].c, tvDiff = tvPx != null ? +(tvPx - liveC).toFixed(5) : null; // TradingView − nguồn
+      if (tvDiff != null) tvInfo[sym].diff[WEB_KEY[d.src] || d.src] = tvDiff;
+      let off = 0, aligned = false;
+      if (d.src !== 'mt5') {
+        if (CFG.align === 'tv' && tvDiff != null) { off = tvDiff; aligned = true; }
+        else if (CFG.align === 'mt5') { const o = state.offset[sym + '|' + d.src]; if (o && Date.now() - o.t < 7 * 864e5) off = o.v; }
+      }
       const c = d.c.filter(x => x.ct <= Date.now()).map(x => off ? { ...x, o: x.o + off, h: x.h + off, l: x.l + off, c: x.c + off } : x);
       if (c.length < 300) { runStatus.errors.push(`${sym} ${tf}: ít nến`); continue; }
-      const a = BOT.analyze(c, CFG), n = c.length;
-      for (const k in a.res) {
-        const r = a.res[k], meta = BOT.S[k];
-        for (const t of r.trades) {
-          if (t.i < n - 300) continue;
-          const id = `${sym}|${tf}|${k}|${c[t.i].t}`, ex = log.find(x => x.id === id);
-          if (ex) { // cập nhật trạng thái
-            if (ex.state !== t.state && (ex.state === 'OPEN' || ex.state === 'PENDING')) {
-              const prev = ex.state; Object.assign(ex, { state: t.state, r: t.r != null ? +t.r.toFixed(3) : null, exitT: t.exit != null ? c[t.exit].t : null });
-              if (prev === 'PENDING' && t.state === 'OPEN') alerts.push(sigText(ex, '🎯 <b>Giá đã chạm Entry – lệnh khớp</b>'));
-              else if (t.state === 'WIN') alerts.push(`✅ <b>Chạm TP</b> ${SYM[sym].name} ${TFN[tf]} · ${esc(meta.short)} ${ex.side > 0 ? 'BUY' : 'SELL'} · <b>+${t.r.toFixed(2)}R</b>`);
-              else if (t.state === 'LOSS') alerts.push(`❌ <b>Dính SL</b> ${SYM[sym].name} ${TFN[tf]} · ${esc(meta.short)} ${ex.side > 0 ? 'BUY' : 'SELL'} · ${t.r.toFixed(2)}R`);
-              else if (t.state === 'TIME') alerts.push(`⏱ <b>Đóng do hết thời gian</b> ${SYM[sym].name} ${TFN[tf]} · ${esc(meta.short)} · ${t.r >= 0 ? '+' : ''}${t.r.toFixed(2)}R`);
-              else if (t.state === 'EXPIRED' || t.state === 'MISSED') alerts.push(`⚪ Huỷ lệnh chờ ${SYM[sym].name} ${TFN[tf]} · ${esc(meta.short)} (${t.state === 'EXPIRED' ? 'quá hạn chưa khớp' : 'giá chạy tới TP trước khi khớp'})`);
-            }
-            continue;
+      const a = ICT.analyze(c, CFG), n = c.length, bt = a.bt;
+      const btInfo = { n: bt.n, win: +bt.winRate.toFixed(3), netR: +bt.netR.toFixed(2), pf: isFinite(bt.pf) ? +bt.pf.toFixed(2) : 99 };
+      for (const t of bt.trades) {
+        if (t.i < n - 300) continue;
+        const id = `ict|${sym}|${tf}|${c[t.i].t}|${t.side}`, ex = log.find(x => x.id === id);
+        if (ex) { // cập nhật trạng thái
+          if (ex.state !== t.state && (ex.state === 'OPEN' || ex.state === 'PENDING')) {
+            const prev = ex.state; Object.assign(ex, { state: t.state, r: t.r != null ? +t.r.toFixed(3) : null, exitT: t.exit != null ? c[t.exit].t : null });
+            const nm = `${SYM[sym].name} ${TFN[tf]} ${ex.side > 0 ? 'BUY' : 'SELL'} ${fx(ex.entry, SYM[sym].dp)}`;
+            if (prev === 'PENDING' && t.state === 'OPEN') alerts.push(sigText(ex, '🎯 <b>Giá đã chạm Entry – lệnh khớp</b>'));
+            else if (t.state === 'WIN') alerts.push(`✅ <b>Chạm TP</b> ${nm} · <b>+${t.r.toFixed(2)}R</b>`);
+            else if (t.state === 'LOSS') alerts.push(`❌ <b>Dính SL</b> ${nm} · ${t.r.toFixed(2)}R`);
+            else if (t.state === 'TIME') alerts.push(`⏱ <b>Đóng do hết thời gian</b> ${nm} · ${t.r >= 0 ? '+' : ''}${t.r.toFixed(2)}R`);
+            else if (t.state === 'EXPIRED' || t.state === 'MISSED') alerts.push(`⚪ Huỷ lệnh chờ ${nm} (${t.state === 'EXPIRED' ? 'quá hạn chưa khớp' : 'giá chạy tới TP trước khi khớp'})`);
           }
-          // tín hiệu mới: phải còn mới, đang mở/chờ, và chiến lược có lãi trên dữ liệu này
-          const fresh = n - 1 - t.i <= CFG.freshBars && (t.state === 'OPEN' || t.state === 'PENDING');
-          if (!fresh || r.n < 5 || r.avgR <= 0) continue;
-          const x = { id, sym, tf, strat: k, stratName: meta.name, stratShort: meta.short, side: t.side, limit: !!t.limit, entry: +t.entry.toFixed(6), sl: +t.sl.toFixed(6), tp: +t.tp.toFixed(6),
-            t: c[t.i].t, note: t.note || '', state: t.state, r: null, src: d.src, off, bt: { n: r.n, win: +r.winRate.toFixed(3), netR: +r.netR.toFixed(2), pf: isFinite(r.pf) ? +r.pf.toFixed(2) : 99 } };
-          log.push(x); alerts.push(sigText(x, '🆕 <b>TÍN HIỆU MỚI</b>'));
+          continue;
         }
+        // tín hiệu mới: còn mở/chờ, đủ hạng, xuất hiện sau lần quét trước (hoặc trong 2 nến gần nhất)
+        if (!(t.state === 'OPEN' || t.state === 'PENDING')) continue;
+        if (ICT.GRADE_RANK[t.grade] < ICT.GRADE_RANK[CFG.minGrade]) continue;
+        if (!(c[t.i].ct >= since || n - 1 - t.i <= CFG.freshBars)) continue;
+        const x = { id, engine: 'ict', sym, tf, side: t.side, model: t.model, poi: t.poi, grade: t.grade, limit: true, expiry: t.expiry,
+          entry: +t.entry.toFixed(6), sl: +t.sl.toFixed(6), tp: +t.tp.toFixed(6), t: c[t.i].t, note: t.note || '', state: t.state, r: null,
+          src: d.src, off: +off.toFixed(5), aligned, tvCode: SYM[sym].tv, tvPx, tvDiff, bt: btInfo };
+        log.push(x); alerts.push(sigText(x, t.state === 'OPEN' ? '🆕 <b>TÍN HIỆU MỚI (đã khớp entry)</b>' : '🆕 <b>TÍN HIỆU MỚI</b>'));
       }
-      // đồng thuận ≥ 2 chiến lược cùng chiều
-      const cs = a.consensus, ck = `${sym}|${tf}|${cs.side}`;
-      if (cs.n >= 2 && (!state.consSent[ck] || Date.now() - state.consSent[ck] > (CFG.freshBars + 1) * MS[tf])) {
-        state.consSent[ck] = Date.now();
-        alerts.push(`🔥 <b>${cs.n} chiến lược cùng ${cs.side > 0 ? 'BUY' : 'SELL'} ${SYM[sym].name} ${TFN[tf]}</b>\n${(cs.side > 0 ? cs.buy : cs.sell).map(k => esc(BOT.S[k].name)).join(', ')}\nGiá ${fx(c[n - 1].c, SYM[sym].dp)} · ${vn(c[n - 1].t)}`);
-      }
-      runStatus[`${sym}|${tf}`] = { consensus: cs, price: c[n - 1].c, t: c[n - 1].t, src: d.src, off, ranking: Object.keys(a.res).map(k => ({ k, n: a.res[k].n, win: +a.res[k].winRate.toFixed(3), netR: +a.res[k].netR.toFixed(2), raw: a.res[k].raw, rej: a.res[k].rej, noStruct: (() => { const b = BOT.backtest(c, BOT.S[k].run(c, a.P), CFG); return { n: b.n, win: +b.winRate.toFixed(3), netR: +b.netR.toFixed(2) }; })() })) };
+      runStatus[`${sym}|${tf}`] = { price: c[n - 1].c, t: c[n - 1].t, src: d.src, off, aligned, tvDiff, ctx: { bias: a.ctx.bias, htf: a.ctx.htf, trend: a.ctx.trend, zone: a.ctx.zone },
+        setups: a.sigs.length, bt: btInfo, rej: a.rej, live: a.live.map(t => ({ side: t.side, grade: t.grade, state: t.state, entry: t.entry, t: c[t.i].t })) };
     }
   }
 
   // giới hạn kích thước: giữ 600 tín hiệu gần nhất, lệnh mở quá 14 ngày coi như đóng
   for (const x of log) if ((x.state === 'OPEN' || x.state === 'PENDING') && Date.now() - x.t > 14 * 864e5) x.state = 'STALE';
   log = log.slice(-600);
-  for (const k in state.consSent) if (Date.now() - state.consSent[k] > 2 * 864e5) delete state.consSent[k];
+  state.consSent = {};
 
   let tgInfo = { configured: !!TOKEN, connected: chats(state).length > 0 };
   if (TOKEN && !MOCK) {
@@ -257,7 +284,7 @@ async function main() {
 
   state.lastRun = Date.now();
   writeJSON('state.json', { ...state, telegram: tgInfo });
-  writeJSON('signals.json', { updated: Date.now(), cfg: CFG, symbols: SYMBOLS, tfs: TFS, telegram: tgInfo, mt5: { configured: !!FB, live: Object.values(runStatus.sources).includes('mt5') }, status: runStatus, signals: log });
+  writeJSON('signals.json', { updated: Date.now(), cfg: CFG, symbols: SYMBOLS, tfs: TFS, telegram: tgInfo, mt5: { configured: !!FB, live: Object.values(runStatus.sources).includes('mt5') }, status: runStatus, tv: tvInfo, signals: log });
   console.log(`Xong: ${alerts.length} thông báo, ${log.length} tín hiệu trong nhật ký, lỗi: ${runStatus.errors.join(' | ') || 'không'}`);
 }
 

@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Bot tín hiệu</title>
-<meta name="description" content="Bot tín hiệu 7 chiến lược học từ các bot/indicator phổ biến (UT Bot, SuperTrend, Squeeze Momentum, WaveTrend, SMC, EMA 34/89, Bollinger+RSI), tự backtest và báo tín hiệu cho vàng và crypto, dữ liệu công khai.">
+<title>Bot tín hiệu ICT/SMC</title>
+<meta name="description" content="Bot tín hiệu ICT/SMC cho vàng và crypto: cấu trúc BOS/CHoCH, Order Block, FVG, thanh khoản BSL/SSL, premium/discount, hướng lệnh theo EMA 34/89, so sánh giá với TradingView, Telegram 24/7.">
 <meta name="theme-color" content="#0d1117">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -33,31 +33,38 @@ select,input{background:var(--panel2);border:1px solid var(--line);color:var(--i
 .muted{color:var(--muted)}.note{color:var(--muted);font-size:13px}.mono{font-family:'JetBrains Mono',monospace}
 .win{color:var(--buy)}.loss{color:var(--sell)}
 .tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
-#chartWrap{position:relative;height:460px}#chart{position:absolute;inset:0}
-@media(max-width:600px){#chartWrap{height:360px}}
-.legend{display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+#chartWrap{position:relative;height:500px}#chart{position:absolute;inset:0}#ov{position:absolute;inset:0;pointer-events:none;z-index:3}
+@media(max-width:600px){#chartWrap{height:380px}}
+.layers{display:flex;gap:4px 12px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-top:8px}.layers label{display:inline-flex;gap:5px;align-items:center;cursor:pointer}
+.layers i{display:inline-block;width:14px;height:10px;border-radius:2px}
 .tw{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{color:var(--muted);font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
-tr.sel td{background:color-mix(in srgb,var(--violet) 12%,transparent)}tbody tr{cursor:pointer}
+td.wrap{white-space:normal;min-width:260px}
 .sig{border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:10px;background:var(--panel2)}
+.sig:first-child{margin-top:0}
 .sig.buy{border-color:color-mix(in srgb,var(--buy) 50%,transparent)}.sig.sell{border-color:color-mix(in srgb,var(--sell) 50%,transparent)}
 .sig .t{display:flex;justify-content:space-between;gap:8px;align-items:center;font-weight:800}
 .lv{display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;margin-top:8px;font-size:13.5px}.lv b{font-family:'JetBrains Mono',monospace}.lv span:nth-child(3n){color:var(--muted);text-align:right}
 .big{font-size:22px;font-weight:800;letter-spacing:-.01em}
+.ctx{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:13.5px}.ctx span:nth-child(odd){color:var(--muted)}
+.tvbox{display:flex;gap:8px 14px;flex-wrap:wrap;align-items:baseline;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:13.5px}
+.tvbox b{font-family:'JetBrains Mono',monospace}
 .radar td,.radar th{text-align:center;padding:6px 4px}.radar td:first-child,.radar th:first-child{text-align:left}
 .cell{display:inline-block;min-width:44px;padding:3px 6px;border-radius:8px;font-weight:700;font-size:12px;background:var(--panel2);color:var(--muted)}
 .cell.buy{background:color-mix(in srgb,var(--buy) 18%,transparent);color:var(--buy)}.cell.sell{background:color-mix(in srgb,var(--sell) 18%,transparent);color:var(--sell)}
-.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.grid2 label{display:grid;gap:3px;font-size:12px;color:var(--muted)}.grid2 input{width:100%}
-.strat{border-top:1px solid var(--line);padding:9px 0}.strat:first-of-type{border-top:0}.strat b{font-size:14px}.strat p{margin:3px 0 0;font-size:13px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.grid2 label{display:grid;gap:3px;font-size:12px;color:var(--muted)}.grid2 input,.grid2 select{width:100%}
+.grid2 label.full{grid-column:1/-1}
+.stat{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.stat div{background:var(--panel2);border-radius:10px;padding:8px 10px}.stat b{display:block;font:700 18px 'JetBrains Mono',monospace}.stat span{font-size:12px;color:var(--muted)}
+@media(max-width:600px){.stat{grid-template-columns:repeat(2,minmax(0,1fr))}}
 #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);padding:10px 14px;border-radius:12px;box-shadow:0 8px 30px #0008;z-index:50;max-width:92vw;display:none}
 .err{color:var(--sell);font-size:13px}
 .nav{display:flex;gap:4px;flex-wrap:wrap;width:100%;order:9}.nav a{color:var(--muted);text-decoration:none;font-size:13px;font-weight:600;padding:4px 10px;border-radius:8px;border:1px solid var(--line)}.nav a.on{color:var(--ink);background:var(--panel2)}
-.grid2 label.full{grid-column:1/-1}
+ol.rules{margin:0;padding-left:18px;font-size:13px;color:var(--muted)}ol.rules li{margin:4px 0}ol.rules b{color:var(--ink)}
 </style>
 </head>
 <body>
 <header><div class="bar">
-  <div class="brand">Bot tín hiệu <small>MT5 khi máy bật · nguồn công khai khi máy tắt · Telegram 24/7</small></div>
-  <nav class="nav"><a href="./" class="on">Tín hiệu</a><a href="../tin-hieu/">ICT/SMC chi tiết</a><a href="../tin-hieu/bot.html">Bot MT5</a><a href="huong-dan-telegram.html">Kết nối Telegram</a></nav>
+  <div class="brand">Bot tín hiệu ICT/SMC <small>EMA 34/89 chọn hướng · OB/FVG/thanh khoản chọn điểm vào · Telegram 24/7</small></div>
+  <nav class="nav"><a href="./" class="on">Tín hiệu</a><a href="../tin-hieu/">ICT/SMC đa khung</a><a href="../tin-hieu/bot.html">Bot MT5</a><a href="huong-dan-telegram.html">Kết nối Telegram</a></nav>
   <div class="seg" id="symSeg"></div>
   <button class="btn" id="notifBtn">🔕 Bật thông báo</button>
 </div></header>
@@ -66,35 +73,54 @@ tr.sel td{background:color-mix(in srgb,var(--violet) 12%,transparent)}tbody tr{c
   <div class="col">
     <div class="card">
       <div class="price"><b id="px">—</b><span id="chg" class="chip">—</span><span id="src" class="chip">đang tải…</span><span id="upd" class="note"></span></div>
+      <div class="tvbox" id="tv"><span class="note">Đang so sánh với TradingView…</span></div>
     </div>
     <div class="card">
       <div class="tools">
         <div class="seg" id="tfSeg"><button data-v="m5">M5</button><button data-v="m15" class="on">M15</button><button data-v="h1">H1</button><button data-v="h4">H4</button></div>
-        <select id="stratSel" aria-label="Chiến lược hiển thị"></select>
+        <span class="note" id="biasTxt"></span>
       </div>
-      <div id="chartWrap"><div id="chart"></div></div>
-      <div class="legend"><span><i style="background:#06b6d4"></i>EMA 34</span><span><i style="background:#eab308"></i>EMA 89</span><span><i style="background:#94a3b8"></i>EMA 200</span><span>▲ BUY · ▼ SELL (chế độ "tất cả" chỉ vẽ chiến lược đang có lãi)</span><span>■ TP / SL của lệnh đã đóng</span></div>
+      <div id="chartWrap"><div id="chart"></div><canvas id="ov"></canvas></div>
+      <div class="layers" id="layers"></div>
     </div>
     <div class="card">
-      <h3>Xếp hạng chiến lược (backtest trên dữ liệu đang xem)</h3>
-      <div class="tw"><table><thead><tr><th>Chiến lược</th><th>Lệnh</th><th>Thắng</th><th>Tổng R</th><th>PF</th><th>Sụt giảm</th><th>Bị loại</th><th>Tín hiệu gần nhất</th></tr></thead><tbody id="rank"></tbody></table></div>
-      <p class="note" id="rankNote"></p>
+      <h3>Bối cảnh ICT/SMC hiện tại</h3>
+      <div class="ctx" id="ctx"></div>
     </div>
     <div class="card">
-      <h3 id="histTitle">Lịch sử tín hiệu</h3>
-      <div class="tw"><table><thead><tr><th>Thời gian</th><th>Lệnh</th><th>Entry</th><th>SL</th><th>TP</th><th>Kết quả</th><th>Lý do</th></tr></thead><tbody id="hist"></tbody></table></div>
+      <h3>Backtest mô hình trên dữ liệu đang xem</h3>
+      <div class="stat" id="stat"></div>
+      <p class="note" id="statNote"></p>
+    </div>
+    <div class="card">
+      <h3>Lịch sử tín hiệu</h3>
+      <div class="tw"><table><thead><tr><th>Thời gian</th><th>Lệnh</th><th>Hạng</th><th>Entry</th><th>SL</th><th>TP</th><th>Kết quả</th><th>Lý do</th></tr></thead><tbody id="hist"></tbody></table></div>
     </div>
   </div>
 
   <aside class="col">
     <div class="card"><h3>Tín hiệu bây giờ</h3><div id="now"></div></div>
     <div class="card"><h3>Máy chủ 24/7 + Telegram</h3><div id="srv"><p class="note">Đang tải nhật ký…</p></div></div>
-    <div class="card"><h3>Bot MT5</h3><div id="mt5bot"></div></div>
     <div class="card">
-      <h3>Radar tất cả các mã</h3>
+      <h3>Radar các mã</h3>
       <div class="tw"><table class="radar"><thead><tr><th>Mã</th><th>M5</th><th>M15</th><th>H1</th><th>H4</th></tr></thead><tbody id="radar"></tbody></table></div>
       <div class="tools" style="margin:10px 0 0"><button class="btn" id="scanBtn">Quét lại</button><span class="note" id="radarNote">Tự quét mỗi 5 phút</span></div>
-      <p class="note" style="margin:6px 0 0">Ô hiện số chiến lược (có lãi khi backtest) đang cùng báo BUY/SELL trong 3 nến gần nhất. Bấm vào ô để mở mã và khung đó.</p>
+      <p class="note" style="margin:6px 0 0">Mũi tên = hướng EMA 34/89. Có hạng (A+/A/B) = đang có lệnh chờ hoặc đang chạy. Bấm vào ô để mở mã và khung đó.</p>
+    </div>
+    <div class="card"><h3>Bot MT5</h3><div id="mt5bot"></div></div>
+    <div class="card">
+      <h3>Cài đặt</h3>
+      <div class="grid2">
+        <label>Hạng tín hiệu tối thiểu<select id="cGrade"><option value="A+">A+ (chặt nhất)</option><option value="A">A</option><option value="B">B (tất cả)</option></select></label>
+        <label>EMA 34/89 khung lớn<select id="cHtf"><option value="grade">Chỉ để xếp hạng</option><option value="require">Bắt buộc cùng chiều</option></select></label>
+        <label>RR tối thiểu tới TP<input id="cMinRR" type="number" step="0.1" min="1" max="5"></label>
+        <label>RR dự phòng<input id="cRR" type="number" step="0.1" min="1" max="6"></label>
+        <label>Lệnh chờ hết hạn sau (nến)<input id="cExp" type="number" step="1" min="3" max="100"></label>
+        <label>Phí + spread khứ hồi (%)<input id="cCost" type="number" step="0.01" min="0" max="1"></label>
+        <label>Giá hiển thị theo<select id="cAlign"><option value="tv">TradingView</option><option value="mt5">Exness MT5 (chênh đo lần cuối)</option><option value="src">Giá gốc của nguồn</option></select></label>
+        <label>Mã TradingView để so<input id="cTv" placeholder="OANDA:XAUUSD"></label>
+      </div>
+      <button class="btn pri" id="cApply" style="margin-top:10px;width:100%">Áp dụng</button>
     </div>
     <div class="card">
       <h3>Nguồn MT5 (Exness)</h3>
@@ -104,30 +130,27 @@ tr.sel td{background:color-mix(in srgb,var(--violet) 12%,transparent)}tbody tr{c
         <label>Mã BTC trên MT5<input id="mB" value="BTCUSDm"></label>
       </div>
       <button class="btn" id="mSave" style="margin-top:10px;width:100%">Lưu & dùng giá MT5</button>
-      <p class="note" style="margin:8px 0 0">Khi máy tính bật và EA <b>MT5_Bridge_Firebase</b> chạy, web dùng giá Exness. Máy tắt thì tự chuyển sang Binance/OKX/Bybit và dời giá theo chênh lệch đo được lần gần nhất. <a href="../tin-hieu/HUONG-DAN-MT5.html" style="color:var(--blue)">Hướng dẫn MT5</a></p>
+      <p class="note" style="margin:8px 0 0">Khi máy tính bật và EA <b>MT5_Bridge_Firebase</b> chạy, web dùng giá Exness. Máy tắt thì tự chuyển sang OKX/Binance/Bybit. <a href="../tin-hieu/HUONG-DAN-MT5.html" style="color:var(--blue)">Hướng dẫn MT5</a></p>
     </div>
     <div class="card">
-      <h3>Cài đặt</h3>
-      <div class="grid2">
-        <label>RR dự phòng (khi không có thanh khoản)<input id="cRR" type="number" step="0.1" min="0.5" max="6"></label>
-        <label>Giữ lệnh tối đa (nến)<input id="cMax" type="number" step="1" min="5" max="500"></label>
-        <label>Phí + spread khứ hồi (%)<input id="cCost" type="number" step="0.01" min="0" max="1"></label>
-        <label>Tín hiệu "mới" trong (nến)<input id="cFresh" type="number" step="1" min="1" max="20"></label>
-      </div>
-      <button class="btn pri" id="cApply" style="margin-top:10px;width:100%">Áp dụng</button>
-    </div>
-    <div class="card">
-      <h3>Học từ đâu</h3>
-      <div id="strats"></div>
-      <p class="note">Logic lấy từ mã nguồn công khai của các indicator này trên TradingView. Các nhóm "bot tín hiệu" trả phí trên Telegram không công khai cách tính và kết quả, nên không đưa vào.</p>
+      <h3>Luật vào lệnh</h3>
+      <ol class="rules">
+        <li><b>Hướng:</b> EMA34 trên EMA89 và giá trên EMA89 → chỉ BUY. EMA34 dưới EMA89 và giá dưới EMA89 → chỉ SELL. Hai đường quấn nhau → đứng ngoài.</li>
+        <li><b>Cấu trúc:</b> cần BOS/CHoCH (đóng cửa qua đỉnh/đáy swing) cùng chiều EMA, nhịp phá vỡ có displacement hoặc FVG.</li>
+        <li><b>Mô hình "Quét + MSS":</b> giá quét SSL (BUY) / BSL (SELL) rồi phá cấu trúc ngược lại → LIMIT tại 50% FVG hoặc OB, SL ngoài đáy/đỉnh quét.</li>
+        <li><b>Mô hình "BOS + hồi OB":</b> BOS cùng xu hướng → LIMIT tại OB (hoặc FVG) của nhịp phá vỡ, SL ngoài OB.</li>
+        <li><b>Vị trí:</b> entry phải nằm ở discount (BUY) / premium (SELL) của nhịp. Không đuổi giá.</li>
+        <li><b>TP:</b> thanh khoản đối diện gần nhất (BSL/SSL, đỉnh/đáy nhịp) đạt RR tối thiểu. Huỷ lệnh chờ nếu giá chạy tới TP trước khi khớp hoặc quá hạn.</li>
+        <li><b>Hạng:</b> A+ = có quét thanh khoản, FVG trùng OB, EMA khung lớn cùng chiều. A = EMA khung lớn cùng chiều. B = khung lớn ngược chiều.</li>
+      </ol>
     </div>
   </aside>
 </main>
-<p class="note" style="max-width:1320px;margin:0 auto;padding:0 16px 30px">Dữ liệu: Binance Futures (dự phòng OKX, Bybit), chỉ dùng nến đã đóng nên tín hiệu không vẽ lại. Kết quả backtest đã trừ phí và spread theo cài đặt, khớp SL trước nếu SL và TP chạm trong cùng nến. Đây là công cụ nghiên cứu, không phải khuyến nghị đầu tư.</p>
+<p class="note" style="max-width:1320px;margin:0 auto;padding:0 16px 30px">Chỉ dùng nến đã đóng nên tín hiệu không vẽ lại. Backtest đã trừ phí và spread theo cài đặt, khớp SL trước nếu SL và TP chạm trong cùng nến. Đây là công cụ nghiên cứu, không phải khuyến nghị đầu tư.</p>
 <div id="toast"></div>
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
-<script src="strategies.js?v=2"></script>
-<script src="app.js?v=3"></script>
+<script src="ict.js?v=1"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

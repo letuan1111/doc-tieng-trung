@@ -1,7 +1,7 @@
-name: Build lại GitHub Pages
+name: Đồng bộ gh-pages + build Pages
 
-# Commit đẩy từ ứng dụng (không phải từ máy cá nhân) không tự kích hoạt bản build Pages "deploy from branch".
-# Workflow này gọi API yêu cầu build lại sau mỗi lần push lên main.
+# Trang web được phục vụ từ nhánh gh-pages. Mỗi lần push lên main: đưa gh-pages lên bằng main rồi yêu cầu build Pages
+# (commit đẩy từ ứng dụng không tự kích hoạt bản build).
 on:
   push:
     branches: [main]
@@ -9,12 +9,17 @@ on:
 
 permissions:
   pages: write
-  contents: read
+  contents: write
 
 jobs:
-  rebuild:
+  sync:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Đẩy main sang gh-pages
+        run: git push -f origin HEAD:refs/heads/gh-pages
       - name: Yêu cầu build Pages
         run: |
           curl -sS -X POST -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" \

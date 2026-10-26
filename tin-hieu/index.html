@@ -89,7 +89,9 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
     <div class="card">
       <h3>Lịch sử tín hiệu (dữ liệu đã tải, không repaint)</h3>
       <div class="stat" id="stats"></div>
-      <div class="tw"><table><thead><tr><th>Thời gian</th><th>Lệnh</th><th>Điểm</th><th>Entry</th><th>SL</th><th>TP1</th><th>RR</th><th>Kết quả</th></tr></thead><tbody id="hist"></tbody></table></div>
+      <p class="note" style="margin:0 0 4px"><b>Hiệu quả theo hạng</b> — cùng dữ liệu đã tải, không repaint. Hạng nào có R/lệnh dương ổn định thì giữ.</p>
+      <div class="tw" id="tiers" style="margin-bottom:12px"></div>
+      <div class="tw"><table><thead><tr><th>Thời gian</th><th>Lệnh</th><th>Hạng · Điểm</th><th>Entry</th><th>SL</th><th>TP1</th><th>RR</th><th>Kết quả</th></tr></thead><tbody id="hist"></tbody></table></div>
       <p class="note">Kết quả tính trên nến M5 đã đóng: khớp khi giá chạm Entry; SL và TP cùng nến → tính SL (thận trọng). Chưa trừ spread/phí. Đây là mô phỏng để nghiên cứu, không phải khuyến nghị đầu tư.</p>
     </div>
   </section>
@@ -113,6 +115,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
     <div class="card">
       <h3>Cài đặt</h3>
       <div class="grid2">
+        <label class="f full">Chất lượng setup<select id="cTier"><option value="A+">A+ — đủ 8/8 điều kiện (ít lệnh nhất)</option><option value="A">A trở lên — đủ cấu trúc, thiếu tối đa 1 phụ</option><option value="all">Tất cả (nhiễu, chỉ để so sánh)</option></select></label>
         <label class="f">Mức lọc<select id="cMode"><option value="strict">Chặt chẽ (sweep + MSS + FVG)</option><option value="balanced">Cân bằng (FVG tuỳ chọn)</option></select></label>
         <label class="f">Kiểu Entry<select id="cEntry"><option value="A">A — FVG 50%</option><option value="B">B — Order Block</option></select></label>
         <label class="f">RR tối thiểu (TP1)<input id="cRR" type="number" step="0.1" min="0.5" value="1.5"></label>
@@ -127,7 +130,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 <div id="toast"></div>
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
-<script src="engine.js?v=13"></script>
-<script src="app.js?v=13"></script>
+<script src="engine.js?v=14"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

@@ -59,7 +59,7 @@
   // ---------------- trạng thái ----------------
   const S = {
     sym: LS.get('smc.sym', 'XAU'), tf: 'm5', view: 'chart', srcIdx: {}, raw: {}, res: null, offset: LS.get('smc.off', {}),
-    cfg: LS.get('smc.cfg', { mode: 'strict', entry: 'A', minRR: 1.5, minScore: 85 }), seen: LS.get('smc.seen', {}), notif: LS.get('smc.notif', false),
+    cfg: Object.assign({ mode: 'strict', entry: 'A', minRR: 1.5, minScore: 85, tier: 'A' }, LS.get('smc.cfg', {})), seen: LS.get('smc.seen', {}), notif: LS.get('smc.notif', false),
   };
 
   async function loadAll(sym, full) {
@@ -92,6 +92,8 @@
   const ft = (t) => new Date(t).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
   const STAGES = ['WAIT_TREND', 'WAIT_POI', 'WAIT_SWEEP', 'WAIT_MSS', 'WAIT_RETEST', 'SIGNAL'];
   const STAGE_VI = { WAIT_TREND: 'Xu hướng', WAIT_POI: 'POI M15', WAIT_SWEEP: 'Sweep', WAIT_MSS: 'MSS M5', WAIT_RETEST: 'Chờ retest', SIGNAL: 'Đã khớp' };
+  const Q_VI = { htf: 'H4+H1 đồng thuận', extSweep: 'Quét thanh khoản ngoài', trueMss: 'MSS phá đỉnh/đáy gốc', discount: 'Entry vùng discount/premium H1', poi: 'POI M15 có displacement', fvg: 'FVG M5 đủ lớn', rr2: 'RR TP1 ≥ 2', kz: 'Trong killzone London/NY' };
+  const qMiss = (q) => Object.keys(Q_VI).filter(k => !q[k]).map(k => Q_VI[k]).concat(q.conflict ? ['Có setup ngược chiều trong 1h'] : []);
   const STATE_VI = { WAIT_RETEST: 'Chờ khớp', SIGNAL: 'Đang chạy', WIN: 'TP ✓', LOSS: 'SL ✗', INVALID: 'Huỷ' };
 
   // ---------------- chart ----------------
@@ -136,10 +138,10 @@
       let lo = 0, hi = c.length - 1, b = 0; while (lo <= hi) { const m = (lo + hi) >> 1; if (c[m].t <= t) { b = m; lo = m + 1; } else hi = m - 1; } return tsec(c[b].t);
     };
     const mk = [];
-    for (const e of (r.buy.events[S.tf] || []).slice(S.tf === 'm5' ? -14 : -30)) if (e.t >= t0)
+    for (const e of (r.buy.events[S.tf] || []).slice(S.tf === 'm5' ? -8 : -16)) if (e.t >= t0)
       mk.push({ time: snap(e.t), position: e.dir > 0 ? 'belowBar' : 'aboveBar', color: e.type === 'CHoCH' ? '#f59e0b' : (e.dir > 0 ? '#22c55e' : '#f43f5e'), shape: e.dir > 0 ? 'arrowUp' : 'arrowDown', text: e.type });
     for (const s of r.all) if (s.t >= t0) {
-      mk.push({ time: snap(s.t), position: s.side === 'buy' ? 'belowBar' : 'aboveBar', color: '#a855f7', shape: 'circle', text: (s.side === 'buy' ? 'BUY ' : 'SELL ') + s.score });
+      mk.push({ time: snap(s.t), position: s.side === 'buy' ? 'belowBar' : 'aboveBar', color: '#a855f7', shape: 'circle', text: (s.side === 'buy' ? 'BUY ' : 'SELL ') + s.q.tier });
       if (s.exit && s.exit.r != null) mk.push({ time: snap(s.exit.t), position: 'inBar', color: s.exit.r > 0 ? '#22c55e' : '#f43f5e', shape: 'square', text: s.exit.r > 0 ? 'TP' : 'SL' });
     }
     mk.sort((a, b) => a.time - b.time); cs.setMarkers(mk);
@@ -255,7 +257,7 @@
     if (!a) {
       const st = [r.buy.live.stage, r.sell.live.stage];
       return `<div class="sig"><div class="t">Chưa có tín hiệu <span class="chip">ĐỨNG NGOÀI</span></div>
-        <p class="note" style="margin:8px 0 0">BUY đang ở bước <b>${STAGE_VI[st[0]]}</b>, SELL ở bước <b>${STAGE_VI[st[1]]}</b>. Hệ thống chỉ báo khi đủ: xu hướng H1 hợp lệ + POI M15 + sweep + MSS M5${r.cfg.mode === 'strict' ? ' + FVG' : ''} và điểm ≥ ${r.cfg.minScore}.</p></div>`;
+        <p class="note" style="margin:8px 0 0">BUY đang ở bước <b>${STAGE_VI[st[0]]}</b>, SELL ở bước <b>${STAGE_VI[st[1]]}</b>. Chỉ báo setup hạng <b>${r.cfg.tier === 'all' ? 'bất kỳ' : r.cfg.tier + (r.cfg.tier === 'A' ? ' trở lên' : '')}</b>: H4+H1 đồng thuận, quét thanh khoản ngoài, MSS phá đỉnh/đáy gốc, entry ở vùng discount/premium.</p></div>`;
     }
     const b = a.side === 'buy', R = Math.abs(a.entry - a.sl), rr = (p) => p == null ? '' : (Math.abs(p - a.entry) / R).toFixed(2) + 'R';
     const live = r[a.side].live.price, dist = live - a.entry;
@@ -269,7 +271,8 @@
         <span>TP2</span><b class="win">${fx(a.tp2)}</b><span>${rr(a.tp2)}</span>
         <span>TP3</span><b class="win">${fx(a.tp3)}</b><span>${rr(a.tp3)}</span>
       </div>
-      <p class="note" style="margin:10px 0 4px">Điểm hợp lưu <b>${a.score}/100</b> · H4/H1 ${sc.htf} · EMA ${sc.ema} · POI ${sc.poi} · Sweep ${sc.sweep} · MSS ${sc.mss} · FVG ${sc.fvg} · Mục tiêu ${sc.target}</p>
+      <ul class="ck" style="margin-top:8px">${Object.keys(Q_VI).map(k => `<li>${a.q[k] ? '<span class="y">✔</span>' : '<span class="n">○</span>'} ${Q_VI[k]}</li>`).join('')}</ul>
+      <p class="note" style="margin:10px 0 4px">Hạng <b>${a.q.tier}</b> · Điểm hợp lưu <b>${a.score}/100</b> · H4/H1 ${sc.htf} · EMA ${sc.ema} · POI ${sc.poi} · Sweep ${sc.sweep} · MSS ${sc.mss} · FVG ${sc.fvg} · Mục tiêu ${sc.target}</p>
       <p class="note" style="margin:0">Tạo lúc ${ft(a.ct)} · POI ${a.zone.kind} M15 ${fx(a.zone.bot)}–${fx(a.zone.top)} · Huỷ nếu không khớp sau ${Math.round(r.cfg.expiryBars * 5 / 60)}h, giá chạy tới TP1 trước, phá ${b ? 'đáy' : 'đỉnh'} sweep hoặc H1 đổi hướng.</p>
     </div>`;
   }
@@ -292,7 +295,11 @@
       <div><b class="win">${st.wins}</b><small>Chạm TP1</small></div><div><b class="loss">${st.losses}</b><small>Dính SL</small></div>
       <div><b>${(st.winRate * 100).toFixed(0)}%</b><small>Tỷ lệ thắng</small></div><div><b class="${st.netR >= 0 ? 'win' : 'loss'}">${st.netR >= 0 ? '+' : ''}${st.netR.toFixed(2)}R</b><small>Tổng R</small></div>
       <div><b>${isFinite(st.pf) ? st.pf.toFixed(2) : '∞'}</b><small>Profit factor</small></div><div><b>${st.maxDD.toFixed(1)}R</b><small>Sụt giảm tối đa</small></div>`;
-    $('hist').innerHTML = all.length ? all.map(s => `<tr><td>${ft(s.ct)}</td><td><span class="chip ${s.side}">${s.side === 'buy' ? 'BUY' : 'SELL'} ${s.eType}</span></td><td>${s.score}</td>
+    const TS = S.res.tierStats;
+    $('tiers').innerHTML = `<table><thead><tr><th>Hạng</th><th>Setup</th><th>Đã đóng</th><th>Thắng</th><th>R/lệnh</th><th>Tổng R</th><th>PF</th></tr></thead><tbody>` +
+      Object.entries(TS).map(([k, v]) => `<tr${k === 'Tất cả' ? ' class="muted"' : ''}><td><b>${k}</b></td><td>${v.total}</td><td>${v.closed}</td><td>${v.closed ? (v.winRate * 100).toFixed(0) + '%' : '—'}</td>
+        <td class="${v.exp >= 0 ? 'win' : 'loss'}">${v.closed ? (v.exp >= 0 ? '+' : '') + v.exp.toFixed(2) : '—'}</td><td class="${v.netR >= 0 ? 'win' : 'loss'}">${v.netR >= 0 ? '+' : ''}${v.netR.toFixed(1)}</td><td>${v.closed ? (isFinite(v.pf) ? v.pf.toFixed(2) : '∞') : '—'}</td></tr>`).join('') + '</tbody></table>';
+    $('hist').innerHTML = all.length ? all.map(s => `<tr><td>${ft(s.ct)}</td><td><span class="chip ${s.side}">${s.side === 'buy' ? 'BUY' : 'SELL'} ${s.eType}</span></td><td title="${esc(qMiss(s.q).join(' · ') || 'Đủ mọi điều kiện')}"><b>${s.q.tier}</b> · ${s.score}</td>
       <td class="mono">${fx(s.entry)}</td><td class="mono">${fx(s.sl)}</td><td class="mono">${fx(s.tp1)}</td><td>${s.rr1.toFixed(2)}</td>
       <td class="${s.state === 'WIN' ? 'win' : s.state === 'LOSS' ? 'loss' : 'muted'}">${STATE_VI[s.state] || s.state}${s.why ? ' · ' + s.why : ''}${s.exit && s.exit.r != null ? ` (${s.exit.r > 0 ? '+' : ''}${s.exit.r.toFixed(2)}R)` : ''}</td></tr>`).join('')
       : '<tr><td colspan="8" class="muted">Chưa có setup nào đạt đủ điều kiện trong dữ liệu đã tải.</td></tr>';
@@ -422,14 +429,14 @@
   seg('tfSeg', 'tf', (tf) => { S.tf = tf; if (S.view === 'tv') renderTV(); else renderChart(true); });
   seg('viewSeg', 'v', (v) => { S.view = v; $('chartWrap').classList.toggle('hide', v !== 'chart'); $('tv').classList.toggle('hide', v !== 'tv'); if (v === 'tv') renderTV(); else setTimeout(() => renderChart(false), 50); });
   [...$('symSeg').children].forEach(b => b.classList.toggle('on', b.dataset.s === S.sym));
-  $('cMode').value = S.cfg.mode; $('cEntry').value = S.cfg.entry; $('cRR').value = S.cfg.minRR; $('cScore').value = S.cfg.minScore;
+  $('cMode').value = S.cfg.mode; $('cTier').value = S.cfg.tier; $('cEntry').value = S.cfg.entry; $('cRR').value = S.cfg.minRR; $('cScore').value = S.cfg.minScore;
   $('mDb').value = MT5.db; $('mX').value = MT5.XAU; $('mB').value = MT5.BTC;
   $('mSave').onclick = () => {
     MT5.db = $('mDb').value.trim(); MT5.XAU = $('mX').value.trim() || 'XAUUSDm'; MT5.BTC = $('mB').value.trim() || 'BTCUSDm';
     LS.set('smc.mt5', MT5); S.srcIdx = {}; S.raw = {}; S.botLogin = null; loadBot(); toast(MT5.db ? 'Đã lưu – đang lấy dữ liệu từ MT5…' : 'Đã tắt nguồn MT5'); refresh(true);
   };
   $('cApply').onclick = () => {
-    S.cfg = { mode: $('cMode').value, entry: $('cEntry').value, minRR: +$('cRR').value || 1.5, minScore: +$('cScore').value || 85 }; LS.set('smc.cfg', S.cfg);
+    S.cfg = { tier: $('cTier').value, mode: $('cMode').value, entry: $('cEntry').value, minRR: +$('cRR').value || 1.5, minScore: +$('cScore').value || 85 }; LS.set('smc.cfg', S.cfg);
     const ex = parseFloat($('cEx').value), d = S.raw[S.sym];
     if (isFinite(ex) && d) { S.offset[S.sym] = +(ex - d.m5[d.m5.length - 1].c).toFixed(3); LS.set('smc.off', S.offset); }
     else if ($('cEx').value === '' ) { /* giữ nguyên */ }

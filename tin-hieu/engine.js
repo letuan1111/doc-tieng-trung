@@ -24,7 +24,11 @@
     entry: 'A',                       // 'A' FVG 50% | 'B' OB
     expiryBars: 36,                   // chờ retest tối đa 36 nến M5
     bufATR: 0.15, minBuf: 0.8,        // buffer SL dưới đáy sweep
+    extLookback: 48,                  // đáy bị quét phải là đáy thấp nhất 48 nến M5 (4h) → thanh khoản ngoài
+    tier: 'A',                        // 'A+' | 'A' | 'all' — chỉ giữ setup đạt hạng này trở lên
+    conflictBars: 12,                 // có setup ngược chiều trong 12 nến M5 (1h) → thị trường giằng co, hạ xuống B
   };
+  const TIER_OK = { 'A+': ['A+'], 'A': ['A+', 'A'], 'all': ['A+', 'A', 'B'] };
 
   // ---------------- tiện ích ----------------
   function ema(a, n) { const k = 2 / (n + 1), o = new Array(a.length); let e = a[0]; for (let i = 0; i < a.length; i++) { e = i ? a[i] * k + e * (1 - k) : a[i]; o[i] = e; } return o; }
@@ -220,9 +224,27 @@
       const pass = core.h1 && core.poi && sweep && (fvg || cfg.mode === 'balanced') && entry != null && tp1 && rr1 >= cfg.minRR && score >= (cfg.mode === 'strict' ? cfg.minScore : Math.min(cfg.minScore, 75));
       if (!pass) { D.rej.push({ bar: j, t: x.t, reasons: reasons.length ? reasons : ['Điểm ' + score + ' < ngưỡng'], score }); continue; }
       lastSetupBar = j;
+      // ---- chấm chất lượng cấu trúc (A+ / A / B) ----
+      const k1 = idxAt(h1, T), H1h = h1.sh.slice(0, h1.st[k1].nH).slice(-2), H1l = h1.sl.slice(0, h1.st[k1].nL).slice(-2);
+      const rgHi = H1h.length ? Math.max(...H1h.map(p => p.p)) : null, rgLo = H1l.length ? Math.min(...H1l.map(p => p.p)) : null;
+      const lowBefore = Math.min(...c.slice(Math.max(0, sweep.s - cfg.extLookback), sweep.s).map(v => v.l));
+      const hr = new Date(Tc).getUTCHours();
+      const q = {
+        htf: t4.dir === 1 && t4.emaUp && t1.hhhl,                                   // H4 + H1 cùng hướng, H1 HH/HL
+        extSweep: lowBefore >= sweep.level - 0.05 * a5,                             // quét đáy ngoài (không có đáy thấp hơn 4h trước)
+        trueMss: SH.i < sweep.s,                                                    // phá đỉnh tạo ra con sóng xuống quét thanh khoản
+        discount: rgHi != null && rgLo != null && rgHi > rgLo && entry <= (rgHi + rgLo) / 2, // entry ở vùng discount H1
+        poi: touch.zone.kind === 'FVG' || !!touch.zone.disp,                        // POI M15 có displacement
+        fvg: !!fvg && fvg.top - fvg.bot >= 0.25 * a5,                               // FVG M5 đủ lớn
+        rr2: rr1 >= 2,
+        kz: (hr >= 6 && hr < 10) || (hr >= 12 && hr < 16),                          // London / New York killzone (UTC)
+      };
+      const qCore = ['htf', 'extSweep', 'trueMss', 'discount'].every(k => q[k]);
+      const miss = ['poi', 'fvg', 'rr2', 'kz'].filter(k => !q[k]).length;
+      q.tier = qCore && !miss ? 'A+' : qCore && miss <= 1 ? 'A' : 'B';
       out.push({
         id: 'S' + c[conf].t, bar: conf, mssBar: j, t: c[conf].t, ct: Tc, entry, sl, tp1, tp2, tp3, rr1,
-        eType, score, sc, sweep, fvg, ob, zone: touch.zone, swingH: SH, trend: { h1: t1, h4: t4 }, reasons,
+        eType, score, sc, sweep, fvg, ob, zone: touch.zone, swingH: SH, trend: { h1: t1, h4: t4 }, reasons, q,
       });
     }
     return { setups: out, poi };
@@ -375,7 +397,8 @@
   // ---------------- API ----------------
   function analyze(raw, userCfg) {
     const cfg = Object.assign({}, DEF, userCfg || {});
-    const res = {};
+    const res = {}, P = {};
+    // lượt 1: quét + vòng đời cho từng phía
     for (const side of ['buy', 'sell']) {
       const src = side === 'buy' ? raw : { m5: mirror(raw.m5), m15: mirror(raw.m15), h1: mirror(raw.h1), h4: mirror(raw.h4) };
       const D = {
@@ -385,27 +408,47 @@
       D.rej = [];
       const { setups, poi } = scanBuy(D, cfg);
       setups.forEach(s => lifecycle(s, D, cfg));
-      const live = liveStage(D, poi, setups, cfg);
+      P[side] = { D, setups, poi };
+    }
+    // lượt 2: lọc nhiễu — giằng co hai chiều, chồng lệnh, hạng chất lượng
+    for (const side of ['buy', 'sell']) {
+      const other = P[side === 'buy' ? 'sell' : 'buy'].setups;
+      for (const s of P[side].setups) {
+        if (other.some(o => o.mssBar <= s.mssBar && s.mssBar - o.mssBar <= cfg.conflictBars)) { s.q.conflict = true; s.q.tier = 'B'; }
+      }
+      let open = null;
+      for (const s of P[side].setups) {
+        s.q.overlap = !!(open && (!open.exit || open.exit.t > s.t)); // setup trước cùng chiều còn đang chờ/chạy
+        s.keep = TIER_OK[cfg.tier || 'A'].includes(s.q.tier) && !s.q.overlap;
+        if (s.keep) open = s;
+      }
+    }
+    const raws = [];
+    for (const side of ['buy', 'sell']) {
+      const { D, setups, poi } = P[side], kept = setups.filter(s => s.keep);
+      const live = liveStage(D, poi, kept, cfg);
       const sg = side === 'buy' ? 1 : -1, f = v => v == null ? v : v * sg;
       const flipZone = q => q && ({ ...q, bot: sg > 0 ? q.bot : -q.top, top: sg > 0 ? q.top : -q.bot });
-      res[side] = {
-        setups: setups.map(s => ({ ...s, side, entry: f(s.entry), sl: f(s.sl), tp1: f(s.tp1), tp2: f(s.tp2), tp3: f(s.tp3),
+      const outS = setups.map(s => ({ ...s, side, entry: f(s.entry), sl: f(s.sl), tp1: f(s.tp1), tp2: f(s.tp2), tp3: f(s.tp3),
           sweep: s.sweep && { ...s.sweep, low: f(s.sweep.low), level: f(s.sweep.level) }, fvg: flipZone(s.fvg), ob: flipZone(s.ob), zone: flipZone(s.zone),
-          exit: s.exit && { ...s.exit, p: f(s.exit.p) } })),
+          exit: s.exit && { ...s.exit, p: f(s.exit.p) } }));
+      raws.push(...outS);
+      res[side] = {
+        setups: outS.filter(s => s.keep),
         poi: poi.map(flipZone),
         live: { ...live, price: f(live.price), zones: live.zones.map(flipZone), touched: live.touched && { ...live.touched, zone: flipZone(live.touched.zone) },
           sweep: live.sweep && { ...live.sweep, low: f(live.sweep.low), level: f(live.sweep.level) }, active: live.active && res_active(live.active, sg) },
         rejected: D.rej,
         events: Object.fromEntries(['m5', 'm15', 'h1', 'h4'].map(k => [k, D[k].events.map(e => ({ ...e, t: D[k].c[e.k].t, dir: e.dir * sg, p: f(e.p) }))])),
       };
-      // vùng cản đa khung: OB/FVG còn hiệu lực + thanh khoản chưa bị lấy
+      // vùng cản đa khung: OB/FVG còn hiệu lực + thanh khoản chưa bị lấy (chỉ 2 mốc gần nhất mỗi khung → bớt rối)
       const zs = {};
       for (const k of ['m15', 'h1', 'h4']) {
         const tf = D[k], last = tf.n - 1, price = tf.c[last].c, a = tf.atr[last];
-        const z = buildPOI(tf).filter(q => q.dead === Infinity && last - q.ci <= 400 && q.bot < price + 0.5 * a)
-          .sort((x, y) => (price - x.top) - (price - y.top)).slice(0, 3);
+        const z = buildPOI(tf).filter(q => q.dead === Infinity && last - q.ci <= 400 && q.bot < price + 0.5 * a && (q.kind === 'FVG' || q.disp))
+          .sort((x, y) => (price - x.top) - (price - y.top)).slice(0, 2);
         const liq = [];
-        for (let q = tf.sh.length - 1; q >= 0 && liq.length < 3; q--) {
+        for (let q = tf.sh.length - 1; q >= 0 && liq.length < 2; q--) {
           const p = tf.sh[q]; if (p.p <= price) continue;
           let taken = false; for (let u = p.i + 1; u <= last; u++) if (tf.c[u].h > p.p) { taken = true; break; }
           if (!taken && !liq.some(l => Math.abs(l.p - p.p) < 0.15 * a)) liq.push({ p: p.p, t: tf.c[p.i].t });
@@ -418,13 +461,21 @@
     }
     function res_active(a, sg) { const f = v => v == null ? v : v * sg; return { ...a, entry: f(a.entry), sl: f(a.sl), tp1: f(a.tp1), tp2: f(a.tp2), tp3: f(a.tp3) }; }
     // thống kê
-    const all = [...res.buy.setups, ...res.sell.setups].sort((a, b) => a.t - b.t);
-    const closed = all.filter(s => s.state === 'WIN' || s.state === 'LOSS');
-    const wins = closed.filter(s => s.state === 'WIN'), gw = wins.reduce((a, s) => a + s.exit.r, 0), gl = closed.length - wins.length;
-    let eq = 0, peak = 0, dd = 0; for (const s of closed) { eq += s.exit.r; peak = Math.max(peak, eq); dd = Math.max(dd, peak - eq); }
-    res.stats = { total: all.length, filled: all.filter(s => s.fill).length, closed: closed.length, wins: wins.length, losses: gl,
-      winRate: closed.length ? wins.length / closed.length : 0, netR: gw - gl, pf: gl ? gw / gl : (gw ? Infinity : 0), maxDD: dd,
-      invalid: all.filter(s => s.state === 'INVALID').length };
+    const stat = (list) => {
+      const closed = list.filter(s => s.state === 'WIN' || s.state === 'LOSS');
+      const wins = closed.filter(s => s.state === 'WIN'), gw = wins.reduce((a, s) => a + s.exit.r, 0), gl = closed.length - wins.length;
+      let eq = 0, peak = 0, dd = 0; for (const s of closed) { eq += s.exit.r; peak = Math.max(peak, eq); dd = Math.max(dd, peak - eq); }
+      return { total: list.length, filled: list.filter(s => s.fill).length, closed: closed.length, wins: wins.length, losses: gl,
+        winRate: closed.length ? wins.length / closed.length : 0, netR: gw - gl, pf: gl ? gw / gl : (gw ? Infinity : 0), maxDD: dd,
+        invalid: list.filter(s => s.state === 'INVALID').length, exp: closed.length ? (gw - gl) / closed.length : 0 };
+    };
+    raws.sort((a, b) => a.t - b.t);
+    const all = raws.filter(s => s.keep);
+    res.stats = stat(all);
+    // so sánh hiệu quả theo hạng (mỗi hạng tính riêng, bỏ setup chồng lệnh)
+    const solo = raws.filter(s => !s.q.overlap);
+    res.tierStats = { 'A+': stat(solo.filter(s => s.q.tier === 'A+')), 'A': stat(solo.filter(s => s.q.tier === 'A')), 'B': stat(solo.filter(s => s.q.tier === 'B')), 'Tất cả': stat(solo) };
+    res.allRaw = raws;
     res.all = all; res.cfg = cfg;
     res.proj = project(res, cfg);
     return res;

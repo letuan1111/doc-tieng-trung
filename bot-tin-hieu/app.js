@@ -20,12 +20,12 @@
   // ---------------- dữ liệu ----------------
   async function getJSON(u, opt) { const r = await fetch(u, Object.assign({ cache: 'no-store' }, opt)); if (!r.ok) throw new Error(r.status + ''); return r.json(); }
   const SRC = [
-    { n: 'OKX', f: async (s, tf) => {
+    { n: 'OKX', f: async (s, tf, bars = BARS) => {
       let out = (await getJSON(`https://www.okx.com/api/v5/market/candles?instId=${s.okx}&bar=${OKX_IV[tf]}&limit=300`)).data || [];
-      for (let p = 0; p < 12 && out.length && out.length < BARS; p++) { const a = (await getJSON(`https://www.okx.com/api/v5/market/history-candles?instId=${s.okx}&bar=${OKX_IV[tf]}&limit=100&after=${out[out.length - 1][0]}`)).data || []; if (!a.length) break; out = out.concat(a); }
+      for (let p = 0; p < 12 && out.length && out.length < bars; p++) { const a = (await getJSON(`https://www.okx.com/api/v5/market/history-candles?instId=${s.okx}&bar=${OKX_IV[tf]}&limit=100&after=${out[out.length - 1][0]}`)).data || []; if (!a.length) break; out = out.concat(a); }
       return out.reverse().map(k => ({ t: +k[0], ct: +k[0] + MS[tf], o: +k[1], h: +k[2], l: +k[3], c: +k[4] }));
     } },
-    { n: 'Binance Futures', f: async (s, tf) => (await getJSON(`https://fapi.binance.com/fapi/v1/klines?symbol=${s.bn}&interval=${IV[tf]}&limit=${BARS}`)).map(k => ({ t: k[0], ct: k[6] + 1, o: +k[1], h: +k[2], l: +k[3], c: +k[4] })) },
+    { n: 'Binance Futures', f: async (s, tf, bars = BARS) => (await getJSON(`https://fapi.binance.com/fapi/v1/klines?symbol=${s.bn}&interval=${IV[tf]}&limit=${Math.min(1500, bars)}`)).map(k => ({ t: k[0], ct: k[6] + 1, o: +k[1], h: +k[2], l: +k[3], c: +k[4] })) },
     { n: 'Bybit', f: async (s, tf) => { const j = await getJSON(`https://api.bybit.com/v5/market/kline?category=linear&symbol=${s.by}&interval=${BY_IV[tf]}&limit=1000`); return (j.result.list || []).reverse().map(k => ({ t: +k[0], ct: +k[0] + MS[tf], o: +k[1], h: +k[2], l: +k[3], c: +k[4] })); } },
   ];
   const srcPref = {};
@@ -48,7 +48,7 @@
       LS.set('bot.off', OFF);
     } catch (_) {}
   }
-  async function loadRaw(sym, tf) {
+  async function loadRaw(sym, tf, bars) {
     if (mt5Name(sym)) {
       try { const c = await mt5Load(sym, tf); if (c.length >= 300) { calibrate(sym); return { c, src: 'MT5 Exness', code: mt5Name(sym), mt5: true }; } throw new Error('MT5 mới có ' + c.length + ' nến'); }
       catch (e) { S.mt5err = e.message; }
@@ -56,7 +56,7 @@
     const s = SYMS[sym], first = srcPref[sym] || 0, order = [first, 0, 1, 2].filter((v, i, a) => a.indexOf(v) === i);
     let err;
     for (const k of order) {
-      try { const d = await SRC[k].f(s, tf); if (d.length < 300) throw new Error('ít dữ liệu'); srcPref[sym] = k; return { c: d, src: SRC[k].n, code: k === 0 ? s.okx : s.bn, mt5: false }; }
+      try { const d = await SRC[k].f(s, tf, bars); if (d.length < 300) throw new Error('ít dữ liệu'); srcPref[sym] = k; return { c: d, src: SRC[k].n, code: k === 0 ? s.okx : s.bn, mt5: false }; }
       catch (e) { err = e; }
     }
     throw err || new Error('không tải được');
@@ -80,8 +80,8 @@
     }
   }
 
-  async function load(sym, tf) {
-    const d = await loadRaw(sym, tf), live = d.c[d.c.length - 1];
+  async function load(sym, tf, bars) {
+    const d = await loadRaw(sym, tf, bars), live = d.c[d.c.length - 1];
     const tv = await tvPrice(sym);
     // chênh lệch: TradingView − nguồn (cùng thời điểm)
     let diff = null;
@@ -197,29 +197,29 @@
       box(a, null, eq, bot, 'rgba(34,197,94,.07)', null, 'DISCOUNT', 'rgba(34,197,94,.9)');
       hline(a, null, eq, dk ? '#94a3b8' : '#64748b', [4, 4], 'EQ 50%', 'end');
     }
-    // 2. FVG chưa lấp (và lấp gần đây)
-    if (S.layers.fvg) for (const f of r.fvgs) {
-      if (f.k < n - 300) continue; if (f.end != null && (f.end < i0 || f.end - f.k < 2)) continue;
-      const bull = f.side > 0; box(f.i, f.end, f.top, f.bot, bull ? 'rgba(59,130,246,.16)' : 'rgba(245,158,11,.16)', null, f.end == null ? 'FVG' : '', bull ? '#60a5fa' : '#f59e0b');
+    const A = r.P.atr[n - 1];
+    // 2. FVG chưa lấp: 3 vùng gần nhất mỗi chiều, bỏ khoảng trống quá nhỏ
+    if (S.layers.fvg) for (const side of [1, -1]) for (const f of r.fvgs.filter(f => f.side === side && f.end == null && f.k >= n - 400 && f.top - f.bot >= 0.25 * A).slice(-3)) {
+      const bull = side > 0; box(f.i, null, f.top, f.bot, bull ? 'rgba(59,130,246,.16)' : 'rgba(245,158,11,.16)', null, 'FVG', bull ? '#60a5fa' : '#f59e0b');
     }
-    // 3. Order Block còn hiệu lực
-    if (S.layers.ob) for (const o of r.obs) {
-      if (o.from < n - 400) continue; if (o.end != null && o.end < i0) continue;
-      const bull = o.side > 0; box(o.i, o.end, o.top, o.bot, bull ? 'rgba(34,197,94,.20)' : 'rgba(244,63,94,.20)', bull ? 'rgba(34,197,94,.7)' : 'rgba(244,63,94,.7)', (bull ? '+OB' : '−OB') + (o.touched != null ? ' ✓' : ''), bull ? '#22c55e' : '#f43f5e');
+    // 3. Order Block còn hiệu lực (chưa bị phá): 3 vùng gần nhất mỗi chiều
+    if (S.layers.ob) for (const side of [1, -1]) for (const o of r.obs.filter(o => o.side === side && o.end == null && o.from >= n - 500).slice(-3)) {
+      const bull = side > 0; box(o.i, null, o.top, o.bot, bull ? 'rgba(34,197,94,.20)' : 'rgba(244,63,94,.20)', bull ? 'rgba(34,197,94,.7)' : 'rgba(244,63,94,.7)', (bull ? '+OB' : '−OB') + (o.touched != null ? ' ✓' : ''), bull ? '#22c55e' : '#f43f5e');
     }
-    // 4. thanh khoản BSL / SSL
+    // 4. thanh khoản BSL / SSL gần giá + 4 lần quét gần nhất
     if (S.layers.liq) {
       const px = d.c[n - 1].c, open = r.liq.filter(q => q.end == null && q.conf < n);
-      const near = [...open.filter(q => q.side > 0 && q.p >= px).sort((a, b) => a.p - b.p).slice(0, 3), ...open.filter(q => q.side < 0 && q.p <= px).sort((a, b) => b.p - a.p).slice(0, 3)];
+      const near = [...open.filter(q => q.side > 0 && q.p >= px).sort((a, b) => a.p - b.p).slice(0, 2), ...open.filter(q => q.side < 0 && q.p <= px).sort((a, b) => b.p - a.p).slice(0, 2)];
       for (const q of near) hline(q.i, null, q.p, q.side > 0 ? '#f59e0b' : '#38bdf8', [2, 3], (q.eq ? (q.side > 0 ? 'EQH ' : 'EQL ') : '') + (q.side > 0 ? 'BSL ' : 'SSL ') + fx(q.p), 'end');
-      for (const s of r.sweeps) {
+      for (const s of r.sweeps.slice(-4)) {
         if (s.i < i0) continue; const x = X(s.i), y = Y(s.p); if (x == null || y == null) continue;
-        g.strokeStyle = s.side > 0 ? '#f59e0b' : '#38bdf8'; g.lineWidth = 1; g.setLineDash([2, 3]); g.beginPath(); g.moveTo(x - 18, y); g.lineTo(x + 6, y); g.stroke(); g.setLineDash([]);
-        g.fillStyle = s.side > 0 ? '#f59e0b' : '#38bdf8'; g.textAlign = 'center'; g.fillText('✕ quét ' + (s.side > 0 ? 'BSL' : 'SSL'), x, y + (s.side > 0 ? -9 : 9));
+        const col = s.side > 0 ? '#f59e0b' : '#38bdf8';
+        g.strokeStyle = col; g.lineWidth = 1; g.setLineDash([2, 3]); g.beginPath(); g.moveTo(x - 18, y); g.lineTo(x + 6, y); g.stroke(); g.setLineDash([]);
+        g.fillStyle = col; g.textAlign = 'center'; g.fillText('✕ quét ' + (s.side > 0 ? 'BSL' : 'SSL'), x, y + (s.side > 0 ? -9 : 9));
       }
     }
-    // 5. cấu trúc BOS / CHoCH
-    if (S.layers.struct) for (const e of r.events) {
+    // 5. cấu trúc BOS / CHoCH: 6 lần phá vỡ gần nhất
+    if (S.layers.struct) for (const e of r.events.slice(-6)) {
       if (e.i < i0) continue;
       const col = e.d > 0 ? '#22c55e' : '#f43f5e';
       hline(e.from, e.i, e.p, e.type === 'CHoCH' ? (e.d > 0 ? '#4ade80' : '#fb7185') : col, e.type === 'CHoCH' ? [5, 3] : [], e.type, e.d > 0 ? 'above' : 'below');
@@ -386,10 +386,10 @@
     const jobs = []; for (const sym of Object.keys(SYMS)) for (const tf of TFS) jobs.push([sym, tf]);
     let idx = 0;
     const worker = async () => { while (idx < jobs.length) { const [sym, tf] = jobs[idx++];
-      try { const d = await load(sym, tf), c = closed(d.c), a = ICT.analyze(c, engCfg()); S.radar[sym + tf] = radarCell(a); checkAlerts(sym, tf, a, c, firstScan); }
+      try { const d = await load(sym, tf, 800), c = closed(d.c), a = ICT.analyze(c, engCfg()); await new Promise(r => setTimeout(r, 400)); S.radar[sym + tf] = radarCell(a); checkAlerts(sym, tf, a, c, firstScan); }
       catch (_) { S.radar[sym + tf] = { err: true }; }
       radarTable(); } };
-    await Promise.all([worker(), worker(), worker()]);
+    await Promise.all([worker(), worker()]);
     firstScan = false; scanning = false; $('radarNote').textContent = 'Quét lúc ' + new Date().toLocaleTimeString('vi-VN') + ' · tự quét mỗi 5 phút';
   }
 

@@ -6,11 +6,11 @@
   const TFMS = { m5: 3e5, m15: 9e5, h1: 36e5, h4: 144e5 };
   const NEED = { m5: 3000, m15: 1500, h1: 1000, h4: 600 };
   const SYMS = {
-    XAU: { name: 'XAUUSD', dp: 2, minBuf: 0.8, tv: 'OANDA:XAUUSD', src: [
+    XAU: { name: 'XAUUSD', dp: 2, minBuf: 0.8, spread: 0.3, tv: 'OANDA:XAUUSD', src: [
       { n: 'Binance Futures XAUUSDT', f: (iv, tot) => binance('XAUUSDT', iv, tot, true) },
       { n: 'OKX XAU-USDT-SWAP', f: (iv, tot) => okx('XAU-USDT-SWAP', iv, Math.min(tot, 1400)) },
       { n: 'Bybit XAUUSDT', f: (iv, tot) => bybit('XAUUSDT', iv, Math.min(tot, 1000)) }] },
-    BTC: { name: 'BTCUSD', dp: 2, minBuf: 40, tv: 'BINANCE:BTCUSDT', src: [
+    BTC: { name: 'BTCUSD', dp: 2, minBuf: 40, spread: 20, tv: 'BINANCE:BTCUSDT', src: [
       { n: 'Binance BTCUSDT', f: (iv, tot) => binance('BTCUSDT', iv, tot, false) },
       { n: 'OKX BTC-USDT', f: (iv, tot) => okx('BTC-USDT', iv, Math.min(tot, 1400)) },
       { n: 'Bybit BTCUSDT', f: (iv, tot) => bybit('BTCUSDT', iv, Math.min(tot, 1000), 'spot') }] },
@@ -92,9 +92,9 @@
   const ft = (t) => new Date(t).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
   const STAGES = ['WAIT_TREND', 'WAIT_POI', 'WAIT_SWEEP', 'WAIT_MSS', 'WAIT_RETEST', 'SIGNAL'];
   const STAGE_VI = { WAIT_TREND: 'Xu hướng', WAIT_POI: 'POI M15', WAIT_SWEEP: 'Sweep', WAIT_MSS: 'MSS M5', WAIT_RETEST: 'Chờ retest', SIGNAL: 'Đã khớp' };
-  const Q_VI = { htf: 'H4+H1 đồng thuận', extSweep: 'Quét thanh khoản ngoài', trueMss: 'MSS phá đỉnh/đáy gốc', discount: 'Entry vùng discount/premium H1', poi: 'POI M15 có displacement', fvg: 'FVG M5 đủ lớn', rr2: 'RR TP1 ≥ 2', kz: 'Trong killzone London/NY' };
+  const Q_VI = { htf: 'H4+H1 đồng thuận', ema15: 'EMA34/89 M15 cùng hướng', extSweep: 'Quét thanh khoản ngoài', trueMss: 'MSS phá đỉnh/đáy gốc', discount: 'Entry vùng discount/premium H1', ote: 'Entry ở discount/premium của sóng MSS', poi: 'POI M15 có displacement', fvg: 'FVG M5 đủ lớn', rr2: 'RR TP1 ≥ 2', kz: 'Trong killzone London/NY' };
   const qMiss = (q) => Object.keys(Q_VI).filter(k => !q[k]).map(k => Q_VI[k]).concat(q.conflict ? ['Có setup ngược chiều trong 1h'] : []);
-  const STATE_VI = { WAIT_RETEST: 'Chờ khớp', SIGNAL: 'Đang chạy', WIN: 'TP ✓', LOSS: 'SL ✗', INVALID: 'Huỷ' };
+  const STATE_VI = { WAIT_RETEST: 'Chờ khớp', SIGNAL: 'Đang chạy', WIN: 'TP ✓', BE: 'Chốt ½ + hoà vốn', LOSS: 'SL ✗', INVALID: 'Huỷ' };
 
   // ---------------- chart ----------------
   let chart, cs, e24, e34, e89, plines = [];
@@ -142,7 +142,7 @@
       mk.push({ time: snap(e.t), position: e.dir > 0 ? 'belowBar' : 'aboveBar', color: e.type === 'CHoCH' ? '#f59e0b' : (e.dir > 0 ? '#22c55e' : '#f43f5e'), shape: e.dir > 0 ? 'arrowUp' : 'arrowDown', text: e.type });
     for (const s of r.all) if (s.t >= t0) {
       mk.push({ time: snap(s.t), position: s.side === 'buy' ? 'belowBar' : 'aboveBar', color: '#a855f7', shape: 'circle', text: (s.side === 'buy' ? 'BUY ' : 'SELL ') + s.q.tier });
-      if (s.exit && s.exit.r != null) mk.push({ time: snap(s.exit.t), position: 'inBar', color: s.exit.r > 0 ? '#22c55e' : '#f43f5e', shape: 'square', text: s.exit.r > 0 ? 'TP' : 'SL' });
+      if (s.exit && s.exit.r != null) mk.push({ time: snap(s.exit.t), position: 'inBar', color: s.exit.r > 0 ? '#22c55e' : '#f43f5e', shape: 'square', text: s.state === 'BE' ? 'BE' : s.exit.r > 0 ? 'TP' : 'SL' });
     }
     mk.sort((a, b) => a.time - b.time); cs.setMarkers(mk);
     plines.forEach(p => cs.removePriceLine(p)); plines = [];
@@ -301,7 +301,7 @@
         <td class="${v.exp >= 0 ? 'win' : 'loss'}">${v.closed ? (v.exp >= 0 ? '+' : '') + v.exp.toFixed(2) : '—'}</td><td class="${v.netR >= 0 ? 'win' : 'loss'}">${v.netR >= 0 ? '+' : ''}${v.netR.toFixed(1)}</td><td>${v.closed ? (isFinite(v.pf) ? v.pf.toFixed(2) : '∞') : '—'}</td></tr>`).join('') + '</tbody></table>';
     $('hist').innerHTML = all.length ? all.map(s => `<tr><td>${ft(s.ct)}</td><td><span class="chip ${s.side}">${s.side === 'buy' ? 'BUY' : 'SELL'} ${s.eType}</span></td><td title="${esc(qMiss(s.q).join(' · ') || 'Đủ mọi điều kiện')}"><b>${s.q.tier}</b> · ${s.score}</td>
       <td class="mono">${fx(s.entry)}</td><td class="mono">${fx(s.sl)}</td><td class="mono">${fx(s.tp1)}</td><td>${s.rr1.toFixed(2)}</td>
-      <td class="${s.state === 'WIN' ? 'win' : s.state === 'LOSS' ? 'loss' : 'muted'}">${STATE_VI[s.state] || s.state}${s.why ? ' · ' + s.why : ''}${s.exit && s.exit.r != null ? ` (${s.exit.r > 0 ? '+' : ''}${s.exit.r.toFixed(2)}R)` : ''}</td></tr>`).join('')
+      <td class="${s.state === 'WIN' || s.state === 'BE' ? 'win' : s.state === 'LOSS' ? 'loss' : 'muted'}">${STATE_VI[s.state] || s.state}${s.why ? ' · ' + s.why : ''}${s.exit && s.exit.r != null ? ` (${s.exit.r > 0 ? '+' : ''}${s.exit.r.toFixed(2)}R)` : ''}</td></tr>`).join('')
       : '<tr><td colspan="8" class="muted">Chưa có setup nào đạt đủ điều kiện trong dữ liệu đã tải.</td></tr>';
   }
 
@@ -378,7 +378,8 @@
       const nm = `${SYMS[S.sym].name} ${s.side === 'buy' ? 'BUY' : 'SELL'}`;
       if (s.state === 'WAIT_RETEST') alertUser(`🆕 Setup ${nm}`, `Entry ${fx(s.entry)} · SL ${fx(s.sl)} · TP1 ${fx(s.tp1)} (${s.rr1.toFixed(1)}R) · ${s.score} điểm`);
       else if (s.state === 'SIGNAL') alertUser(`🎯 Giá chạm Entry ${nm}`, `Khớp ${fx(s.entry)} · SL ${fx(s.sl)} · TP1 ${fx(s.tp1)}`);
-      else if (s.state === 'WIN') alertUser(`✅ ${nm} chạm TP1`, `+${s.rr1.toFixed(2)}R`);
+      else if (s.state === 'WIN') alertUser(`✅ ${nm} chạm TP1`, `+${s.exit.r.toFixed(2)}R`);
+      else if (s.state === 'BE') alertUser(`🟡 ${nm} đã chốt ½ ở +1R, phần còn lại về hoà vốn`, `+${s.exit.r.toFixed(2)}R`);
       else if (s.state === 'LOSS') alertUser(`❌ ${nm} dính SL`, `−1R tại ${fx(s.sl)}`);
       else if (s.state === 'INVALID' && prev) alertUser(`⚪ ${nm} huỷ`, s.why || '');
     }
@@ -393,7 +394,7 @@
       const sym = S.sym, d = await loadAll(sym, full);
       if (sym !== S.sym) return;
       const off = S.isMT5 ? 0 : (S.offset[sym] || 0);
-      S.res = SMC.analyze(closedOnly(d, off), { ...S.cfg, minBuf: SYMS[sym].minBuf });
+      S.res = SMC.analyze(closedOnly(d, off), { ...S.cfg, minBuf: SYMS[sym].minBuf, spread: SYMS[sym].spread });
       const m5 = d.m5, last = m5[m5.length - 1], prevDay = m5[Math.max(0, m5.length - 289)];
       $('px').textContent = fx(last.c + off);
       const ch = (last.c - prevDay.c) / prevDay.c * 100; $('chg').textContent = (ch >= 0 ? '+' : '') + ch.toFixed(2) + '% 24h'; $('chg').className = 'chip ' + (ch >= 0 ? 'buy' : 'sell');

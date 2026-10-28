@@ -23,7 +23,15 @@
     mode: 'strict',                   // 'strict' | 'balanced'
     entry: 'A',                       // 'A' FVG 50% | 'B' OB
     expiryBars: 36,                   // chờ retest tối đa 36 nến M5
-    bufATR: 0.15, minBuf: 0.8,        // buffer SL dưới đáy sweep
+    bufATR: 1.0, minBuf: 0.8,         // buffer SL dưới đáy sweep (1 ATR M5 — tránh bị quét lần 2)
+    spread: 0,                        // spread sàn (giá) cộng vào SL
+    ict: true,                        // bắt buộc đủ chuỗi ICT/SMC (không chỉ chấm điểm)
+    emaM15: true,                     // EMA34/89 M15 phải cùng hướng H1
+    minSlATR: 1.5,                    // SL tối thiểu 1.5 ATR M5 (SL quá sát = RR ảo)
+    partialR: 1.0, partialPct: 0.5,   // chốt 50% ở +1R rồi dời SL về hoà vốn (0 = tắt)
+    pdTF: 'm15',                      // khung đo premium/discount (dealing range): 'm15' | 'h1'
+    ictReq: ['htf', 'extSweep', 'trueMss'], // điều kiện ICT bắt buộc; discount / killzone dùng để xếp hạng
+    killzone: false,                  // true = chỉ vào lệnh trong killzone London/NY
     extLookback: 48,                  // đáy bị quét phải là đáy thấp nhất 48 nến M5 (4h) → thanh khoản ngoài
     tier: 'A',                        // 'A+' | 'A' | 'all' — chỉ giữ setup đạt hạng này trở lên
     conflictBars: 12,                 // có setup ngược chiều trong 12 nến M5 (1h) → thị trường giằng co, hạ xuống B
@@ -63,6 +71,7 @@
     }
     // duyệt tuần tự: swing đã xác nhận, BOS/CHoCH bằng giá đóng cửa
     let ph = 0, pl = 0, sh = [], sl = [], actH = null, actL = null, dir = 0, lastBos = -1;
+    let sdir = 0, sL = null, sLi = 0, sH = null, sHi = 0; const sBrkH = new Set(), sBrkL = new Set();
     for (let k = 0; k < n; k++) {
       while (ph < tf.pivH.length && tf.pivH[ph].conf <= k) { const p = tf.pivH[ph++]; sh.push(p); actH = { ...p, broken: false }; }
       while (pl < tf.pivL.length && tf.pivL[pl].conf <= k) { const p = tf.pivL[pl++]; sl.push(p); actL = { ...p, broken: false }; }
@@ -72,7 +81,25 @@
       if (actL && !actL.broken && c[k].c < actL.p) {
         actL.broken = true; tf.events.push({ k, dir: -1, p: actL.p, piv: actL.i, type: dir === 1 ? 'CHoCH' : 'BOS' }); dir = -1; lastBos = k;
       }
-      tf.st[k] = { dir, lastBos, nH: sh.length, nL: sl.length };
+      // ---- cấu trúc SWING (external): xu hướng chỉ đổi khi phá strong low/high — đáy/đỉnh đã tạo ra BOS ----
+      if (sh.length && !sBrkH.has(sh[sh.length - 1].i) && c[k].c > sh[sh.length - 1].p && sdir !== -1) {
+        const p = sh[sh.length - 1]; sBrkH.add(p.i);
+        let lo = Infinity, li = p.i; for (let u = p.i; u <= k; u++) if (c[u].l < lo) { lo = c[u].l; li = u; }
+        sdir = 1; sL = lo; sLi = li; sH = null;
+      }
+      if (sl.length && !sBrkL.has(sl[sl.length - 1].i) && c[k].c < sl[sl.length - 1].p && sdir !== 1) {
+        const p = sl[sl.length - 1]; sBrkL.add(p.i);
+        let hi = -Infinity, hiI = p.i; for (let u = p.i; u <= k; u++) if (c[u].h > hi) { hi = c[u].h; hiI = u; }
+        sdir = -1; sH = hi; sHi = hiI; sL = null;
+      }
+      if (sdir === 1 && c[k].c < sL) { // phá strong low → CHoCH swing giảm
+        let hi = -Infinity, hiI = sLi; for (let u = sLi; u <= k; u++) if (c[u].h > hi) { hi = c[u].h; hiI = u; }
+        sdir = -1; sH = hi; sHi = hiI; sL = null; for (const p of sl) sBrkL.add(p.i);
+      } else if (sdir === -1 && c[k].c > sH) { // phá strong high → CHoCH swing tăng
+        let lo = Infinity, li = sHi; for (let u = sHi; u <= k; u++) if (c[u].l < lo) { lo = c[u].l; li = u; }
+        sdir = 1; sL = lo; sLi = li; sH = null; for (const p of sh) sBrkH.add(p.i);
+      }
+      tf.st[k] = { dir, lastBos, nH: sh.length, nL: sl.length, sdir, sL, sLi, sH, sHi };
     }
     tf.sh = sh; tf.sl = sl;
     return tf;
@@ -85,9 +112,10 @@
     const H = tf.sh.slice(0, s.nH), Lw = tf.sl.slice(0, s.nL);
     const hh = H.length >= 2 && H[H.length - 1].p > H[H.length - 2].p;
     const hl = Lw.length >= 2 && Lw[Lw.length - 1].p > Lw[Lw.length - 2].p;
+    // ICT/SMC: xu hướng theo cấu trúc swing (strong low/high), không theo từng nhịp hồi nội bộ
     return {
-      k, dir: s.dir, emaUp: tf.e1[k] > tf.e2[k], gap: Math.abs(tf.e1[k] - tf.e2[k]) / a,
-      slope: (tf.e2[k] - tf.e2[k - cfg.slopeBack]) / a, hhhl: hh && hl, lhll: !hh && !hl && H.length >= 2 && Lw.length >= 2,
+      k, dir: cfg.ict ? s.sdir : s.dir, idir: s.dir, emaUp: tf.e1[k] > tf.e2[k], gap: Math.abs(tf.e1[k] - tf.e2[k]) / a,
+      slope: (tf.e2[k] - tf.e2[k - cfg.slopeBack]) / a, hhhl: cfg.ict ? s.sdir === 1 : hh && hl, lhll: !hh && !hl && H.length >= 2 && Lw.length >= 2,
       above89: tf.c[k].c > tf.e2[k], e1: tf.e1[k], e2: tf.e2[k], atr: a, close: tf.c[k].c,
     };
   }
@@ -124,12 +152,12 @@
       const x = c[j], rng = x.h - x.l, body = x.c - x.o;
       if (body <= 0 || rng <= 0) continue;
       const a5 = m5.atr[j - 1];
-      const isDisp = body >= cfg.dispBody * rng && rng >= cfg.dispATR * a5;
-      if (!isDisp) continue;
+      const isDispAt = (u) => { const y = c[u], r = y.h - y.l, b = y.c - y.o; return b > 0 && b >= cfg.dispBody * r && r >= cfg.dispATR * m5.atr[u - 1]; };
+      // ICT: displacement là cả con sóng từ cú quét lên phá đỉnh (kiểm tra sau khi tìm sweep); chế độ cũ: nến phá phải là displacement
+      if (!cfg.ict && !isDispAt(j)) continue;
       // swing high M5 đã xác nhận gần nhất trước j
       const nH = m5.st[j - 1].nH; if (!nH) continue;
-      const SH = m5.sh[nH - 1];
-      if (!(x.c > SH.p && c[j - 1].c <= SH.p)) continue; // MSS: lần đóng cửa đầu tiên phá swing high
+      let SH = m5.sh[nH - 1];
       if (j - lastSetupBar < 6) continue;
       // tìm sweep SSL trong 12 nến trước
       let sweep = null;
@@ -143,6 +171,17 @@
           }
         }
       }
+      // MSS đúng ICT: phá đỉnh đứng TRƯỚC cú quét (đỉnh gốc của sóng hồi), không phải đỉnh nhỏ sinh ra sau cú quét
+      if (cfg.ict && sweep) {
+        let q = nH - 1; while (q >= 0 && m5.sh[q].i >= sweep.s) q--;
+        if (q < 0) continue;
+        SH = m5.sh[q];
+        let first = true; for (let u = sweep.s; u < j; u++) if (c[u].c > SH.p) { first = false; break; }
+        if (!first) continue;
+        let disp = false; for (let u = sweep.s; u <= j; u++) if (isDispAt(u)) { disp = true; break; }
+        if (!disp) continue;
+      } else if (cfg.ict && !isDispAt(j)) continue;
+      if (!(x.c > SH.p && c[j - 1].c <= SH.p)) continue; // MSS: lần đóng cửa đầu tiên phá swing high
       // POI M15 được chạm trước MSS
       const T = x.ct;
       let touch = null;
@@ -167,6 +206,15 @@
         if (k >= m5.n) break;
         if (c[k].l > c[k - 2].h) { fvg = { bot: c[k - 2].h, top: c[k].l, k }; conf = Math.max(j, k); break; }
       }
+      // ICT: FVG có thể nằm bất kỳ đâu trong sóng displacement (sau cú quét) — lấy FVG gần nhất còn nguyên
+      if (cfg.ict && !fvg && sweep) {
+        for (let k = j - 1; k >= sweep.s + 2; k--) {
+          if (c[k].l > c[k - 2].h) {
+            let filled = false; for (let u = k + 1; u <= j; u++) if (c[u].l <= c[k - 2].h) { filled = true; break; }
+            if (!filled) { fvg = { bot: c[k - 2].h, top: c[k].l, k }; break; }
+          }
+        }
+      }
       // OB M5: nến giảm cuối cùng trước displacement
       let ob = null;
       for (let k = j - 1; k >= Math.max(0, (sweep ? sweep.s : j) - 3); k--) if (c[k].c < c[k].o) { ob = { bot: c[k].l, top: c[k].o, k }; break; }
@@ -190,8 +238,9 @@
       else if (ob) { entry = ob.top; eType = 'B'; }
       else if (fvg) { entry = (fvg.bot + fvg.top) / 2; eType = 'A'; }
       const lowRef = sweep ? Math.min(...c.slice(sweep.s, j + 1).map(v => v.l)) : Math.min(...c.slice(Math.max(0, j - cfg.sweepLookback), j + 1).map(v => v.l));
-      const buf = Math.max(cfg.bufATR * a5, cfg.minBuf);
-      const sl = lowRef - buf;
+      const buf = Math.max(cfg.bufATR * a5, cfg.minBuf) + (cfg.spread || 0);
+      let sl = lowRef - buf;
+      if (entry != null && entry - sl < cfg.minSlATR * a5) sl = entry - cfg.minSlATR * a5;
       // mục tiêu thanh khoản (đỉnh chưa bị lấy)
       const Tc = c[conf].ct;
       const tgt = (tf, above) => {
@@ -221,27 +270,46 @@
       if (!tp1) reasons.push('Không có mục tiêu thanh khoản');
       else if (rr1 < cfg.minRR) reasons.push(`Mục tiêu quá gần (RR ${rr1.toFixed(2)})`);
 
-      const pass = core.h1 && core.poi && sweep && (fvg || cfg.mode === 'balanced') && entry != null && tp1 && rr1 >= cfg.minRR && score >= (cfg.mode === 'strict' ? cfg.minScore : Math.min(cfg.minScore, 75));
-      if (!pass) { D.rej.push({ bar: j, t: x.t, reasons: reasons.length ? reasons : ['Điểm ' + score + ' < ngưỡng'], score }); continue; }
-      lastSetupBar = j;
-      // ---- chấm chất lượng cấu trúc (A+ / A / B) ----
-      const k1 = idxAt(h1, T), H1h = h1.sh.slice(0, h1.st[k1].nH).slice(-2), H1l = h1.sl.slice(0, h1.st[k1].nL).slice(-2);
-      const rgHi = H1h.length ? Math.max(...H1h.map(p => p.p)) : null, rgLo = H1l.length ? Math.min(...H1l.map(p => p.p)) : null;
-      const lowBefore = Math.min(...c.slice(Math.max(0, sweep.s - cfg.extLookback), sweep.s).map(v => v.l));
+      // ---- chấm chất lượng cấu trúc ICT/SMC ----
+      // dealing range = sóng đẩy hiện tại trên khung pdTF: đáy gốc của BOS tăng gần nhất → đỉnh cao nhất tới giờ
+      const pd = cfg.pdTF === 'h1' ? h1 : m15, kp = idxAt(pd, T);
+      let rgHi = null, rgLo = null;
+      if (kp >= 0 && pd.st[kp].sdir === 1) { rgLo = pd.st[kp].sL; rgHi = Math.max(...pd.c.slice(pd.st[kp].sLi, kp + 1).map(v => v.h)); }
+      // quét thanh khoản ngoài của sóng hồi: mức bị quét là đáy thấp nhất kể từ đỉnh gốc (SH) tới lúc quét
+      const lowBefore = sweep ? Math.min(...c.slice(Math.min(SH.i, sweep.s - 1), sweep.s).map(v => v.l)) : -Infinity;
       const hr = new Date(Tc).getUTCHours();
+      const t15 = trendAt(m15, T, cfg);
+      // con sóng MSS: từ đáy sweep tới đỉnh cao nhất của displacement → entry phải nằm ở nửa dưới (discount của sóng M5)
+      const legHi = Math.max(...c.slice(j, conf + 1).map(v => v.h));
       const q = {
         htf: t4.dir === 1 && t4.emaUp && t1.hhhl,                                   // H4 + H1 cùng hướng, H1 HH/HL
-        extSweep: lowBefore >= sweep.level - 0.05 * a5,                             // quét đáy ngoài (không có đáy thấp hơn 4h trước)
-        trueMss: SH.i < sweep.s,                                                    // phá đỉnh tạo ra con sóng xuống quét thanh khoản
-        discount: rgHi != null && rgLo != null && rgHi > rgLo && entry <= (rgHi + rgLo) / 2, // entry ở vùng discount H1
-        poi: touch.zone.kind === 'FVG' || !!touch.zone.disp,                        // POI M15 có displacement
+        ema15: !!t15 && t15.emaUp,                                                  // EMA34 > EMA89 trên M15 (đồng thuận H1)
+        extSweep: !!sweep && lowBefore >= sweep.level - 0.05 * a5,                  // quét đáy ngoài (không có đáy thấp hơn 4h trước)
+        trueMss: !!sweep && SH.i < sweep.s,                                         // phá đỉnh tạo ra con sóng xuống quét thanh khoản
+        discount: entry != null && rgHi != null && rgHi > rgLo && entry > rgLo && entry <= (rgHi + rgLo) / 2, // entry ở discount của dealing range (pdTF)
+        ote: entry != null && legHi > lowRef && entry <= lowRef + 0.5 * (legHi - lowRef),                   // entry ở discount của sóng MSS
+        poi: !!touch && (touch.zone.kind === 'FVG' || !!touch.zone.disp),           // POI M15 có displacement
         fvg: !!fvg && fvg.top - fvg.bot >= 0.25 * a5,                               // FVG M5 đủ lớn
         rr2: rr1 >= 2,
         kz: (hr >= 6 && hr < 10) || (hr >= 12 && hr < 16),                          // London / New York killzone (UTC)
       };
-      const qCore = ['htf', 'extSweep', 'trueMss', 'discount'].every(k => q[k]);
-      const miss = ['poi', 'fvg', 'rr2', 'kz'].filter(k => !q[k]).length;
-      q.tier = qCore && !miss ? 'A+' : qCore && miss <= 1 ? 'A' : 'B';
+      const Q_REASON = { htf: 'H4/H1 chưa cùng xu hướng tăng (HH/HL)', ema15: 'EMA34/89 M15 chưa tăng', extSweep: 'Không quét thanh khoản ngoài',
+        trueMss: 'MSS không phá đỉnh gốc của sóng quét', discount: 'Entry không ở vùng discount (dealing range ' + cfg.pdTF.toUpperCase() + ')', ote: 'Entry không ở discount của sóng MSS', kz: 'Ngoài killzone London/NY' };
+      const ictReq = (cfg.ictReq || ['htf', 'extSweep', 'trueMss']).concat(cfg.killzone ? ['kz'] : [], cfg.emaM15 ? ['ema15'] : []);
+      const ictOK = !cfg.ict || ictReq.every(k => q[k]);
+      if (cfg.ict) for (const k of ictReq) if (!q[k]) reasons.push(Q_REASON[k]);
+
+      const pass = ictOK && core.h1 && core.poi && sweep && (fvg || cfg.mode === 'balanced') && entry != null && tp1 && rr1 >= cfg.minRR && score >= (cfg.mode === 'strict' ? cfg.minScore : Math.min(cfg.minScore, 75));
+      if (!pass) { D.rej.push({ bar: j, t: x.t, reasons: reasons.length ? reasons : ['Điểm ' + score + ' < ngưỡng'], score }); continue; }
+      lastSetupBar = j;
+      if (cfg.ict) { // cấu trúc lõi đã bắt buộc → hạng theo số điểm cộng thêm còn thiếu
+        const miss = ['discount', 'kz', 'poi', 'fvg', 'rr2'].filter(k => !q[k]).length;
+        q.tier = !miss ? 'A+' : miss <= 2 ? 'A' : 'B';
+      } else {
+        const qCore = ['htf', 'extSweep', 'trueMss', 'discount'].every(k => q[k]);
+        const miss = ['poi', 'fvg', 'rr2', 'kz'].filter(k => !q[k]).length;
+        q.tier = qCore && !miss ? 'A+' : qCore && miss <= 1 ? 'A' : 'B';
+      }
       out.push({
         id: 'S' + c[conf].t, bar: conf, mssBar: j, t: c[conf].t, ct: Tc, entry, sl, tp1, tp2, tp3, rr1,
         eType, score, sc, sweep, fvg, ob, zone: touch.zone, swingH: SH, trend: { h1: t1, h4: t4 }, reasons, q,
@@ -262,12 +330,20 @@
           continue;
         }
         if (x.h >= s.tp1) { s.state = 'INVALID'; s.why = 'Giá chạy tới TP1 trước khi khớp'; s.exit = { bar: m, t: x.t }; return s; }
-        if (x.c < s.sl) { s.state = 'INVALID'; s.why = 'Phá mức vô hiệu'; s.exit = { bar: m, t: x.t }; return s; }
+        if (x.c < (s.sweep ? s.sweep.low : s.sl)) { s.state = 'INVALID'; s.why = 'Đóng cửa phá đáy sweep – cấu trúc hỏng'; s.exit = { bar: m, t: x.t }; return s; }
         if (m - s.bar > cfg.expiryBars) { s.state = 'INVALID'; s.why = 'Hết hạn chờ retest'; s.exit = { bar: m, t: x.t }; return s; }
         const t1 = trendAt(D.h1, x.ct, cfg); if (t1 && t1.dir !== 1) { s.state = 'INVALID'; s.why = 'H1 đổi hướng'; s.exit = { bar: m, t: x.t }; return s; }
       } else if (s.state === 'SIGNAL') {
-        if (x.l <= s.sl) { s.state = 'LOSS'; s.exit = { bar: m, t: x.t, p: s.sl, r: -1 }; return s; }
-        if (x.h >= s.tp1) { s.state = 'WIN'; s.exit = { bar: m, t: x.t, p: s.tp1, r: s.rr1 }; return s; }
+        // quản lý lệnh kiểu ICT: chốt một phần ở partialR, dời SL về entry (hoà vốn), phần còn lại chạy tới TP1
+        const R = s.entry - s.sl, pc = cfg.partialR > 0 ? cfg.partialPct : 0;
+        if (!s.part) {
+          if (x.l <= s.sl) { s.state = 'LOSS'; s.exit = { bar: m, t: x.t, p: s.sl, r: -1 }; return s; }
+          if (x.h >= s.tp1) { s.state = 'WIN'; s.exit = { bar: m, t: x.t, p: s.tp1, r: s.rr1 }; return s; }
+          if (pc && cfg.partialR < s.rr1 && x.h >= s.entry + cfg.partialR * R) { s.part = { bar: m, t: x.t, p: s.entry + cfg.partialR * R, pct: pc, r: pc * cfg.partialR }; continue; }
+        } else {
+          if (x.l <= s.entry) { s.state = 'BE'; s.exit = { bar: m, t: x.t, p: s.entry, r: s.part.r }; return s; }
+          if (x.h >= s.tp1) { s.state = 'WIN'; s.exit = { bar: m, t: x.t, p: s.tp1, r: s.part.r + (1 - s.part.pct) * s.rr1 }; return s; }
+        }
       }
     }
     return s;
@@ -462,10 +538,12 @@
     function res_active(a, sg) { const f = v => v == null ? v : v * sg; return { ...a, entry: f(a.entry), sl: f(a.sl), tp1: f(a.tp1), tp2: f(a.tp2), tp3: f(a.tp3) }; }
     // thống kê
     const stat = (list) => {
-      const closed = list.filter(s => s.state === 'WIN' || s.state === 'LOSS');
-      const wins = closed.filter(s => s.state === 'WIN'), gw = wins.reduce((a, s) => a + s.exit.r, 0), gl = closed.length - wins.length;
+      const closed = list.filter(s => s.state === 'WIN' || s.state === 'LOSS' || s.state === 'BE');
+      const wins = closed.filter(s => s.exit.r > 0), gw = wins.reduce((a, s) => a + s.exit.r, 0);
+      const gl = closed.filter(s => s.exit.r < 0).reduce((a, s) => a - s.exit.r, 0), nl = closed.filter(s => s.state === 'LOSS').length;
       let eq = 0, peak = 0, dd = 0; for (const s of closed) { eq += s.exit.r; peak = Math.max(peak, eq); dd = Math.max(dd, peak - eq); }
-      return { total: list.length, filled: list.filter(s => s.fill).length, closed: closed.length, wins: wins.length, losses: gl,
+      return { total: list.length, filled: list.filter(s => s.fill).length, closed: closed.length, wins: wins.length, losses: nl,
+        be: closed.filter(s => s.state === 'BE').length,
         winRate: closed.length ? wins.length / closed.length : 0, netR: gw - gl, pf: gl ? gw / gl : (gw ? Infinity : 0), maxDD: dd,
         invalid: list.filter(s => s.state === 'INVALID').length, exp: closed.length ? (gw - gl) / closed.length : 0 };
     };

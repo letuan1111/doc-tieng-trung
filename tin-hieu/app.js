@@ -43,7 +43,7 @@
   }
   const IV = { m5: '5m', m15: '15m', h1: '1h', h4: '4h' };
   // ---- MT5 (Exness) qua Firebase: EA MT5_Bridge gửi nến + giá ----
-  const MT5 = Object.assign({ db: '', root: 'mt5', XAU: 'XAUUSDm', BTC: 'BTCUSDm' }, LS.get('smc.mt5', {}));
+  const MT5 = Object.assign({ db: 'https://letuan-mt5-default-rtdb.asia-southeast1.firebasedatabase.app', root: 'mt5', XAU: 'XAUUSDm', BTC: 'BTCUSDm' }, LS.get('smc.mt5', {}));
   const IVK = { '5m': 'm5', '15m': 'm15', '1h': 'h1', '4h': 'h4' };
   const mt5Base = () => MT5.db.replace(/\/+$/, '') + '/' + MT5.root + '/' + MT5[S.sym];
   async function mt5(sym, iv, total) {

@@ -60,6 +60,36 @@
     return { bias: out, txt: TF_TXT[ms] || 'khung lớn', ok: true, e34: a[a.length - 1], e89: b[b.length - 1] };
   }
 
+  // cấu trúc SWING khung lớn (ICT/SMC): xu hướng chỉ đổi khi phá strong low/high (đáy/đỉnh đã tạo ra BOS),
+  // kèm dealing range của sóng đẩy hiện tại để đo premium/discount. Chỉ dùng nến khung lớn đã đóng.
+  function htfStruct(c, step, L) {
+    const ms = HTF_OF[step] || step * 4, H = resample(c, ms), n = c.length, txt = TF_TXT[ms] || 'khung lớn';
+    const dir = new Array(n).fill(0), eq = new Array(n).fill(null);
+    if (H.length < 40) return { ok: false, dir, eq, txt };
+    const pv = pivots(H, L), S = new Array(H.length);
+    let ih = 0, il = 0, sh = [], sl = [], sdir = 0, sL = null, sLi = 0, sH = null, sHi = 0;
+    const bH = new Set(), bL = new Set();
+    for (let k = 0; k < H.length; k++) {
+      while (ih < pv.H.length && pv.H[ih].conf <= k) sh.push(pv.H[ih++]);
+      while (il < pv.L.length && pv.L[il].conf <= k) sl.push(pv.L[il++]);
+      const x = H[k], ph = sh[sh.length - 1], pl = sl[sl.length - 1];
+      if (ph && !bH.has(ph.i) && x.c > ph.p && sdir !== -1) { bH.add(ph.i); let lo = Infinity, li = ph.i; for (let u = ph.i; u <= k; u++) if (H[u].l < lo) { lo = H[u].l; li = u; } sdir = 1; sL = lo; sLi = li; }
+      if (pl && !bL.has(pl.i) && x.c < pl.p && sdir !== 1) { bL.add(pl.i); let hi = -Infinity, hj = pl.i; for (let u = pl.i; u <= k; u++) if (H[u].h > hi) { hi = H[u].h; hj = u; } sdir = -1; sH = hi; sHi = hj; }
+      if (sdir === 1 && x.c < sL) { let hi = -Infinity, hj = sLi; for (let u = sLi; u <= k; u++) if (H[u].h > hi) { hi = H[u].h; hj = u; } sdir = -1; sH = hi; sHi = hj; for (const p of sl) bL.add(p.i); }
+      else if (sdir === -1 && x.c > sH) { let lo = Infinity, li = sHi; for (let u = sHi; u <= k; u++) if (H[u].l < lo) { lo = H[u].l; li = u; } sdir = 1; sL = lo; sLi = li; for (const p of sh) bH.add(p.i); }
+      let e = null;
+      if (sdir === 1) { let top = -Infinity; for (let u = sLi; u <= k; u++) top = Math.max(top, H[u].h); e = (sL + top) / 2; }
+      else if (sdir === -1) { let bot = Infinity; for (let u = sHi; u <= k; u++) bot = Math.min(bot, H[u].l); e = (sH + bot) / 2; }
+      S[k] = { d: sdir, eq: e };
+    }
+    let j = -1;
+    for (let i = 0; i < n; i++) {
+      while (j + 1 < H.length && H[j + 1].end <= c[i].ct) j++;
+      if (j >= 0) { dir[i] = S[j].d; eq[i] = S[j].eq; }
+    }
+    return { ok: true, dir, eq, txt };
+  }
+
   const GRADE_RANK = { 'A+': 3, A: 2, B: 1 };
 
   // ---------------- đồng thuận EMA 34/89 nhiều khung (mặc định M5 + M15 + H1) ----------------
@@ -88,12 +118,16 @@
 
   // ---------------- phân tích ----------------
   function analyze(c, cfg) {
-    cfg = Object.assign({ swing: 3, minRR: 1.5, maxRR: 6, rr: 2, expiry: 20, maxBars: 48, cost: 0.0004, freshBars: 2, sweepWin: 20, dispATR: 1.0, slBuf: 0.15, htf: 'grade', minGrade: 'B' }, cfg);
+    cfg = Object.assign({ swing: 3, minRR: 1.5, maxRR: 6, rr: 2, expiry: 20, maxBars: 48, cost: 0.0004, freshBars: 2, sweepWin: 20, dispATR: 1.0, slBuf: 0.15, htf: 'grade', minGrade: 'B',
+      // ICT chặt (mặc định): cấu trúc swing khung lớn cùng chiều + entry ở discount/premium của dealing range khung lớn,
+      // SL ngoài điểm quét thêm slATR·ATR + spread (tối thiểu minSlATR·ATR), chốt partialPct ở +partialR rồi dời SL về hoà vốn
+      ict: true, htfStructReq: true, htfPD: false, slATR: 1.0, minSlATR: 1.5, maxSlATR: 6, spread: 0, partialR: 1.0, partialPct: 0.5 }, cfg);
     const n = c.length, step = stepOf(c);
     if (c.length && c[0].ct == null) c = c.map(x => ({ ...x, ct: x.t + step }));
     const cl = c.map(x => x.c), e34 = ema(cl, 34), e89 = ema(cl, 89), e200 = ema(cl, 200), A = atr(c, 14);
     const bias = cl.map((x, i) => i < 89 ? 0 : e34[i] > e89[i] && x > e89[i] ? 1 : e34[i] < e89[i] && x < e89[i] ? -1 : 0);
     const HT = htfBias(c, step), tfTxt = TF_TXT[step] || '';
+    const HS = cfg.ict ? htfStruct(c, step, cfg.swing) : { ok: false };
     // hướng lệnh: đồng thuận nhiều khung (cfg.cons từ consensus()) hoặc EMA của khung đang xem
     const CONS = cfg.cons || null, dirArr = CONS ? CONS.dir : bias, dirTxt = CONS ? CONS.names.join('+') : tfTxt;
     const pv = pivots(c, cfg.swing);
@@ -170,6 +204,7 @@
         else if (!model) R('CHoCH chưa quét thanh khoản');
         else if (dirArr[i] !== d) R(CONS ? `EMA34/89 ${dirTxt} chưa đồng thuận ${d > 0 ? 'BUY' : 'SELL'}` : `EMA34/89 không ủng hộ ${d > 0 ? 'BUY' : 'SELL'}`);
         else if (!CONS && cfg.htf === 'require' && HT.ok && HT.bias[i] !== d) R('EMA34/89 khung lớn ngược chiều');
+        else if (cfg.ict && cfg.htfStructReq && (!HS.ok || HS.dir[i] !== d)) R(`Cấu trúc swing ${HS.txt || 'khung lớn'} chưa ${d > 0 ? 'tăng' : 'giảm'}`);
         else {
           const eq = (ext + pl) / 2, rng = Math.abs(ext - pl), tol = 0.05 * rng;
           const inDisc = (p) => d > 0 ? p <= eq + tol : p >= eq - tol;
@@ -178,12 +213,15 @@
           const cand = model === 'sweep' ? [['FVG', fvgCE], ['OB', obEdge]] : [['OB', obEdge], ['FVG', fvgCE]];
           for (const [k, p] of cand) if (p != null && inDisc(p) && (d > 0 ? p < x.c : p > x.c)) { entry = p; poi = k; break; }
           if (entry == null) R(d > 0 ? 'POI (OB/FVG) nằm ở premium' : 'POI (OB/FVG) nằm ở discount');
+          else if (cfg.ict && cfg.htfPD && HS.ok && HS.eq[i] != null && (d > 0 ? entry > HS.eq[i] : entry < HS.eq[i])) R(d > 0 ? `Entry ở premium ${HS.txt} (không mua đuổi)` : `Entry ở discount ${HS.txt} (không bán đuổi)`);
           else {
             const base = model === 'sweep' ? sw.ext : (d > 0 ? Math.min(OB.bot, pl) : Math.max(OB.top, pl));
-            const sl = base - d * cfg.slBuf * a, risk = Math.abs(entry - sl);
+            let sl = base - d * (cfg.ict ? cfg.slATR * a + (cfg.spread || 0) : cfg.slBuf * a);
+            if (cfg.ict && (d > 0 ? sl < entry : sl > entry) && Math.abs(entry - sl) < cfg.minSlATR * a) sl = entry - d * cfg.minSlATR * a;
+            const risk = Math.abs(entry - sl);
             if (d > 0 ? sl >= entry : sl <= entry) R('SL sai phía');
             else if (risk < 0.25 * a) R('SL quá sát (<0.25 ATR)');
-            else if (risk > 5 * a) R('SL quá xa (>5 ATR)');
+            else if (risk > (cfg.ict ? cfg.maxSlATR : 5) * a) R(`SL quá xa (>${cfg.ict ? cfg.maxSlATR : 5} ATR)`);
             else {
               // TP: thanh khoản đối diện gần nhất còn nguyên (đỉnh nhịp + BSL/SSL chưa bị lấy)
               const tg = [{ p: ext, t: (d > 0 ? 'đỉnh nhịp ' : 'đáy nhịp ') + fmt(ext) }];
@@ -198,7 +236,10 @@
                 const pos = Math.abs(entry - pl) / (rng || 1);
                 const note = (model === 'sweep' ? `Quét ${d > 0 ? 'SSL' : 'BSL'} ${fmt(sw.lvl)} → ${type} ${fmt(brk.piv.p)}` : `${type} ${fmt(brk.piv.p)} cùng xu hướng → hồi về ${poi}`) +
                   ` · Entry ${poi} ${poi === 'FVG' ? '50%' : d > 0 ? 'đỉnh' : 'đáy'} (${(pos * 100).toFixed(0)}% nhịp, ${d > 0 ? 'discount' : 'premium'})` +
-                  (CONS ? ` · EMA34/89 ${dirTxt} đồng thuận ${d > 0 ? 'tăng' : 'giảm'}` : ` · EMA34/89 ${tfTxt} ${d > 0 ? 'tăng' : 'giảm'}${HT.ok ? `, ${HT.txt} ${htfOk ? 'cùng chiều' : 'ngược chiều'}` : ''}`) + ` · SL ${model === 'sweep' ? 'ngoài đáy quét' : 'ngoài OB'} · TP ${tpT}`;
+                  (CONS ? ` · EMA34/89 ${dirTxt} đồng thuận ${d > 0 ? 'tăng' : 'giảm'}` : ` · EMA34/89 ${tfTxt} ${d > 0 ? 'tăng' : 'giảm'}${HT.ok ? `, ${HT.txt} ${htfOk ? 'cùng chiều' : 'ngược chiều'}` : ''}`) +
+                  (cfg.ict ? ` · Cấu trúc ${HS.txt} ${d > 0 ? 'tăng' : 'giảm'}, entry ở ${d > 0 ? 'discount' : 'premium'} ${HS.txt}` : '') +
+                  ` · SL ${model === 'sweep' ? (d > 0 ? 'dưới đáy quét' : 'trên đỉnh quét') : 'ngoài OB'}${cfg.ict ? ` + ${cfg.slATR} ATR` : ''} · TP ${tpT}` +
+                  (cfg.ict && cfg.partialR > 0 ? ` · Chốt ${Math.round(cfg.partialPct * 100)}% ở +${cfg.partialR}R rồi dời SL về entry` : '');
                 sigs.push({ i, side: d, entry, sl, tp, limit: true, expiry: cfg.expiry, model, poi, grade, type,
                   zone: poi === 'FVG' ? { top: fvg.top, bot: fvg.bot, i: fvg.i } : { top: OB.top, bot: OB.bot, i: OB.i },
                   sweep: model === 'sweep' ? { i: sw.i, p: sw.lvl } : null, mss: { i, p: brk.piv.p, from: brk.piv.i }, note });
@@ -250,12 +291,25 @@
       if (t.state === 'PENDING' && k > s.i + s.expiry) t.state = 'EXPIRED';
       if (t.state !== 'OPEN') { trades.push(t); busyUntil = t.state === 'PENDING' ? c.length : Math.min(k, c.length - 1); continue; }
       const costR = cfg.cost * s.entry / risk;
+      // chốt một phần ở +partialR, phần còn lại dời SL về entry (chỉ khi TP xa hơn mốc chốt)
+      const pc = cfg.ict && cfg.partialR > 0 && cfg.partialR < rrT ? cfg.partialPct : 0, pLvl = s.entry + s.side * cfg.partialR * risk;
       for (let j = t.fill; j < c.length; j++) {
         const x = c[j];
-        const hitSL = s.side > 0 ? x.l <= s.sl : x.h >= s.sl, hitTP = s.side > 0 ? x.h >= tp : x.l <= tp;
-        if (hitSL) { t.state = 'LOSS'; t.exit = j; t.r = -1 - costR; break; }
-        if (hitTP && j > t.fill) { t.state = 'WIN'; t.exit = j; t.r = rrT - costR; break; }
-        if (j - t.fill >= cfg.maxBars) { t.state = 'TIME'; t.exit = j; t.r = s.side * (x.c - s.entry) / risk - costR; break; }
+        const hitTP = s.side > 0 ? x.h >= tp : x.l <= tp;
+        if (!t.part) {
+          const hitSL = s.side > 0 ? x.l <= s.sl : x.h >= s.sl;
+          if (hitSL) { t.state = 'LOSS'; t.exit = j; t.r = -1 - costR; break; }
+          if (hitTP && j > t.fill) { t.state = 'WIN'; t.exit = j; t.r = rrT - costR; break; }
+          if (pc && j > t.fill && (s.side > 0 ? x.h >= pLvl : x.l <= pLvl)) t.part = { j, pct: pc, r: pc * cfg.partialR };
+        } else if (j > t.part.j) {
+          const hitBE = s.side > 0 ? x.l <= s.entry : x.h >= s.entry;
+          if (hitBE) { t.state = 'BE'; t.exit = j; t.r = t.part.r - costR; break; }
+          if (hitTP) { t.state = 'WIN'; t.exit = j; t.r = t.part.r + (1 - t.part.pct) * rrT - costR; break; }
+        }
+        if (j - t.fill >= cfg.maxBars) {
+          const open = s.side * (x.c - s.entry) / risk;
+          t.state = 'TIME'; t.exit = j; t.r = (t.part ? t.part.r + (1 - t.part.pct) * open : open) - costR; break;
+        }
       }
       trades.push(t); busyUntil = t.exit != null ? t.exit : c.length;
     }

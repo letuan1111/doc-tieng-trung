@@ -129,7 +129,7 @@
   const fx = (v, d = dp()) => v == null || !isFinite(v) ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
   const sgn = (v, d) => (v >= 0 ? '+' : '−') + fx(Math.abs(v), d);
   const ft = (t) => new Date(t).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
-  const STATE = { WIN: ['TP ✓', 'win'], LOSS: ['SL ✗', 'loss'], TIME: ['Hết giờ', 'muted'], OPEN: ['Đang chạy', ''], PENDING: ['Chờ khớp', ''], EXPIRED: ['Hết hạn', 'muted'], MISSED: ['Lỡ (chạy tới TP)', 'muted'], STALE: ['Quá cũ', 'muted'] };
+  const STATE = { WIN: ['TP ✓', 'win'], BE: ['Chốt ½ + hoà vốn', 'win'], LOSS: ['SL ✗', 'loss'], TIME: ['Hết giờ', 'muted'], OPEN: ['Đang chạy', ''], PENDING: ['Chờ khớp', ''], EXPIRED: ['Hết hạn', 'muted'], MISSED: ['Lỡ (chạy tới TP)', 'muted'], STALE: ['Quá cũ', 'muted'] };
   const sideTxt = (s) => s > 0 ? 'BUY' : 'SELL', sideCls = (s) => s > 0 ? 'buy' : 'sell';
   const MODEL = { sweep: 'Quét + MSS', bos: 'BOS + hồi OB/FVG' };
   const biasTxt = (b) => b > 0 ? '<b class="win">▲ TĂNG</b>' : b < 0 ? '<b class="loss">▼ GIẢM</b>' : '<b class="muted">đi ngang</b>';

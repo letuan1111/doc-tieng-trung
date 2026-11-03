@@ -19,7 +19,8 @@ const TOKEN = (ENV.TELEGRAM_BOT_TOKEN || '').trim();
 const FIXED_CHAT = (ENV.TELEGRAM_CHAT_ID || '').trim();
 const FB = (ENV.FIREBASE_URL || '').trim().replace(/\/+$/, '');
 const SYMBOLS = (ENV.SYMBOLS || 'XAU,BTC').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-const TFS = (ENV.TFS || 'm5,m15,h1').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+// M5 bị loại khỏi mặc định: backtest 60 ngày M5 lỗ −76R (nhiễu quá nhiều). Khung M5 vẫn dùng cho đồng thuận EMA.
+const TFS = (ENV.TFS || 'm15,h1').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 const CFG = { rr: +(ENV.RR || 2), minRR: +(ENV.MIN_RR || 1.5), expiry: +(ENV.EXPIRY || 20), maxBars: +(ENV.MAX_BARS || 48), cost: +(ENV.COST_PCT || 0.04) / 100, freshBars: 2,
   minGrade: ENV.MIN_GRADE || 'A', htf: ENV.HTF_EMA || 'grade', align: ENV.ALIGN || 'tv' };
 // hướng lệnh = đồng thuận EMA34/89 của các khung này (đặt DIR=tf để chỉ dùng khung đang quét)
@@ -28,8 +29,8 @@ const MOCK = ENV.MOCK === '1';
 const WEB = ENV.WEB_URL || 'https://letuan1111.github.io/doc-tieng-trung/bot-tin-hieu/';
 
 const SYM = {
-  XAU: { name: 'XAUUSD', mt5: ENV.MT5_XAU || 'XAUUSDm', okx: 'XAU-USDT-SWAP', by: 'XAUUSDT', bn: 'XAUUSDT', kr: 'PAXGUSD', dp: 2, tv: ENV.TV_XAU || 'OANDA:XAUUSD' },
-  BTC: { name: 'BTCUSD', mt5: ENV.MT5_BTC || 'BTCUSDm', okx: 'BTC-USDT-SWAP', by: 'BTCUSDT', bn: 'BTCUSDT', kr: 'XBTUSD', dp: 1, tv: ENV.TV_BTC || 'BITSTAMP:BTCUSD' },
+  XAU: { name: 'XAUUSD', mt5: ENV.MT5_XAU || 'XAUUSDm', okx: 'XAU-USDT-SWAP', by: 'XAUUSDT', bn: 'XAUUSDT', kr: 'PAXGUSD', dp: 2, spread: +(ENV.SPREAD_XAU || 0.3), tv: ENV.TV_XAU || 'OANDA:XAUUSD' },
+  BTC: { name: 'BTCUSD', mt5: ENV.MT5_BTC || 'BTCUSDm', okx: 'BTC-USDT-SWAP', by: 'BTCUSDT', bn: 'BTCUSDT', kr: 'XBTUSD', dp: 1, spread: +(ENV.SPREAD_BTC || 20), tv: ENV.TV_BTC || 'BITSTAMP:BTCUSD' },
   ETH: { name: 'ETHUSD', mt5: ENV.MT5_ETH || 'ETHUSDm', okx: 'ETH-USDT-SWAP', by: 'ETHUSDT', bn: 'ETHUSDT', kr: 'ETHUSD', dp: 2, tv: ENV.TV_ETH || 'BITSTAMP:ETHUSD' },
   SOL: { name: 'SOLUSD', mt5: '', okx: 'SOL-USDT-SWAP', by: 'SOLUSDT', bn: 'SOLUSDT', kr: 'SOLUSD', dp: 3, tv: ENV.TV_SOL || 'COINBASE:SOLUSD' },
 };
@@ -241,7 +242,7 @@ async function main() {
       if (c.length < 300) { runStatus.errors.push(`${sym} ${tf}: ít nến`); continue; }
       if (DIR === 'cons' && !consOk) continue;
       const cons = DIR === 'cons' ? ICT.consensus(c, CONS_TF.map(t => ({ name: TFN[t], c: data[t].c.filter(x => x.ct <= Date.now()) }))) : null;
-      const a = ICT.analyze(c, { ...CFG, cons }), n = c.length, bt = a.bt;
+      const a = ICT.analyze(c, { ...CFG, cons, spread: SYM[sym].spread || 0 }), n = c.length, bt = a.bt;
       const btInfo = { n: bt.n, win: +bt.winRate.toFixed(3), netR: +bt.netR.toFixed(2), pf: isFinite(bt.pf) ? +bt.pf.toFixed(2) : 99 };
       for (const t of bt.trades) {
         if (t.i < n - 300) continue;
@@ -253,6 +254,7 @@ async function main() {
             if (prev === 'PENDING' && t.state === 'OPEN') alerts.push(sigText(ex, '🎯 <b>Giá đã chạm Entry – lệnh khớp</b>'));
             else if (t.state === 'WIN') alerts.push(`✅ <b>Chạm TP</b> ${nm} · <b>+${t.r.toFixed(2)}R</b>`);
             else if (t.state === 'LOSS') alerts.push(`❌ <b>Dính SL</b> ${nm} · ${t.r.toFixed(2)}R`);
+            else if (t.state === 'BE') alerts.push(`🟡 <b>Đã chốt ½ ở +1R, phần còn lại về hoà vốn</b> ${nm} · +${t.r.toFixed(2)}R`);
             else if (t.state === 'TIME') alerts.push(`⏱ <b>Đóng do hết thời gian</b> ${nm} · ${t.r >= 0 ? '+' : ''}${t.r.toFixed(2)}R`);
             else if (t.state === 'EXPIRED' || t.state === 'MISSED') alerts.push(`⚪ Huỷ lệnh chờ ${nm} (${t.state === 'EXPIRED' ? 'quá hạn chưa khớp' : 'giá chạy tới TP trước khi khớp'})`);
           }

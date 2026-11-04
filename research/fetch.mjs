@@ -1,7 +1,7 @@
 // Tải nến OKX (XAU, BTC) M5/M15/H1 trong N ngày → research/data/*.json
 import fs from 'node:fs';
 const DAYS = +(process.argv[2] || 190), MS = { m5: 3e5, m15: 9e5, h1: 36e5 }, BAR = { m5: '5m', m15: '15m', h1: '1H' };
-const SYM = { XAU: 'XAU-USDT-SWAP', BTC: 'BTC-USDT-SWAP' };
+const SYM = { XAU: 'XAU-USDT-SWAP', BTC: 'BTC-USDT-SWAP', ETH: 'ETH-USDT-SWAP' };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 async function j(u) { for (let k = 0; k < 6; k++) { try { const r = await fetch(u); if (r.ok) { const x = await r.json(); if (x.code === '0') return x; } } catch (_) {} await sleep(1000 * (k + 1)); } throw new Error('fetch ' + u); }
 fs.mkdirSync('research/data', { recursive: true });

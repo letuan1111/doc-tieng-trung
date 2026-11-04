@@ -14,10 +14,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: node research/fetch.mjs 190
+      - run: node research/fetch.mjs 375
       - run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f research/data
-          git commit -q -m "[data] dữ liệu OKX 190 ngày"
+          git commit -q -m "[data] dữ liệu OKX 375 ngày"
           git push -q origin HEAD:bt-ict

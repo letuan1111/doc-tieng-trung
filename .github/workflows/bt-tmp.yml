@@ -2,8 +2,11 @@ name: Nghiên cứu tạm (bt-ict)
 on:
   push:
     branches: [bt-ict]
+permissions:
+  contents: write
 jobs:
   data:
+    if: "!contains(github.event.head_commit.message, '[data]')"
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -12,8 +15,9 @@ jobs:
         with:
           node-version: 20
       - run: node research/fetch.mjs 190
-      - uses: actions/upload-artifact@v4
-        with:
-          name: okx-data
-          path: research/data/
-          retention-days: 7
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f research/data
+          git commit -q -m "[data] dữ liệu OKX 190 ngày"
+          git push -q origin HEAD:bt-ict

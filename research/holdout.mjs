@@ -14,10 +14,12 @@ const V = {
   'MỚI chỉ setup A+B (bỏ BOS)':                     { S: ['A', 'B'], htf: 1, em: 1, en: 0, sb: 2, tp: 1 },
 };
 const pass = (it, q) => q.S.includes(it.setup) && (!q.htf || it.e.htf === it.e.d) && (!q.em || it.e.ema);
+const GATE = process.env.GATE || 'm15'; // 'm15': M5 cần M15/H1 cùng chiều · 'h1': M5/M15 chỉ vào khi H1 có setup cùng chiều (top-down) · 'h1only'
 function portfolio(cands) {
   cands.sort((a, b) => a.t - b.t);
-  const hi = cands.filter(x => x.tf !== 'm5');
-  cands = cands.filter(x => x.tf !== 'm5' || hi.some(h => h.d === x.d && h.t <= x.t && x.t - h.t <= 12 * 9e5));
+  if (GATE === 'h1only') cands = cands.filter(x => x.tf === 'h1');
+  else if (GATE === 'h1') { const H = cands.filter(x => x.tf === 'h1'); cands = cands.filter(x => x.tf === 'h1' || H.some(h => h.d === x.d && h.t <= x.t && x.t - h.t <= 8 * 36e5)); }
+  else { const hi = cands.filter(x => x.tf !== 'm5'); cands = cands.filter(x => x.tf !== 'm5' || hi.some(h => h.d === x.d && h.t <= x.t && x.t - h.t <= 12 * 9e5)); }
   const out = []; let busy = -Infinity;
   for (let i = 0; i < cands.length; i++) {
     const s = cands[i]; if (s.t <= busy) continue;
@@ -43,7 +45,7 @@ for (const sym of ['XAU', 'BTC', 'ETH']) {
   }
   // engine đang chạy (bot Telegram hiện tại), M15+H1
   const CFG = { rr: 2, minRR: 1.5, expiry: 20, maxBars: 48, cost: 0, freshBars: 2, minGrade: 'A', htf: 'grade', spread: SPREAD[sym] };
-  for (const tf of ['m15', 'h1']) { const c = D[tf], cons = LIVE.consensus(c, TFS.map(t => ({ name: t.toUpperCase(), c: D[t] }))); const a = LIVE.analyze(c, { ...CFG, cons });
+  for (const tf of (GATE === 'h1only' ? ['h1'] : ['m15', 'h1'])) { const c = D[tf], cons = LIVE.consensus(c, TFS.map(t => ({ name: t.toUpperCase(), c: D[t] }))); const a = LIVE.analyze(c, { ...CFG, cons });
     for (const t of a.bt.trades) if (t.r != null && (LIVE.GRADE_RANK[t.grade] || 0) >= 2) (RES['ĐANG CHẠY (bot Telegram hiện tại)'] = RES['ĐANG CHẠY (bot Telegram hiện tại)'] || []).push({ sym, tf, t: c[t.i].ct, r: t.r - SPREAD[sym] / t.risk, setup: t.model }); }
   console.error(sym, 'xong', D.m5.length, 'nến M5 từ', new Date(D.m5[0].t).toISOString().slice(0, 10));
 }

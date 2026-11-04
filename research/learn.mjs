@@ -96,4 +96,4 @@ console.log('chọn từ nhiều khung', sum(allTrades.filter(x => x.multi)));
 const st = {}; for (const x of allTrades) st[x.st] = (st[x.st] || 0) + 1; console.log('kết quả lệnh', JSON.stringify(st));
 console.log('\n=== CẤU HÌNH ĐÃ CHỌN MỖI THÁNG');
 for (const r of report.chosen) console.log(r.month, r.sym, r.tf.padEnd(4), r.cfg, r.train ? `| học: ${r.train}` : '');
-fs.writeFileSync(new URL('./learn-trades.json', import.meta.url), JSON.stringify(allTrades));
+if (process.env.SAVE) fs.writeFileSync(process.env.SAVE, JSON.stringify(allTrades));

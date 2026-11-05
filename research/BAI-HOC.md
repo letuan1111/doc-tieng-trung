@@ -132,3 +132,10 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
   - 12 tháng: 677 lệnh, thắng 35%, +3652 USD. 6 tháng trước +3660 USD, 6 tháng gần −8 USD.
   - Đã bật Telegram.
   - Vào limit tại FVG thì kém hơn: 12 tháng +196 USD với limit mép FVG, −42 USD với limit giữa FVG.
+
+## Telegram chỉ gửi 🔁 EMA hồi trong giờ thắng cao (emapb3, 05/11/2026)
+- **EMA hồi chuyển sang EMA34/89 M30:** 12 tháng 531 lệnh, thắng 38%, +2084 USD. Lời ở cả hai nửa năm, ổn định hơn bản EMA M15.
+- **Giờ gửi Telegram (VN):** 0h, 8h, 11h, 12h, 14h, 17h, 20h, 21h — các giờ thắng ≥ 43%.
+  - 12 tháng: 192 lệnh (~4/tuần), thắng 48%, +3630 USD (0.02 lot). 6 tháng trước +2611 USD, 6 tháng gần +1019 USD.
+  - Lưu ý: các giờ này được chọn sau khi đã xem kết quả, nên có thể đẹp hơn thực tế.
+- **Các mô hình khác** (⭐ Chuẩn, 🔎 Ghi nhận, 🌊 Sóng 15, 🎯 BOS 15) và EMA hồi ngoài các giờ trên: chỉ ghi nhật ký. Trên trang, các lệnh được gửi Telegram có dấu 📲.

@@ -1,13 +1,17 @@
 /* Mô hình "🔁 EMA hồi" — rút ra khi tua từng nến M15 vàng 27/10 → 05/11/2026 (sóng giảm 106 giá 30/10, sóng tăng 122 giá 04/11). Chuỗi bắt buộc:
- *  1. Xu hướng: EMA34 M15 trên EMA89 (chỉ BUY) / dưới (chỉ SELL).
+ *  1. Xu hướng: EMA34 M30 trên EMA89 (chỉ BUY) / dưới (chỉ SELL). (EMA M30 ổn định hơn M15: research/emaTF.mjs)
  *  2. Giá HỒI về vùng EMA34 (chạm EMA34, không thủng EMA89 quá 1 ATR) và QUÉT thanh khoản: đáy hồi thủng đáy swing M5 trước đó (SSL) — SELL: đỉnh hồi vượt đỉnh swing (BSL).
  *  3. PHÁ VỠ cấu trúc M5 theo xu hướng (MSS/BOS): nến M5 đóng cửa vượt đỉnh/đáy swing gần nhất trước điểm hồi.
  *  4. Nhịp phá vỡ có FVG M5 → VÀO NGAY giá đóng nến phá · SL ngoài đáy/đỉnh quét + 0.3 ATR M15 + spread · TP 2R · giữ tối đa 2 ngày.
  *  Kiểm tra (research/emastrict.mjs, 0.02 lot): 10 ngày gần 17 lệnh thắng 71% +802 USD · 12 tháng 677 lệnh thắng 35% +3652 USD
  *  (6 tháng trước +3660, 6 tháng gần −8: mạnh khi có xu hướng rõ, hoà khi đi ngang).
+ *  Telegram chỉ gửi lệnh trong các giờ VN CFG.tgHours (thắng cao nhất, chạm TP nhiều nhất); mọi lệnh vẫn ghi nhật ký.
  */
 (function (root, factory) { const E = factory(); if (typeof module === 'object' && module.exports) module.exports = E; else root.EMAPB = E; })(typeof self !== 'undefined' ? self : this, function () {
-  const CFG = { look: 36, L: 2, touch: 0.1, deep: 1.0, slATR: 0.3, rr: 2, holdMs: 2 * 864e5, needSweep: true, needFVG: true };
+  const CFG = { look: 36, L: 2, touch: 0.1, deep: 1.0, slATR: 0.3, rr: 2, holdMs: 2 * 864e5, needSweep: true, needFVG: true, emaTF: 'm30',
+    // giờ VN gửi Telegram: thắng ≥ 43% trong 12 tháng (research/tghours.mjs: 192 lệnh, thắng 48%, lời cả 2 nửa năm) — giờ khác chỉ ghi nhật ký
+    tgHours: [0, 8, 11, 12, 14, 17, 20, 21] };
+  function resample(c, ms) { const out = []; let cur = null; for (const x of c) { const s = Math.floor(x.t / ms) * ms; if (!cur || cur.t !== s) { if (cur) out.push(cur); cur = { t: s, ct: s + ms, o: x.o, h: x.h, l: x.l, c: x.c, last: x.ct }; } else { cur.h = Math.max(cur.h, x.h); cur.l = Math.min(cur.l, x.l); cur.c = x.c; cur.last = x.ct; } } if (cur && cur.last >= cur.ct) out.push(cur); return out; }
   function ema(v, p) { const k = 2 / (p + 1), o = new Array(v.length); let e = v[0]; for (let i = 0; i < v.length; i++) { e = i ? v[i] * k + e * (1 - k) : v[0]; o[i] = e; } return o; }
   function atr(c, p = 14) { const o = new Array(c.length); let a = c.length ? c[0].h - c[0].l : 0; for (let i = 0; i < c.length; i++) { const tr = i ? Math.max(c[i].h - c[i].l, Math.abs(c[i].h - c[i - 1].c), Math.abs(c[i].l - c[i - 1].c)) : c[i].h - c[i].l; a = i < p ? (a * i + tr) / (i + 1) : (a * (p - 1) + tr) / p; o[i] = a; } return o; }
   function pivots(c, L) { const H = [], Lw = []; for (let i = L; i < c.length - L; i++) { let ph = true, pl = true; for (let k = 1; k <= L; k++) { if (c[i - k].h >= c[i].h || c[i + k].h > c[i].h) ph = false; if (c[i - k].l <= c[i].l || c[i + k].l < c[i].l) pl = false; } if (ph) H.push({ i, p: c[i].h, conf: i + L }); if (pl) Lw.push({ i, p: c[i].l, conf: i + L }); } return { H, L: Lw }; }
@@ -16,7 +20,7 @@
   function run(D, opt) {
     opt = opt || {}; const cfg = { ...CFG, ...(opt.cfg || {}) }, c = D.m5, spread = opt.spread || 0, out = [];
     if (!c || c.length < 150 || !D.m15 || D.m15.length < 120) return out;
-    const EC = D.emaC || D.m15, n = c.length, cl = EC.map(x => x.c), E34 = mapHTF(c, EC, ema(cl, 34)), E89 = mapHTF(c, EC, ema(cl, 89)), AT = mapHTF(c, D.m15, atr(D.m15)); // EMA34/89 theo khung D.emaC (mặc định M15)
+    const EC = D.emaC || (cfg.emaTF === 'm30' ? resample(D.m15, 18e5) : D.m15), n = c.length, cl = EC.map(x => x.c), E34 = mapHTF(c, EC, ema(cl, 34)), E89 = mapHTF(c, EC, ema(cl, 89)), AT = mapHTF(c, D.m15, atr(D.m15)); // EMA34/89 theo khung D.emaC (mặc định M15)
     const pv = pivots(c, cfg.L), used = new Set(); let ih = 0, il = 0; const sh = [], sl = [];
     for (let k = 100; k < n; k++) {
       while (ih < pv.H.length && pv.H[ih].conf <= k) sh.push(pv.H[ih++]); while (il < pv.L.length && pv.L[il].conf <= k) sl.push(pv.L[il++]);
@@ -38,7 +42,7 @@
         const tp = entry + d * cfg.rr * risk;
         const s = { id: `e5-${c[k].t}-${d > 0 ? 'B' : 'S'}`, tf: 'm5', model: 'EMA hồi', grade: 'E', side: d, t: c[k].t, ct: c[k].ct, entry, sl: slP, tp, risk, rr: cfg.rr,
           sweep: pP, sweepName: swept ? (d > 0 ? 'SSL (đáy hồi)' : 'BSL (đỉnh hồi)') : (d > 0 ? 'đáy hồi EMA34' : 'đỉnh hồi EMA34'), origin: pP, fvg: f, spread,
-          ema34: E34[k], ema89: E89[k], pullT: c[pi].t, state: 'OPEN', fillT: c[k].t, exitT: null, exitP: null, r: null, pts: null };
+          ema34: E34[k], ema89: E89[k], emaTF: D.emaC ? 'tuỳ chọn' : cfg.emaTF.toUpperCase(), hour: (new Date(c[k].t).getUTCHours() + 7) % 24, tgOK: cfg.tgHours.includes((new Date(c[k].t).getUTCHours() + 7) % 24), pullT: c[pi].t, state: 'OPEN', fillT: c[k].t, exitT: null, exitP: null, r: null, pts: null };
         for (let u = k + 1; u < n; u++) { const x = c[u];
           if (d > 0 ? x.l <= slP : x.h >= slP) { s.state = 'LOSS'; s.exitP = slP; s.exitT = x.ct; break; }
           if (d > 0 ? x.h >= tp : x.l <= tp) { s.state = 'WIN'; s.exitP = tp; s.exitT = x.ct; break; }
@@ -50,5 +54,5 @@
     return out;
   }
   const FINAL = { WIN: 1, LOSS: 1, TIME: 1 };
-  return { run, CFG, FINAL, version: 'emapb2-2026-11-05', telegram: true };
+  return { run, CFG, FINAL, version: 'emapb3-2026-11-05', telegram: true };
 });

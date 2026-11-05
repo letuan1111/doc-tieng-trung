@@ -63,7 +63,7 @@ function tgText(t) {
   const lv = `Entry <b>${f(t.entry)}</b> · SL <b>${f(t.sl)}</b> · TP <b>${f(t.tp)}</b> (${(t.rr || 2).toFixed(1)}R)`;
   const sw = `Đã quét ${esc(t.sweepName)} ${f(t.sweep)} → MSS + FVG`;
   switch (t.state) {
-    case 'PENDING': if (t.grade === 'E') return `🆕 ${head}\nEMA34 M15 ${f(t.ema34)} ${t.side > 0 ? '>' : '<'} EMA89 ${f(t.ema89)} · giá hồi về EMA34 lúc ${vnT(t.pullT)}\nĐã quét ${esc(t.sweepName)} ${f(t.sweep)} → phá vỡ M5 + FVG M5 ${f(t.fvg && t.fvg.bot)} – ${f(t.fvg && t.fvg.top)}\n${lv}\n<a href="${PAGE}">Mở trang</a>`;
+    case 'PENDING': if (t.grade === 'E') return `🆕 ${head}\n⏰ ${t.hour}h — khung giờ thắng cao\nEMA34 M30 ${f(t.ema34)} ${t.side > 0 ? '>' : '<'} EMA89 M30 ${f(t.ema89)} · giá hồi về EMA34 lúc ${vnT(t.pullT)}\nĐã quét ${esc(t.sweepName)} ${f(t.sweep)} → phá vỡ M5 + FVG M5 ${f(t.fvg && t.fvg.bot)} – ${f(t.fvg && t.fvg.top)}\n${lv}\n<a href="${PAGE}">Mở trang</a>`;
       if (t.grade === 'W') return `🆕 ${head}\n${sw.replace(' → MSS + FVG', ' → MSS M5 + FVG M5')}\n${zone}\n${lv} · mục tiêu sóng <b>${f(Math.abs(t.tp - t.entry))} giá</b>\nHuỷ nếu chưa khớp trước ${vnT(t.ct + WAVE.CFG.expiry * 3e5)}\n<a href="${PAGE}">Mở trang</a>`;
       return `🆕 ${head}\n${sw}\n${zone}\n${lv}\n${t.ctx ? '<i>' + esc(V3.ctxText(t.ctx)) + '</i>\n' : ''}Huỷ nếu chưa khớp trước ${vnT(t.ct + (t.grade === 'S' ? V3.BOS15.expiry[t.tf] : V3.CFG[t.tf].expiry) * MS[t.tf])}\n<a href="${PAGE}">Mở trang</a>`;
     case 'OPEN': return `🎯 Đã khớp ${head}\n${lv}\nKhớp lúc ${vnT(t.fillT)}`;
@@ -74,7 +74,8 @@ function tgText(t) {
   }
 }
 const toSend = [];
-const notify = (t) => { if (!t.live) return; t.tg = t.tg || []; if (t.state === 'OPEN' && !t.tg.includes('PENDING')) { t.tg.push('PENDING'); if (t.grade === 'E') t.tg.push('OPEN'); toSend.push(tgText({ ...t, state: 'PENDING' })); } if (t.grade === 'E' && !t.tg.includes('PENDING')) { t.tg.push('PENDING', 'OPEN'); toSend.push(tgText({ ...t, state: 'PENDING' })); }
+// CHỈ gửi Telegram lệnh 🔁 EMA hồi trong giờ thắng cao (tgOK); mọi mô hình khác / giờ khác chỉ ghi nhật ký
+const notify = (t) => { if (!t.live || !(t.grade === 'E' && t.tgOK)) return; t.tg = t.tg || []; if (t.state === 'OPEN' && !t.tg.includes('PENDING')) { t.tg.push('PENDING'); if (t.grade === 'E') t.tg.push('OPEN'); toSend.push(tgText({ ...t, state: 'PENDING' })); } if (t.grade === 'E' && !t.tg.includes('PENDING')) { t.tg.push('PENDING', 'OPEN'); toSend.push(tgText({ ...t, state: 'PENDING' })); }
   if (V3.FINAL[t.state] && t.fillT && !t.tg.includes('OPEN') && t.state !== 'SKIP') { t.tg.push('OPEN'); toSend.push(tgText({ ...t, state: 'OPEN' })); } if (t.tg.includes(t.state)) return; t.tg.push(t.state); toSend.push(tgText(t)); };
 const closed = (c) => c.filter(x => x.ct <= NOW());
 
@@ -116,8 +117,8 @@ for (const sym of Object.keys(SYMS)) {
 // ---- Sóng 15 (vàng, M5): quét thanh khoản → MSS M5 → limit mép FVG M5 · SL ngoài điểm quét · TP max(2R, 15 giá)
 try {
   let m5, m15;
-  if (process.env.MOCK_DIR) { const rd = (tf) => JSON.parse(fs.readFileSync(path.join(process.env.MOCK_DIR, `XAU_${tf}.json`), 'utf8')).map(k => ({ t: k[0], ct: k[0] + MS[tf], o: k[1], h: k[2], l: k[3], c: k[4] })).filter(x => x.ct <= NOW()); m5 = rd('m5').slice(-NEED.m5); m15 = rd('m15').slice(-600); }
-  else { m5 = closed(await okx(SYMS.XAU.okx, 'm5')); m15 = (XAU15 || []).slice(-600); }
+  if (process.env.MOCK_DIR) { const rd = (tf) => JSON.parse(fs.readFileSync(path.join(process.env.MOCK_DIR, `XAU_${tf}.json`), 'utf8')).map(k => ({ t: k[0], ct: k[0] + MS[tf], o: k[1], h: k[2], l: k[3], c: k[4] })).filter(x => x.ct <= NOW()); m5 = rd('m5').slice(-NEED.m5); m15 = rd('m15').slice(-3000); }
+  else { m5 = closed(await okx(SYMS.XAU.okx, 'm5')); m15 = XAU15 || []; }
   // các mô hình chạy trên M5 vàng: tính lại toàn bộ cửa sổ mỗi lần, cập nhật lệnh chưa kết thúc
   for (const [MOD, G] of [[WAVE, 'W'], [EMAPB, 'E']]) {
     const W = MOD.run({ m5, m15 }, { spread: SYMS.XAU.spread }), seenW = new Set(), tg = MOD.telegram !== false;

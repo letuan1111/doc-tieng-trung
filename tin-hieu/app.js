@@ -293,7 +293,7 @@
     $('stats').innerHTML = `<div><b>${st.total}</b><small>Setup</small></div><div><b>${st.filled}</b><small>Đã khớp</small></div>
       <div><b class="win">${st.wins}</b><small>Chạm TP1</small></div><div><b class="loss">${st.losses}</b><small>Dính SL</small></div>
       <div><b>${(st.winRate * 100).toFixed(0)}%</b><small>Tỷ lệ thắng</small></div><div><b class="${st.netR >= 0 ? 'win' : 'loss'}">${st.netR >= 0 ? '+' : ''}${st.netR.toFixed(2)}R</b><small>Tổng R</small></div>
-      <div><b>${isFinite(st.pf) ? st.pf.toFixed(2) : '∞'}</b><small>Profit factor</small></div><div><b>${st.maxDD.toFixed(1)}R</b><small>Sụt giảm tối đa</small></div>${(() => { const a = V3.stats(rows.filter(t => t.state !== 'SKIP' && (t.grade || 'A') === 'A')), b = V3.stats(rows.filter(t => t.state !== 'SKIP' && t.grade === 'B')), w = V3.stats(rows.filter(t => t.grade === 'W')); return `<div><b class="${a.netR >= 0 ? 'win' : 'loss'}">${a.netR >= 0 ? '+' : ''}${a.netR.toFixed(1)}R</b><small>⭐ Chuẩn (${a.closed} lệnh)</small></div><div><b class="${b.netR >= 0 ? 'win' : 'loss'}">${b.netR >= 0 ? '+' : ''}${b.netR.toFixed(1)}R</b><small>🔎 Ghi nhận (${b.closed} lệnh)</small></div><div><b class="${w.netR >= 0 ? 'win' : 'loss'}">${w.netR >= 0 ? '+' : ''}${w.netR.toFixed(1)}R</b><small>🌊 Sóng 15 (${w.closed} lệnh)</small></div>`; })()}`;
+      <div><b>${isFinite(st.pf) ? st.pf.toFixed(2) : '∞'}</b><small>Profit factor</small></div><div><b>${st.maxDD.toFixed(1)}R</b><small>Sụt giảm tối đa</small></div>${(() => { const a = V3.stats(rows.filter(t => t.state !== 'SKIP' && (t.grade || 'A') === 'A')), b = V3.stats(rows.filter(t => t.state !== 'SKIP' && t.grade === 'B')), w = V3.stats(rows.filter(t => t.grade === 'W')), sb = V3.stats(rows.filter(t => t.state !== 'SKIP' && t.grade === 'S')); return `<div><b class="${a.netR >= 0 ? 'win' : 'loss'}">${a.netR >= 0 ? '+' : ''}${a.netR.toFixed(1)}R</b><small>⭐ Chuẩn (${a.closed} lệnh)</small></div><div><b class="${b.netR >= 0 ? 'win' : 'loss'}">${b.netR >= 0 ? '+' : ''}${b.netR.toFixed(1)}R</b><small>🔎 Ghi nhận (${b.closed} lệnh)</small></div><div><b class="${w.netR >= 0 ? 'win' : 'loss'}">${w.netR >= 0 ? '+' : ''}${w.netR.toFixed(1)}R</b><small>🌊 Sóng 15 (${w.closed} lệnh)</small></div><div><b class="${sb.netR >= 0 ? 'win' : 'loss'}">${sb.netR >= 0 ? '+' : ''}${sb.netR.toFixed(1)}R</b><small>🎯 BOS 15 (${sb.closed} lệnh)</small></div>`; })()}`;
     const TS = S.res.tierStats;
     $('tiers').innerHTML = `<table><thead><tr><th>Hạng</th><th>Setup</th><th>Đã đóng</th><th>Thắng</th><th>R/lệnh</th><th>Tổng R</th><th>PF</th></tr></thead><tbody>` +
       Object.entries(TS).map(([k, v]) => `<tr${k === 'Tất cả' ? ' class="muted"' : ''}><td><b>${k}</b></td><td>${v.total}</td><td>${v.closed}</td><td>${v.closed ? (v.winRate * 100).toFixed(0) + '%' : '—'}</td>
@@ -306,7 +306,7 @@
 
   // ---------------- V3: tín hiệu hiện tại + nhật ký máy chủ ----------------
   const JR = 'https://raw.githubusercontent.com/letuan1111/doc-tieng-trung/bot-data/tinhieu-journal.json';
-  const GR = (s) => s.grade === 'W' ? '<span class="chip" style="background:rgba(56,189,248,.15);color:#38bdf8" title="Kịch bản Sóng 15: quét thanh khoản → MSS M5 → limit mép FVG M5, TP ≥ 15 giá">🌊 Sóng 15</span>' : s.grade === 'B' ? '<span class="chip" title="Setup quét thanh khoản ICT/SMC — chỉ ghi nhận, chưa đạt bộ lọc chuẩn">Ghi nhận</span>' : '<span class="chip buy" title="Đạt quy tắc chuẩn đã kiểm chứng">Chuẩn</span>';
+  const GR = (s) => s.grade === 'S' ? '<span class="chip" style="background:rgba(250,204,21,.15);color:#facc15" title="BOS 15: quét thanh khoản → BOS tiếp diễn + FVG trên M15/M30, SL 10 giá, TP 15 giá">🎯 BOS 15</span>' : s.grade === 'W' ? '<span class="chip" style="background:rgba(56,189,248,.15);color:#38bdf8" title="Kịch bản Sóng 15: quét thanh khoản → MSS M5 → limit mép FVG M5, TP ≥ 15 giá">🌊 Sóng 15</span>' : s.grade === 'B' ? '<span class="chip" title="Setup quét thanh khoản ICT/SMC — chỉ ghi nhận, chưa đạt bộ lọc chuẩn">Ghi nhận</span>' : '<span class="chip buy" title="Đạt quy tắc chuẩn đã kiểm chứng">Chuẩn</span>';
   const v3Active = () => { const L = (S.v3 || []).filter(s => s.state === 'PENDING' || s.state === 'OPEN'); return L.filter(s => s.grade !== 'B').slice(-1)[0] || L.slice(-1)[0] || null; };
   // lot theo % rủi ro: Exness XAUUSDm 1 lot = 100 oz, BTCUSDm 1 lot = 1 BTC; làm tròn xuống 0.01
   const CONTRACT = { XAU: 100, BTC: 1 };
@@ -475,7 +475,7 @@
       const off = S.isMT5 ? 0 : (S.offset[sym] || 0);
       const cd = closedOnly(d, off);
       S.res = SMC.analyze(cd, { ...S.cfg, minBuf: SYMS[sym].minBuf, spread: SYMS[sym].spread });
-      S.v3 = V3.runAll({ m15: cd.m15, h1: cd.h1 }, { spread: SYMS[sym].spread, now: Date.now() });
+      { const all = V3.runAll({ m15: cd.m15, h1: cd.h1 }, { spread: SYMS[sym].spread, now: Date.now() }); S.v3 = sym === 'XAU' ? [...all, ...V3.runBos({ m15: cd.m15, h1: cd.h1 }, { spread: SYMS[sym].spread, now: Date.now() })].sort((a, b) => a.ct - b.ct) : all; }
       const m5 = d.m5, last = m5[m5.length - 1], prevDay = m5[Math.max(0, m5.length - 289)];
       $('px').textContent = fx(last.c + off);
       const ch = (last.c - prevDay.c) / prevDay.c * 100; $('chg').textContent = (ch >= 0 ? '+' : '') + ch.toFixed(2) + '% 24h'; $('chg').className = 'chip ' + (ch >= 0 ? 'buy' : 'sell');

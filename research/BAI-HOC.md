@@ -94,3 +94,15 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
 4. SL ngoài cực trị quét + 0.3 ATR M15 + spread. TP = max(2R, 15 giá). Giữ lệnh tối đa 2 ngày.
 - **Kết quả 12 tháng:** 58 lệnh (~1.2/tuần), 20 TP / 37 SL, thắng 34%, TP trung bình ~32 giá, +3.2R (+94 USD với 0.02 lot). Dương ở cả hai nửa năm, nhưng lợi thế mỏng.
 - **Các cách khác đều kém:** thêm phiên Á, entry CE FVG, TP cố định 15 giá, TP 3R, SL +0.5 ATR.
+
+## Mô hình BOS 15 (vàng M15/M30, SL 10 · TP 15) — v4.4, 05/11/2026
+- **Cách tìm:** kiểm tra mọi cấu trúc ICT/SMC trên M5/M15/M30 (research/struct15.mjs, sl10.mjs). Chỉ có "quét thanh khoản → BOS tiếp diễn + FVG" trên M15 và M30 đạt TP 15 / SL 10 giá mà có lời ở cả hai nửa năm.
+- **Quy tắc:**
+  1. Râu nến quét PDH/PDL, tuần, London, phiên Á hoặc swing.
+  2. BOS cùng chiều cấu trúc swing của khung, có displacement và FVG.
+  3. Limit mép FVG, SL 10 giá, TP 15 giá.
+  4. Chờ khớp M15 2h, M30 3h. Mỗi khung giữ một lệnh riêng.
+- **Kết quả 12 tháng:**
+  - Tính một lần: 43 lệnh, 25 TP / 18 SL, thắng 58%, +347 USD (0.02 lot). 6 tháng trước +268 USD, 6 tháng gần +79 USD, 3 tháng gần thắng 67% (+186 USD).
+  - Tua từng nến như máy chủ: 48 lệnh, thắng 52%, +240 USD.
+- **Đã sửa lỗi:** đỉnh/đáy tuần trước bị tính sai khi máy chủ chỉ có một phần tuần, làm sinh ra lệnh "quét PWL" giả.

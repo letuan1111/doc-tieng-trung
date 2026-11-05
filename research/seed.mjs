@@ -11,7 +11,7 @@ const out = [];
 for (const [sym, S] of Object.entries(SYMS)) {
   const D = { m15: load(sym, 'm15'), h1: load(sym, 'h1') }; D.m30 = V3.resample(D.m15, V3.MS.m30);
   const end = D.m15[D.m15.length - 1].ct;
-  for (const s of V3.runAll(D, { spread: S.spread, now: end })) {
+  for (const s of [...V3.runAll(D, { spread: S.spread, now: end }), ...(sym === 'XAU' ? V3.runBos(D, { spread: S.spread, now: end }) : [])]) {
     if (!V3.FINAL[s.state] || (s.exitT || s.ct) > end - 2 * 864e5) continue;
     out.push({ ...s, id: `${sym}-${s.id}`, sym, ver: V3.version, src: 'OKX ' + S.okx + ' (tính lại 12 tháng)', seen: end, lastT: end, dp: S.dp, live: false });
   }

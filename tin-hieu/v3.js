@@ -40,11 +40,11 @@
   function prevDay(c) { const out = new Array(c.length); let day = null, full = false, dH = -Infinity, dL = Infinity, pH = null, pL = null; const step = c.length > 1 ? c[1].t - c[0].t : 0; for (let i = 0; i < c.length; i++) { const dk = Math.floor(c[i].t / 864e5); if (dk !== day) { if (day !== null) { pH = full ? dH : null; pL = full ? dL : null; } day = dk; full = c[i].t - dk * 864e5 <= step; dH = -Infinity; dL = Infinity; } out[i] = { pH, pL }; dH = Math.max(dH, c[i].h); dL = Math.min(dL, c[i].l); } return out; }
   // đỉnh/đáy phiên Á (00–06 UTC), London (07–12 UTC) của ngày hiện tại (chỉ khi phiên đã kết thúc) và tuần trước
   function sessLv(c) {
-    const out = new Array(c.length); let day = null, aH = -Infinity, aL = Infinity, lH = -Infinity, lL = Infinity, wk = null, wH = -Infinity, wL = Infinity, pwH = null, pwL = null;
+    const out = new Array(c.length); let day = null, aH = -Infinity, aL = Infinity, lH = -Infinity, lL = Infinity, wk = null, wH = -Infinity, wL = Infinity, pwH = null, pwL = null, wFull = false;
     for (let i = 0; i < c.length; i++) {
       const x = c[i], dk = Math.floor(x.t / 864e5), hr = new Date(x.t).getUTCHours(), wkk = Math.floor((dk + 3) / 7);
       if (dk !== day) { day = dk; aH = -Infinity; aL = Infinity; lH = -Infinity; lL = Infinity; }
-      if (wkk !== wk) { if (wk !== null) { pwH = wH; pwL = wL; } wk = wkk; wH = -Infinity; wL = Infinity; }
+      if (wkk !== wk) { if (wk !== null && wFull) { pwH = wH; pwL = wL; } else if (wk !== null) { pwH = pwL = null; } wFull = (dk + 3) % 7 === 0 && x.t % 864e5 < 36e5; wk = wkk; wH = -Infinity; wL = Infinity; } // tuần trước chỉ dùng khi có đủ dữ liệu từ đầu tuần
       out[i] = { aH: hr >= 6 && aH > -Infinity ? aH : null, aL: hr >= 6 && aL < Infinity ? aL : null, lH: hr >= 12 && lH > -Infinity ? lH : null, lL: hr >= 12 && lL < Infinity ? lL : null, wH: pwH, wL: pwL };
       if (hr < 6) { aH = Math.max(aH, x.h); aL = Math.min(aL, x.l); } else if (hr >= 7 && hr < 12) { lH = Math.max(lH, x.h); lL = Math.min(lL, x.l); }
       wH = Math.max(wH, x.h); wL = Math.min(wL, x.l);
@@ -78,6 +78,7 @@
     H = H || {}; const h1 = H.h1 || (tf === 'h1' ? c : null), h4 = h1 ? resample(h1, MS.h4) : null;
     const eTF = emaDir(c), eH1 = h1 ? mapHTF(c, h1, emaDir(h1)) : [], eH4 = h4 ? mapHTF(c, h4, emaDir(h4)) : [], e89 = ema(c.map(x => x.c), 89);
     const S1 = h1 ? mapHTF(c, h1, swingStruct(h1)) : [], S4 = h4 ? mapHTF(c, h4, swingStruct(h4)) : [];
+    const STF = swingStruct(c);
     const day = h1 ? resample(h1, 864e5) : [], adr = day.map((_, i) => { if (i < 14) return null; let q = 0; for (let u = i - 14; u < i; u++) q += day[u].h - day[u].l; return q / 14; });
     const dayAt = new Map(day.map((d, i) => [d.t, i]));
     let ih = 0, il = 0; const sh = [], sl = [], bH = new Set(), bL = new Set();
@@ -121,7 +122,8 @@
         const leg = Math.abs(ext - oP), ret = (px) => leg > 0 ? +(d > 0 ? (ext - px) / leg : (px - ext) / leg).toFixed(2) : null;
         const s4 = S4[k], s1 = S1[k], pdR = (px, s) => s && s.hi > s.lo ? +(d > 0 ? (px - s.lo) / (s.hi - s.lo) : (s.hi - px) / (s.hi - s.lo)).toFixed(2) : null;
         const ce = (fvg.top + fvg.bot) / 2, edge = d > 0 ? fvg.top : fvg.bot, ote = ext - d * 0.705 * leg;
-        Object.assign(ctx, { st1: s1 ? s1.d === d : null, st4: s4 ? s4.d === d : null, kzSweep: KZ(c[oi].t), kzMss: KZ(x.t),
+        const pS = STF[Math.max(0, oi - 1)];
+        Object.assign(ctx, { bos: !!(pS && pS.d === d), st1: s1 ? s1.d === d : null, st4: s4 ? s4.d === d : null, kzSweep: KZ(c[oi].t), kzMss: KZ(x.t),
           retCE: ret(ce), retEdge: ret(edge), fvgOTE: Math.max(d > 0 ? fvg.bot : fvg.bot, Math.min(ext - d * 0.62 * leg, ext - d * 0.79 * leg)) <= Math.min(fvg.top, Math.max(ext - d * 0.62 * leg, ext - d * 0.79 * leg)),
           pd4: pdR(ce, s4), pd1: pdR(ce, s1) });
         // thanh khoản đối diện (đích của con sóng): PDH/PDL hôm nay + đỉnh/đáy swing chưa bị phá, vượt quá cực trị sóng
@@ -225,6 +227,18 @@
     for (const s of Bl) { if (s.state === 'SKIP') continue; const a = map.get(s.id); if (a && a.state !== 'SKIP') continue; s.grade = 'B'; map.set(s.id, s); }
     return [...map.values()].sort((a, b) => a.ct - b.ct || TFS.indexOf(a.tf) - TFS.indexOf(b.tf));
   }
+  // Mô hình "BOS 15" (vàng): quét thanh khoản (PDH/PDL, tuần, London, phiên Á, swing) → BOS tiếp diễn (phá cùng chiều cấu trúc swing của khung)
+  // có displacement + FVG trên M15 / M30 → LIMIT mép FVG · SL 10 giá · TP 15 giá. Kiểm tra 12 tháng (research/sl10.mjs): M15 thắng 56–69%, M30 ~58%.
+  const BOS15 = { tfs: ['m15', 'm30'], sl: 10, tp: 15, expiry: { m15: 8, m30: 6 }, hold: { m15: 192, m30: 96 } };
+  function runBos(D, opt) {
+    opt = opt || {}; const save = {}; for (const tf of TFS) save[tf] = CFG[tf];
+    try {
+      for (const tf of TFS) CFG[tf] = BOS15.tfs.includes(tf) ? { ...save[tf], entry: 'edge', liq: LIQ_ALL, filter: (x) => x.bos, sides: [1, -1], slPts: BOS15.sl, tpPts: BOS15.tp, minRiskATR: 0, expiry: BOS15.expiry[tf], hold: BOS15.hold[tf] } : { ...save[tf], sides: [] };
+      const L = run(D, { ...opt, perTF: opt.perTF != null ? opt.perTF : true });
+      for (const s of L) { s.grade = 'S'; s.id = s.id + '-bos'; }
+      return L;
+    } finally { for (const tf of TFS) CFG[tf] = save[tf]; }
+  }
   // mô tả bối cảnh bằng lời
   function ctxText(x, side) {
     if (!x) return '';
@@ -238,7 +252,7 @@
     return { signals: list.filter(s => s.state !== 'SKIP').length, closed: done.length, wins: w, losses: done.filter(s => s.state === 'LOSS').length, winRate: done.length ? w / done.length : 0, netR: R, pf: gl ? gw / gl : (gw ? Infinity : 0), maxDD: dd };
   }
   const STATE_VI = { PENDING: 'Chờ khớp', OPEN: 'Đang chạy', WIN: 'Chạm TP', LOSS: 'Dính SL', TIME: 'Hết giờ, đóng theo giá', MISSED: 'Lỡ (chạm TP trước khi khớp)', EXPIRED: 'Hết hạn chờ', INVALID: 'Huỷ (phá đỉnh/đáy quét)', SKIP: 'Bỏ qua' };
-  const V3 = { run, runAll, LIQ_ALL, stats, setups, simulate, track, resample, ctxText, CFG, TFS, MS, RR, FINAL, STATE_VI, inWindow, version: 'v4.3-2026-11-05' };
+  const V3 = { run, runAll, runBos, BOS15, LIQ_ALL, stats, setups, simulate, track, resample, ctxText, CFG, TFS, MS, RR, FINAL, STATE_VI, inWindow, version: 'v4.4-2026-11-05' };
   if (typeof module === 'object' && module.exports) module.exports = V3;
   root.V3 = V3;
 })(typeof window !== 'undefined' ? window : globalThis);

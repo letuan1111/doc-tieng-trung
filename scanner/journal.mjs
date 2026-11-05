@@ -56,14 +56,14 @@ async function tgSend(text) {
   for (const id of CHATS) { try { await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: id, text, parse_mode: 'HTML', disable_web_page_preview: true }), signal: AbortSignal.timeout(15000) }); } catch (_) {} await sleep(350); }
 }
 function tgText(t) {
-  const f = (v) => v == null ? '—' : (+v).toFixed(t.dp ?? 2), side = t.side > 0 ? 'BUY' : 'SELL', tag = t.grade === 'W' ? '🌊 Sóng 15' : t.grade === 'B' ? '🔎 Ghi nhận' : '⭐ Chuẩn';
+  const f = (v) => v == null ? '—' : (+v).toFixed(t.dp ?? 2), side = t.side > 0 ? 'BUY' : 'SELL', tag = t.grade === 'S' ? '🎯 BOS 15' : t.grade === 'W' ? '🌊 Sóng 15' : t.grade === 'B' ? '🔎 Ghi nhận' : '⭐ Chuẩn';
   const head = `<b>${t.sym} · ${t.tf.toUpperCase()} · ${side} LIMIT</b> — ${tag}`;
   const zone = `Vùng FVG ${t.tf.toUpperCase()}: ${f(t.fvg && t.fvg.bot)} – ${f(t.fvg && t.fvg.top)}`;
   const lv = `Entry <b>${f(t.entry)}</b> · SL <b>${f(t.sl)}</b> · TP <b>${f(t.tp)}</b> (${(t.rr || 2).toFixed(1)}R)`;
   const sw = `Đã quét ${esc(t.sweepName)} ${f(t.sweep)} → MSS + FVG`;
   switch (t.state) {
     case 'PENDING': if (t.grade === 'W') return `🆕 ${head}\n${sw.replace(' → MSS + FVG', ' → MSS M5 + FVG M5')}\n${zone}\n${lv} · mục tiêu sóng <b>${f(Math.abs(t.tp - t.entry))} giá</b>\nHuỷ nếu chưa khớp trước ${vnT(t.ct + WAVE.CFG.expiry * 3e5)}\n<a href="${PAGE}">Mở trang</a>`;
-      return `🆕 ${head}\n${sw}\n${zone}\n${lv}\n${t.ctx ? '<i>' + esc(V3.ctxText(t.ctx)) + '</i>\n' : ''}Huỷ nếu chưa khớp trước ${vnT(t.ct + V3.CFG[t.tf].expiry * MS[t.tf])}\n<a href="${PAGE}">Mở trang</a>`;
+      return `🆕 ${head}\n${sw}\n${zone}\n${lv}\n${t.ctx ? '<i>' + esc(V3.ctxText(t.ctx)) + '</i>\n' : ''}Huỷ nếu chưa khớp trước ${vnT(t.ct + (t.grade === 'S' ? V3.BOS15.expiry[t.tf] : V3.CFG[t.tf].expiry) * MS[t.tf])}\n<a href="${PAGE}">Mở trang</a>`;
     case 'OPEN': return `🎯 Đã khớp ${head}\n${lv}\nKhớp lúc ${vnT(t.fillT)}`;
     case 'WIN': return `✅ Chạm TP ${head}\n${lv}\nKết quả <b>+${t.r.toFixed(2)}R</b>${t.pts != null ? ` (+${t.pts.toFixed(1)} giá)` : ''} · đóng ${vnT(t.exitT)}`;
     case 'LOSS': return `❌ Dính SL ${head}\n${lv}\nKết quả <b>${t.r.toFixed(2)}R</b>${t.pts != null ? ` (${t.pts.toFixed(1)} giá)` : ''} · đóng ${vnT(t.exitT)}`;
@@ -92,6 +92,7 @@ for (const sym of Object.keys(SYMS)) {
   const D = { m15: closed(L.D.m15), h1: closed(L.D.h1) }; D.m30 = V3.resample(D.m15, MS.m30);
   if (sym === 'XAU') XAU15 = D.m15;
   const res = V3.runAll(D, { spread: SYMS[sym].spread, now: NOW() });
+  if (sym === 'XAU') res.push(...V3.runBos(D, { spread: SYMS[sym].spread, now: NOW() }));
   for (const s of res) {
     if (s.state === 'SKIP' && /^M5 không có/.test(s.why || '')) continue; // M5 đứng riêng: không phải tín hiệu
     const id = `${sym}-${s.id}`, old = byId.get(id);
@@ -102,9 +103,10 @@ for (const sym of Object.keys(SYMS)) {
       J.trades.push(rec); byId.set(id, rec); added++; notify(rec); continue;
     }
     if (V3.FINAL[old.state]) continue;
-    if (s.state === 'SKIP' && old.state === 'PENDING' && old.grade === 'A') { old.state = 'SKIP'; old.why = s.why; old.exitT = NOW(); changed++; notify(old); continue; }
+    if (s.state === 'SKIP' && old.state === 'PENDING' && (old.grade === 'A' || old.grade === 'S')) { old.state = 'SKIP'; old.why = s.why; old.exitT = NOW(); changed++; notify(old); continue; }
     if (!D[old.tf]) continue; // lệnh M5 của bản V3 cũ: không còn dữ liệu M5
-    const before = old.state; V3.track(old, D[old.tf]); if (old.state !== before) { changed++; notify(old); }
+    const sv = V3.CFG[old.tf]; if (old.grade === 'S') V3.CFG[old.tf] = { ...sv, expiry: V3.BOS15.expiry[old.tf], hold: V3.BOS15.hold[old.tf] };
+    const before = old.state; V3.track(old, D[old.tf]); V3.CFG[old.tf] = sv; if (old.state !== before) { changed++; notify(old); }
   }
 }
 // ---- Sóng 15 (vàng, M5): quét thanh khoản → MSS M5 → limit mép FVG M5 · SL ngoài điểm quét · TP max(2R, 15 giá)
@@ -127,7 +129,7 @@ try {
 for (const t of J.trades) if (t.grade !== 'W' && !V3.FINAL[t.state] && NOW() - t.ct > 30 * 864e5) { t.state = 'TIME'; t.why = 'Quá 30 ngày không cập nhật được'; }
 J.trades.sort((a, b) => a.ct - b.ct);
 J.updated = NOW(); J.errors = errs;
-J.stats = {}; for (const sym of Object.keys(SYMS)) J.stats[sym] = { chuan: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'A')), song15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'W')), tatca: V3.stats(J.trades.filter(t => t.sym === sym)) };
+J.stats = {}; for (const sym of Object.keys(SYMS)) J.stats[sym] = { chuan: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'A')), song15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'W')), bos15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'S')), tatca: V3.stats(J.trades.filter(t => t.sym === sym)) };
 fs.mkdirSync(DATA, { recursive: true });
 J.telegram = { chats: CHATS.length, token: !!TOKEN };
 fs.writeFileSync(FILE, JSON.stringify(J));

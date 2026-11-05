@@ -16,7 +16,7 @@
   function run(D, opt) {
     opt = opt || {}; const cfg = { ...CFG, ...(opt.cfg || {}) }, c = D.m5, spread = opt.spread || 0, out = [];
     if (!c || c.length < 150 || !D.m15 || D.m15.length < 120) return out;
-    const n = c.length, cl = D.m15.map(x => x.c), E34 = mapHTF(c, D.m15, ema(cl, 34)), E89 = mapHTF(c, D.m15, ema(cl, 89)), AT = mapHTF(c, D.m15, atr(D.m15));
+    const EC = D.emaC || D.m15, n = c.length, cl = EC.map(x => x.c), E34 = mapHTF(c, EC, ema(cl, 34)), E89 = mapHTF(c, EC, ema(cl, 89)), AT = mapHTF(c, D.m15, atr(D.m15)); // EMA34/89 theo khung D.emaC (mặc định M15)
     const pv = pivots(c, cfg.L), used = new Set(); let ih = 0, il = 0; const sh = [], sl = [];
     for (let k = 100; k < n; k++) {
       while (ih < pv.H.length && pv.H[ih].conf <= k) sh.push(pv.H[ih++]); while (il < pv.L.length && pv.L[il].conf <= k) sl.push(pv.L[il++]);

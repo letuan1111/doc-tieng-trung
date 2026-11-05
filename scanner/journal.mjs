@@ -80,6 +80,9 @@ try { J = { ...J, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) }; } catch (_) {}
 if (J.version !== V3.version) J.trades = J.trades.filter(t => t.live);
 J.version = V3.version; J.rules = RULES;
 const byId = new Map(J.trades.map(x => [x.id, x]));
+// nạp sẵn lịch sử 12 tháng (tính lại từ OKX) — chỉ thêm lệnh chưa có, cùng bản quy tắc
+try { const SEED = JSON.parse(fs.readFileSync(path.join(__dir, 'journal-seed.json'), 'utf8'));
+  if (SEED.version === V3.version) { let n = 0; for (const t of SEED.trades) if (!byId.has(t.id)) { J.trades.push(t); byId.set(t.id, t); n++; } if (n) console.log(`Nạp ${n} lệnh lịch sử 12 tháng`); } } catch (_) {}
 let added = 0, changed = 0; const errs = [];
 for (const sym of Object.keys(SYMS)) {
   let L;

@@ -293,7 +293,7 @@
     $('stats').innerHTML = `<div><b>${st.total}</b><small>Setup</small></div><div><b>${st.filled}</b><small>Đã khớp</small></div>
       <div><b class="win">${st.wins}</b><small>Chạm TP1</small></div><div><b class="loss">${st.losses}</b><small>Dính SL</small></div>
       <div><b>${(st.winRate * 100).toFixed(0)}%</b><small>Tỷ lệ thắng</small></div><div><b class="${st.netR >= 0 ? 'win' : 'loss'}">${st.netR >= 0 ? '+' : ''}${st.netR.toFixed(2)}R</b><small>Tổng R</small></div>
-      <div><b>${isFinite(st.pf) ? st.pf.toFixed(2) : '∞'}</b><small>Profit factor</small></div><div><b>${st.maxDD.toFixed(1)}R</b><small>Sụt giảm tối đa</small></div>`;
+      <div><b>${isFinite(st.pf) ? st.pf.toFixed(2) : '∞'}</b><small>Profit factor</small></div><div><b>${st.maxDD.toFixed(1)}R</b><small>Sụt giảm tối đa</small></div>${(() => { const a = V3.stats(rows.filter(t => t.state !== 'SKIP' && t.grade !== 'B')), b = V3.stats(rows.filter(t => t.state !== 'SKIP' && t.grade === 'B')); return `<div><b class="${a.netR >= 0 ? 'win' : 'loss'}">${a.netR >= 0 ? '+' : ''}${a.netR.toFixed(1)}R</b><small>⭐ Chuẩn (${a.closed} lệnh)</small></div><div><b class="${b.netR >= 0 ? 'win' : 'loss'}">${b.netR >= 0 ? '+' : ''}${b.netR.toFixed(1)}R</b><small>🔎 Ghi nhận (${b.closed} lệnh)</small></div>`; })()}`;
     const TS = S.res.tierStats;
     $('tiers').innerHTML = `<table><thead><tr><th>Hạng</th><th>Setup</th><th>Đã đóng</th><th>Thắng</th><th>R/lệnh</th><th>Tổng R</th><th>PF</th></tr></thead><tbody>` +
       Object.entries(TS).map(([k, v]) => `<tr${k === 'Tất cả' ? ' class="muted"' : ''}><td><b>${k}</b></td><td>${v.total}</td><td>${v.closed}</td><td>${v.closed ? (v.winRate * 100).toFixed(0) + '%' : '—'}</td>
@@ -362,15 +362,17 @@
     const J = S.journal;
     if (!J) { $('jBody').innerHTML = `<tr><td colspan="9" class="muted">${S.jErr ? 'Chưa đọc được nhật ký (' + esc(S.jErr) + '). Máy chủ ghi lần đầu sau khi workflow chạy.' : 'Đang tải nhật ký…'}</td></tr>`; return; }
     const rows = jRows(), st = V3.stats(rows.filter(t => t.state !== 'SKIP')), p = (t, v) => v == null ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: t.dp || 2, maximumFractionDigits: t.dp || 2 });
+    setTimeout(() => { const b = $('jMore'); if (b) b.onclick = () => { S.jLimit = (S.jLimit || 200) + 300; renderJournal(); }; });
     $('jUpd').textContent = `Máy chủ cập nhật ${new Date(J.updated).toLocaleString('vi-VN')}${J.errors && J.errors.length ? ' · lỗi: ' + J.errors.join('; ') : ''}`;
     $('jStats').innerHTML = `<div><b>${st.signals}</b><small>Tín hiệu</small></div><div><b>${st.closed}</b><small>Đã đóng</small></div>
       <div><b class="win">${st.wins}</b><small>Thắng</small></div><div><b class="loss">${st.losses}</b><small>Dính SL</small></div>
       <div><b>${(st.winRate * 100).toFixed(0)}%</b><small>Tỷ lệ thắng</small></div><div><b class="${st.netR >= 0 ? 'win' : 'loss'}">${st.netR >= 0 ? '+' : ''}${st.netR.toFixed(2)}R</b><small>Tổng R</small></div>
       <div><b>${isFinite(st.pf) ? st.pf.toFixed(2) : '∞'}</b><small>Profit factor</small></div><div><b>${st.maxDD.toFixed(1)}R</b><small>Sụt giảm tối đa</small></div>`;
-    $('jBody').innerHTML = rows.length ? rows.map(t => `<tr><td>${ft(t.ct)}</td><td>${t.sym} · ${t.tf.toUpperCase()} ${GR(t)}</td><td><span class="chip ${t.side > 0 ? 'buy' : 'sell'}">${t.side > 0 ? 'BUY' : 'SELL'}</span></td>
+    const lim = S.jLimit || 200, shown = rows.slice(0, lim);
+    $('jBody').innerHTML = rows.length ? shown.map(t => `<tr><td>${ft(t.ct)}</td><td>${t.sym} · ${t.tf.toUpperCase()} ${GR(t)}</td><td><span class="chip ${t.side > 0 ? 'buy' : 'sell'}">${t.side > 0 ? 'BUY' : 'SELL'}</span></td>
       <td class="mono">${t.sweepName} ${p(t, t.sweep)}</td><td class="mono">${p(t, t.entry)}${t.fvg ? `<br><small class="note">FVG ${t.tf.toUpperCase()} ${p(t, t.fvg.bot)}–${p(t, t.fvg.top)}</small>` : ''}</td><td class="mono">${p(t, t.sl)}</td><td class="mono">${p(t, t.tp)}</td>
       <td class="${t.r > 0 ? 'win' : t.r < 0 ? 'loss' : 'muted'}">${V3.STATE_VI[t.state] || t.state}${t.r != null ? ` (${t.r > 0 ? '+' : ''}${t.r.toFixed(2)}R)` : ''}</td>
-      <td class="note">${t.ctx ? '<span title="Bối cảnh giá lúc tín hiệu">' + esc(V3.ctxText(t.ctx)) + '</span><br>' : ''}${t.ver && t.ver !== V3.version ? '[' + esc(t.ver) + '] ' : (!t.ver ? '[v3 cũ] ' : '')}${esc(t.why || '')}${t.live === false ? ' · tính lại khi bật nhật ký' : ''}${t.fillT ? ' · khớp ' + ft(t.fillT) : ''}${t.exitT && t.state !== 'PENDING' && t.state !== 'OPEN' ? ' · đóng ' + ft(t.exitT) : ''} · ${esc(t.src || '')}</td></tr>`).join('')
+      <td class="note">${t.ctx ? '<span title="Bối cảnh giá lúc tín hiệu">' + esc(V3.ctxText(t.ctx)) + '</span><br>' : ''}${t.ver && t.ver !== V3.version ? '[' + esc(t.ver) + '] ' : (!t.ver ? '[v3 cũ] ' : '')}${esc(t.why || '')}${t.live === false ? ' · tính lại từ lịch sử' : ''}${t.fillT ? ' · khớp ' + ft(t.fillT) : ''}${t.exitT && t.state !== 'PENDING' && t.state !== 'OPEN' ? ' · đóng ' + ft(t.exitT) : ''} · ${esc(t.src || '')}</td></tr>`).join('') + (rows.length > lim ? `<tr><td colspan="9" style="text-align:center"><button class="btn" id="jMore">Hiện thêm (${rows.length - lim} lệnh cũ hơn)</button></td></tr>` : '')
       : '<tr><td colspan="9" class="muted">Chưa có lệnh nào trong nhật ký.</td></tr>';
   }
   function journalCSV() {

@@ -141,11 +141,13 @@
     const cfg = CFG[e.tf], d = e.d, k = e.k;
     const entry = cfg.entry === 'ce' ? (e.fvg.top + e.fvg.bot) / 2 : cfg.entry === 'ote' ? e.ext - d * 0.705 * Math.abs(e.ext - e.oP) : (d > 0 ? e.fvg.top : e.fvg.bot);
     if (!(d > 0 ? entry < c[k].c && entry > e.oP : entry > c[k].c && entry < e.oP)) return null;
-    const sl = e.oP - d * (cfg.slATR * e.a + spread), risk = Math.abs(entry - sl);
-    if (risk < 0.6 * e.a || risk > 10 * e.a) return null;
+    const sl = cfg.slPts ? entry - d * (cfg.slPts + spread) : e.oP - d * (cfg.slATR * e.a + spread), risk = Math.abs(entry - sl); // slPts: SL cố định theo giá
+    if (risk < (cfg.minRiskATR != null ? cfg.minRiskATR : 0.6) * e.a || risk > 10 * e.a) return null;
     // TP: cfg.tp = số R cố định (mặc định 2) hoặc 'liq' = thanh khoản đối diện (tối thiểu tpMin R, tối đa tpMax R)
     let rr = typeof cfg.tp === 'number' ? cfg.tp : RR;
     if (cfg.tp === 'liq') { const lr = e.liq != null ? Math.abs(e.liq - entry) / risk : 0; rr = lr >= (cfg.tpMin || 2) ? Math.min(lr, cfg.tpMax || 5) : (cfg.tpMin || 2); }
+    if (cfg.maxRiskPts && risk > cfg.maxRiskPts) return null; // SL quá xa so với mục tiêu sóng
+    if (cfg.tpPts) rr = cfg.tpPts / risk; // TP cố định theo giá (ví dụ 15 giá vàng)
     const tp = entry + d * rr * risk, cost = spread / risk;
     const s = { id: `${e.tf}-${e.t}-${d > 0 ? 'B' : 'S'}`, tf: e.tf, side: d, t: e.t, ct: e.ct, entry, sl, tp, risk, sweep: e.lvl, sweepName: e.lvName || (d > 0 ? 'PDL' : 'PDH'), origin: e.oP,
       fvg: { top: e.fvg.top, bot: e.fvg.bot }, liq: e.liq, rr: +rr.toFixed(2), spread, ctx: e.ctx, state: 'PENDING', fillT: null, exitT: null, exitP: null, r: null };

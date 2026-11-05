@@ -139,3 +139,8 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
   - 12 tháng: 192 lệnh (~4/tuần), thắng 48%, +3630 USD (0.02 lot). 6 tháng trước +2611 USD, 6 tháng gần +1019 USD.
   - Lưu ý: các giờ này được chọn sau khi đã xem kết quả, nên có thể đẹp hơn thực tế.
 - **Các mô hình khác** (⭐ Chuẩn, 🔎 Ghi nhận, 🌊 Sóng 15, 🎯 BOS 15) và EMA hồi ngoài các giờ trên: chỉ ghi nhật ký. Trên trang, các lệnh được gửi Telegram có dấu 📲.
+
+## M5 gãy xu hướng (EMA34/89 M5) → vào ngược để giá test EMA34 M15 (kiểm 12 tháng, 2026-11-05)
+- Lúc EMA34 M5 cắt EMA89 M5 ngược xu hướng M15, 99% số lần giá ĐÃ chạm/vượt EMA34 M15 rồi (EMA89 M5 ≈ EMA30 M15) → tín hiệu luôn đến muộn, không còn đường tới mục tiêu.
+- Tín hiệu sớm hơn (giá M5 đóng cửa vượt EMA34 M5, giá còn cách EMA34 M15 ≥ 1 ATR, + quét + MSS + FVG): 280 lệnh, thắng 43%, TP TB 11 / SL TB 15 giá → −408$ (0.02 lot). Mọi biến thể đều lỗ cả năm; cách xa EMA hơn thì thắng còn thấp hơn (≥2 ATR: 26%).
+- Kết luận: không dùng làm chiến lược. Giữ EMA hồi (vào cùng xu hướng sau khi giá đã hồi về EMA) như cũ.

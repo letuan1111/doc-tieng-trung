@@ -44,7 +44,7 @@ async function load(sym) {
 const NOW = () => process.env.MOCK_END ? +process.env.MOCK_END : Date.now();
 const closed = (c) => c.filter(x => x.ct <= NOW());
 
-const RULES = 'Quét PDH/PDL → MSS có displacement → limit tại FVG · M15: cấu trúc swing H4 cùng chiều, ngoài phiên Á (mép, SL+0.5ATR) · M30: mọi setup (CE, SL+1ATR) · H1: cả hai chiều (mép, SL+1ATR) · chờ khớp M15 6h / M30 10h / H1 16h · TP 2R';
+const RULES = 'Ghi nhận mọi setup ICT/SMC quét thanh khoản (PDH/PDL, tuần, London, phiên Á, swing) → MSS + FVG; nhãn Chuẩn = Quét PDH/PDL → MSS có displacement → limit tại FVG · M15: cấu trúc swing H4 cùng chiều, ngoài phiên Á (mép, SL+0.5ATR) · M30: mọi setup (CE, SL+1ATR) · H1: cả hai chiều (mép, SL+1ATR) · chờ khớp M15 6h / M30 10h / H1 16h · TP 2R';
 let J = { version: V3.version, rules: RULES, trades: [] };
 try { J = { ...J, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) }; } catch (_) {}
 // đổi bản quy tắc: bỏ các lệnh "tính lại" của bản cũ (sẽ tính lại theo bản mới), giữ nguyên lệnh đã ghi trực tiếp
@@ -56,7 +56,7 @@ for (const sym of Object.keys(SYMS)) {
   let L;
   try { L = await load(sym); } catch (e) { errs.push(sym + ': ' + e.message); continue; }
   const D = { m15: closed(L.D.m15), h1: closed(L.D.h1) }; D.m30 = V3.resample(D.m15, MS.m30);
-  const res = V3.run(D, { spread: SYMS[sym].spread, now: NOW() });
+  const res = V3.runAll(D, { spread: SYMS[sym].spread, now: NOW() });
   for (const s of res) {
     if (s.state === 'SKIP' && /^M5 không có/.test(s.why || '')) continue; // M5 đứng riêng: không phải tín hiệu
     const id = `${sym}-${s.id}`, old = byId.get(id);
@@ -67,7 +67,7 @@ for (const sym of Object.keys(SYMS)) {
       J.trades.push(rec); byId.set(id, rec); added++; continue;
     }
     if (V3.FINAL[old.state]) continue;
-    if (s.state === 'SKIP' && old.state === 'PENDING') { old.state = 'SKIP'; old.why = s.why; old.exitT = NOW(); changed++; continue; }
+    if (s.state === 'SKIP' && old.state === 'PENDING' && old.grade === 'A') { old.state = 'SKIP'; old.why = s.why; old.exitT = NOW(); changed++; continue; }
     if (!D[old.tf]) continue; // lệnh M5 của bản V3 cũ: không còn dữ liệu M5
     const before = old.state; V3.track(old, D[old.tf]); if (old.state !== before) changed++;
   }
@@ -76,7 +76,7 @@ for (const sym of Object.keys(SYMS)) {
 for (const t of J.trades) if (!V3.FINAL[t.state] && NOW() - t.ct > 30 * 864e5) { t.state = 'TIME'; t.why = 'Quá 30 ngày không cập nhật được'; }
 J.trades.sort((a, b) => a.ct - b.ct);
 J.updated = NOW(); J.errors = errs;
-J.stats = {}; for (const sym of Object.keys(SYMS)) J.stats[sym] = V3.stats(J.trades.filter(t => t.sym === sym));
+J.stats = {}; for (const sym of Object.keys(SYMS)) J.stats[sym] = { chuan: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'A')), tatca: V3.stats(J.trades.filter(t => t.sym === sym)) };
 fs.mkdirSync(DATA, { recursive: true });
 fs.writeFileSync(FILE, JSON.stringify(J));
 console.log(`Nhật ký V4: ${J.trades.length} dòng (+${added} mới, ${changed} đổi trạng thái)${errs.length ? ' · lỗi: ' + errs.join('; ') : ''}`);

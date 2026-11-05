@@ -306,7 +306,8 @@
 
   // ---------------- V3: tín hiệu hiện tại + nhật ký máy chủ ----------------
   const JR = 'https://raw.githubusercontent.com/letuan1111/doc-tieng-trung/bot-data/tinhieu-journal.json';
-  const v3Active = () => (S.v3 || []).filter(s => s.state === 'PENDING' || s.state === 'OPEN').slice(-1)[0] || null;
+  const GR = (s) => s.grade === 'B' ? '<span class="chip" title="Setup quét thanh khoản ICT/SMC — chỉ ghi nhận, chưa đạt bộ lọc chuẩn">Ghi nhận</span>' : '<span class="chip buy" title="Đạt quy tắc chuẩn đã kiểm chứng">Chuẩn</span>';
+  const v3Active = () => { const L = (S.v3 || []).filter(s => s.state === 'PENDING' || s.state === 'OPEN'); return L.filter(s => s.grade !== 'B').slice(-1)[0] || L.slice(-1)[0] || null; };
   // lot theo % rủi ro: Exness XAUUSDm 1 lot = 100 oz, BTCUSDm 1 lot = 1 BTC; làm tròn xuống 0.01
   const CONTRACT = { XAU: 100, BTC: 1 };
   function lotFor(sym, risk) {
@@ -320,12 +321,13 @@
       <li><span class="y">1</span> Giá quét <b>PDH</b> (đỉnh hôm trước) hoặc <b>PDL</b> (đáy hôm trước) rồi đóng cửa quay lại</li>
       <li><span class="y">2</span> MSS/CHoCH ngược chiều cú quét, sóng có displacement + FVG</li>
       <li><span class="y">3</span> Limit tại FVG · <b>M15</b>: cấu trúc swing H4 cùng chiều (bias ICT), ngoài phiên Á 7h–13h (mép FVG, SL +0.5 ATR) · <b>M30</b>: mọi setup (giữa FVG, SL +1 ATR) · <b>H1</b>: cả BUY/SELL (mép FVG, SL +1 ATR) · chờ khớp M15 6h, M30 10h, H1 16h</li>
-      <li><span class="y">4</span> TP 2R · nhiều khung cùng chiều → chọn entry giá đẹp nhất · một lệnh một lúc</li></ul>`;
+      <li><span class="y">4</span> TP 2R · nhiều khung cùng chiều → chọn entry giá đẹp nhất · một lệnh một lúc</li>
+      <li><span class="y">+</span> Nhật ký còn <b>ghi nhận</b> mọi setup quét thanh khoản khác (đỉnh/đáy tuần, London, phiên Á, swing → MSS + FVG), nhãn <i>Ghi nhận</i>, mỗi khung một lệnh</li></ul>`;
     const hist = last.length ? `<p class="note" style="margin:8px 0 2px">Gần nhất:</p><ul class="ck">${last.map(s => `<li><span class="chip ${s.side > 0 ? 'buy' : 'sell'}">${s.side > 0 ? 'BUY' : 'SELL'} ${s.tf.toUpperCase()}</span> ${ft(s.ct)} · ${fx(s.entry)} · <b class="${s.r > 0 ? 'win' : s.r < 0 ? 'loss' : ''}">${V3.STATE_VI[s.state]}${s.r != null ? ` (${s.r > 0 ? '+' : ''}${s.r.toFixed(2)}R)` : ''}</b></li>`).join('')}</ul>` : '';
     if (!a) return `<div class="sig"><div class="t">Chưa có tín hiệu <span class="chip">ĐỨNG NGOÀI</span></div><p class="note" style="margin:8px 0 0">Chờ giá quét PDH/PDL rồi phá cấu trúc ngược lại.</p></div>${rules}${hist}`;
     const b = a.side > 0, exp = a.ct + V3.CFG[a.tf].expiry * TFMS[a.tf];
     return `<div class="sig ${b ? 'buy' : 'sell'}">
-      <div class="t">${b ? 'BUY' : 'SELL'} LIMIT ${a.tf.toUpperCase()} <span class="chip ${b ? 'buy' : 'sell'}">${a.state === 'OPEN' ? 'ĐÃ KHỚP · ĐANG CHẠY' : 'CHỜ GIÁ VỀ ENTRY'}</span></div>
+      <div class="t">${b ? 'BUY' : 'SELL'} LIMIT ${a.tf.toUpperCase()} ${GR(a)} <span class="chip ${b ? 'buy' : 'sell'}">${a.state === 'OPEN' ? 'ĐÃ KHỚP · ĐANG CHẠY' : 'CHỜ GIÁ VỀ ENTRY'}</span></div>
       <div class="lv">
         <span>Entry (FVG ${V3.CFG[a.tf].entry === 'ce' ? 'giữa' : 'mép'})</span><b>${fx(a.entry)}</b><span></span>
         <span>Stop Loss</span><b class="loss">${fx(a.sl)}</b><span>−1R · ${fx(a.risk)}</span>
@@ -342,7 +344,7 @@
       if (s.state === 'SKIP') continue;
       const prev = seen[s.id]; if (prev === s.state) continue; seen[s.id] = s.state;
       if (first && !prev) continue;
-      const tag = `${nm} ${s.side > 0 ? 'BUY' : 'SELL'} ${s.tf.toUpperCase()}`;
+      const tag = `${nm} ${s.side > 0 ? 'BUY' : 'SELL'} ${s.tf.toUpperCase()}${s.grade === 'B' ? ' [ghi nhận · ' + s.sweepName + ']' : ''}`;
       if (s.state === 'PENDING') alertUser(`🆕 V4 ${tag}`, `Quét ${s.sweepName} ${fx(s.sweep)} · Entry ${fx(s.entry)} · SL ${fx(s.sl)} · TP ${fx(s.tp)} (2R)`);
       else if (s.state === 'OPEN') alertUser(`🎯 V4 khớp ${tag}`, `Entry ${fx(s.entry)} · SL ${fx(s.sl)} · TP ${fx(s.tp)}`);
       else if (s.state === 'WIN') alertUser(`✅ V4 ${tag} chạm TP`, `+${s.r.toFixed(2)}R`);
@@ -353,8 +355,8 @@
   async function loadJournal() { try { S.journal = await getJSON(JR + '?t=' + Date.now()); S.jErr = ''; } catch (e) { S.jErr = e.message; } renderJournal(); }
   function jRows() {
     const J = S.journal; if (!J) return [];
-    const all = $('jSym').value === 'all', sk = $('jSkip').checked, old = $('jOld').checked;
-    return J.trades.filter(t => (all || t.sym === S.sym) && (sk || t.state !== 'SKIP') && (old || t.ver === V3.version)).slice().reverse();
+    const all = $('jSym').value === 'all', sk = $('jSkip').checked, old = $('jOld').checked, g = $('jGrade').value;
+    return J.trades.filter(t => (all || t.sym === S.sym) && (sk || t.state !== 'SKIP') && (old || t.ver === V3.version) && (g === 'all' || (t.grade || 'A') === g)).slice().reverse();
   }
   function renderJournal() {
     const J = S.journal;
@@ -365,7 +367,7 @@
       <div><b class="win">${st.wins}</b><small>Thắng</small></div><div><b class="loss">${st.losses}</b><small>Dính SL</small></div>
       <div><b>${(st.winRate * 100).toFixed(0)}%</b><small>Tỷ lệ thắng</small></div><div><b class="${st.netR >= 0 ? 'win' : 'loss'}">${st.netR >= 0 ? '+' : ''}${st.netR.toFixed(2)}R</b><small>Tổng R</small></div>
       <div><b>${isFinite(st.pf) ? st.pf.toFixed(2) : '∞'}</b><small>Profit factor</small></div><div><b>${st.maxDD.toFixed(1)}R</b><small>Sụt giảm tối đa</small></div>`;
-    $('jBody').innerHTML = rows.length ? rows.map(t => `<tr><td>${ft(t.ct)}</td><td>${t.sym} · ${t.tf.toUpperCase()}</td><td><span class="chip ${t.side > 0 ? 'buy' : 'sell'}">${t.side > 0 ? 'BUY' : 'SELL'}</span></td>
+    $('jBody').innerHTML = rows.length ? rows.map(t => `<tr><td>${ft(t.ct)}</td><td>${t.sym} · ${t.tf.toUpperCase()} ${GR(t)}</td><td><span class="chip ${t.side > 0 ? 'buy' : 'sell'}">${t.side > 0 ? 'BUY' : 'SELL'}</span></td>
       <td class="mono">${t.sweepName} ${p(t, t.sweep)}</td><td class="mono">${p(t, t.entry)}</td><td class="mono">${p(t, t.sl)}</td><td class="mono">${p(t, t.tp)}</td>
       <td class="${t.r > 0 ? 'win' : t.r < 0 ? 'loss' : 'muted'}">${V3.STATE_VI[t.state] || t.state}${t.r != null ? ` (${t.r > 0 ? '+' : ''}${t.r.toFixed(2)}R)` : ''}</td>
       <td class="note">${t.ctx ? '<span title="Bối cảnh giá lúc tín hiệu">' + esc(V3.ctxText(t.ctx)) + '</span><br>' : ''}${t.ver && t.ver !== V3.version ? '[' + esc(t.ver) + '] ' : (!t.ver ? '[v3 cũ] ' : '')}${esc(t.why || '')}${t.live === false ? ' · tính lại khi bật nhật ký' : ''}${t.fillT ? ' · khớp ' + ft(t.fillT) : ''}${t.exitT && t.state !== 'PENDING' && t.state !== 'OPEN' ? ' · đóng ' + ft(t.exitT) : ''} · ${esc(t.src || '')}</td></tr>`).join('')
@@ -373,9 +375,9 @@
   }
   function journalCSV() {
     const J = S.journal; if (!J) return;
-    const H = ['id', 'cap', 'khung', 'lenh', 'tao_luc', 'quet', 'muc_quet', 'entry', 'sl', 'tp', 'trang_thai', 'R', 'khop_luc', 'dong_luc', 'ghi_chu', 'nguon', 'phien', 'gio_vn', 'ema_khung', 'ema_h1', 'ema_h4', 'quet_sau_atr', 'song_atr', 'so_nen_song', 'fvg_atr', 'ngay_da_chay_adr', 'gia_luc_tin_hieu', 'phien_ban'];
+    const H = ['id', 'cap', 'khung', 'lenh', 'tao_luc', 'quet', 'muc_quet', 'entry', 'sl', 'tp', 'trang_thai', 'R', 'khop_luc', 'dong_luc', 'ghi_chu', 'nguon', 'phien', 'gio_vn', 'ema_khung', 'ema_h1', 'ema_h4', 'quet_sau_atr', 'song_atr', 'so_nen_song', 'fvg_atr', 'ngay_da_chay_adr', 'gia_luc_tin_hieu', 'phien_ban', 'nhan'];
     const iso = (t) => t ? new Date(t).toISOString() : '';
-    const rows = J.trades.map(t => [t.id, t.sym, t.tf, t.side > 0 ? 'BUY' : 'SELL', iso(t.ct), t.sweepName, t.sweep, t.entry, t.sl, t.tp, t.state, t.r == null ? '' : t.r.toFixed(3), iso(t.fillT), iso(t.exitT), t.why || '', t.src || '', ...(t.ctx ? [t.ctx.sess, t.ctx.hour, t.ctx.emaTF, t.ctx.emaH1, t.ctx.emaH4, t.ctx.depth, t.ctx.moveATR, t.ctx.legBars, t.ctx.fvgATR, t.ctx.dayUsed, t.ctx.price] : Array(11).fill('')), t.ver || 'v3']);
+    const rows = J.trades.map(t => [t.id, t.sym, t.tf, t.side > 0 ? 'BUY' : 'SELL', iso(t.ct), t.sweepName, t.sweep, t.entry, t.sl, t.tp, t.state, t.r == null ? '' : t.r.toFixed(3), iso(t.fillT), iso(t.exitT), t.why || '', t.src || '', ...(t.ctx ? [t.ctx.sess, t.ctx.hour, t.ctx.emaTF, t.ctx.emaH1, t.ctx.emaH4, t.ctx.depth, t.ctx.moveATR, t.ctx.legBars, t.ctx.fvgATR, t.ctx.dayUsed, t.ctx.price] : Array(11).fill('')), t.ver || 'v3', t.grade === 'B' ? 'Ghi nhận' : 'Chuẩn']);
     const csv = '\ufeff' + [H, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = `nhat-ky-v3-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
@@ -471,7 +473,7 @@
       const off = S.isMT5 ? 0 : (S.offset[sym] || 0);
       const cd = closedOnly(d, off);
       S.res = SMC.analyze(cd, { ...S.cfg, minBuf: SYMS[sym].minBuf, spread: SYMS[sym].spread });
-      S.v3 = V3.run({ m15: cd.m15, h1: cd.h1 }, { spread: SYMS[sym].spread, now: Date.now() });
+      S.v3 = V3.runAll({ m15: cd.m15, h1: cd.h1 }, { spread: SYMS[sym].spread, now: Date.now() });
       const m5 = d.m5, last = m5[m5.length - 1], prevDay = m5[Math.max(0, m5.length - 289)];
       $('px').textContent = fx(last.c + off);
       const ch = (last.c - prevDay.c) / prevDay.c * 100; $('chg').textContent = (ch >= 0 ? '+' : '') + ch.toFixed(2) + '% 24h'; $('chg').className = 'chip ' + (ch >= 0 ? 'buy' : 'sell');
@@ -531,7 +533,7 @@
 
   initChart(); refresh(true); loadBot();
   setInterval(tick, 15000); setInterval(loadBot, 15000);
-  $('jSym').onchange = renderJournal; $('jSkip').onchange = renderJournal; $('jOld').onchange = renderJournal;
+  $('jSym').onchange = renderJournal; $('jSkip').onchange = renderJournal; $('jOld').onchange = renderJournal; $('jGrade').onchange = renderJournal;
   $('rBal').value = LS.get('risk.bal', '') || ''; $('rPct').value = LS.get('risk.pct', 1);
   const saveRisk = () => { LS.set('risk.bal', +$('rBal').value || 0); LS.set('risk.pct', Math.min(5, Math.max(0.1, +$('rPct').value || 1))); if (S.v3) $('v3now').innerHTML = v3Card(); };
   $('rBal').onchange = saveRisk; $('rPct').onchange = saveRisk; $('jCsv').onclick = journalCSV;

@@ -213,6 +213,18 @@
     }
     return all;
   }
+  // Ghi nhận MỌI setup ICT/SMC có quét thanh khoản (PDH/PDL, tuần, London, phiên Á, swing) → MSS + displacement + FVG.
+  // grade 'A' = đạt quy tắc chuẩn (đã kiểm chứng có lời); 'B' = setup quét thanh khoản khác, chỉ để ghi nhận/theo dõi. Mỗi khung một lệnh riêng.
+  const LIQ_ALL = ['pd', 'pw', 'london', 'asia', 'swing'];
+  function runAll(D, opt) {
+    opt = opt || {};
+    const A = run(D, opt); for (const s of A) s.grade = 'A';
+    const save = {}; for (const tf of TFS) { save[tf] = CFG[tf]; CFG[tf] = { ...CFG[tf], liq: LIQ_ALL, filter: null, sides: [1, -1] }; }
+    let Bl; try { Bl = run(D, { ...opt, perTF: true }); } finally { for (const tf of TFS) CFG[tf] = save[tf]; }
+    const map = new Map(A.map(s => [s.id, s]));
+    for (const s of Bl) { if (s.state === 'SKIP') continue; const a = map.get(s.id); if (a && a.state !== 'SKIP') continue; s.grade = 'B'; map.set(s.id, s); }
+    return [...map.values()].sort((a, b) => a.ct - b.ct || TFS.indexOf(a.tf) - TFS.indexOf(b.tf));
+  }
   // mô tả bối cảnh bằng lời
   function ctxText(x, side) {
     if (!x) return '';
@@ -226,7 +238,7 @@
     return { signals: list.filter(s => s.state !== 'SKIP').length, closed: done.length, wins: w, losses: done.filter(s => s.state === 'LOSS').length, winRate: done.length ? w / done.length : 0, netR: R, pf: gl ? gw / gl : (gw ? Infinity : 0), maxDD: dd };
   }
   const STATE_VI = { PENDING: 'Chờ khớp', OPEN: 'Đang chạy', WIN: 'Chạm TP', LOSS: 'Dính SL', TIME: 'Hết giờ, đóng theo giá', MISSED: 'Lỡ (chạm TP trước khi khớp)', EXPIRED: 'Hết hạn chờ', INVALID: 'Huỷ (phá đỉnh/đáy quét)', SKIP: 'Bỏ qua' };
-  const V3 = { run, stats, setups, simulate, track, resample, ctxText, CFG, TFS, MS, RR, FINAL, STATE_VI, inWindow, version: 'v4.2.1-2026-11-05' };
+  const V3 = { run, runAll, LIQ_ALL, stats, setups, simulate, track, resample, ctxText, CFG, TFS, MS, RR, FINAL, STATE_VI, inWindow, version: 'v4.3-2026-11-05' };
   if (typeof module === 'object' && module.exports) module.exports = V3;
   root.V3 = V3;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: bot-tin-hieu
@@ -57,3 +58,9 @@ jobs:
           LOOP_MIN: 50
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash scanner/loop.sh
+
+      - name: Tự gọi lượt kế tiếp (GitHub hay bỏ lịch hẹn giờ)
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run bot-tin-hieu.yml --ref main -R "$GITHUB_REPOSITORY" || echo "Không gọi được lượt kế tiếp"

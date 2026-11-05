@@ -31,7 +31,7 @@ const st = (R) => { const w = R.filter(r => r.res === 'TP').length, U = (f) => R
   return { n: R.length, pd: R.length / 260, wr: w / (R.length || 1), U: U(() => true), a: U(r => r.t < S), b: U(r => r.t >= S), dd, ml, sl: R.reduce((s, r) => s + r.risk, 0) / (R.length || 1) }; };
 const fmt = (k, s) => `${(s.a > 0 && s.b > 0) ? '✓' : ' '} ${k.padEnd(56)} ${String(s.n).padStart(4)} (${s.pd.toFixed(1)}/ngày) · thắng ${String(Math.round(100 * s.wr)).padStart(2)}% · SL TB ${s.sl.toFixed(1)} · ${s.U >= 0 ? '+' : ''}${s.U.toFixed(0)}$ (trước ${s.a.toFixed(0)} · gần ${s.b.toFixed(0)}) · DD ${s.dd.toFixed(0)} · thua l.t. ${s.ml}`;
 export { trade, st, fmt, m15, m30 };
-if (process.argv[1].endsWith('emaquick.mjs')) {
+if ((process.argv[1] || '').endsWith('emaquick.mjs')) {
   const rows = [];
   for (const [tn, C, ms] of [['M15', m15, 9e5], ['M30', m30, 18e5]]) for (const p of [9, 21, 34, 55, 89]) for (const mode of ['limit', 'confirm', 'reject']) for (const trend of [false, true]) for (const rr of [1, 1.5, 2]) {
     const o = { mode, trend, rr }; const s = st(trade(C, ms, p, o)); if (s.n < 100) continue; rows.push({ k: `${tn} EMA${p} · ${mode === 'limit' ? 'limit tại EMA' : mode === 'confirm' ? 'chờ nến M5 bật lại' : 'chờ nến M5 rút râu'}${trend ? ' · +xu hướng M30' : ''} · TP ${rr}R`, ...s }); }

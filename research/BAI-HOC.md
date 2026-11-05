@@ -160,3 +160,9 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
 - Phần còn lại: EMA89 M15 chỉ cách vài giá, trong khi SL trên đỉnh quét cách ~25 giá (trung vị) → chỉ 25–58 lệnh/năm đủ RR ≥ 0.7, thắng 20–39%, kết quả quanh hoà vốn (−58…+225$), không đủ để tin.
 - Vào sớm hơn (quét + MSS, chưa chờ EMA M5 cắt), limit ở FVG/CE/OB/50%/OTE, TP EMA34 hoặc EMA89 M15: 18/18 biến thể đều lỗ (−162…−1571$).
 - Kết luận: EMA M5 cắt ngược xu hướng M15 = dấu hiệu giá ĐÃ hồi về EMA M15 → dùng để chuẩn bị lệnh THEO xu hướng M15 (EMA hồi), không SELL/BUY ngược.
+
+## Nhiều lệnh hơn để bắt nhịp HỒI theo xu hướng (pullback.mjs, pullback-check.mjs, 2026-11-05)
+- Grid 480 cấu hình (EMA M15/M30 · tín hiệu M5 mss/nhấn chìm/vượt EMA21/EMA9 cắt 21 · vùng hồi · quét/FVG/H1 · TP). 67 lời cả 2 nửa; cụm ổn định nhất đều là: EMA M30 + nến M5 đóng cửa vượt lại EMA21 M5.
+- Luật "Hồi EMA21": EMA34>EMA89 M30 (hoặc ngược lại) · trong 3h qua giá hồi chạm vùng EMA34–89 M30 (không xuyên quá EMA89 1 ATR), đáy hồi ≤ 2h trước · nến M5 đóng cửa vượt lại EMA21 M5 → vào nến sau · SL dưới đáy hồi + 0.3 ATR M15 (≤ 15 giá) · TP 2R.
+- Vàng 12 tháng: 413 lệnh (1.6/ngày), thắng 36%, SL TB 9 giá, +1001$ (trước 833 · gần 168), DD 266, thua liên tiếp 8. TP 3R: +1221$, DD 487. Spread 0.5 vẫn +1038$, 0.7 còn +721$. BUY và SELL đều lời. 10/13 tháng lời.
+- Yếu: 6 tháng gần lời ít hơn (+168$ với TP 2R); SL tối đa 10 giá thì hết lời; EMA M15 thay M30 thì 6 tháng gần lỗ; BTC cùng luật lỗ nhẹ → luật riêng cho vàng.

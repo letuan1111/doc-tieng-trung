@@ -91,6 +91,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
       <div class="toggles" style="margin:0 0 8px">
         <label><select id="jSym"><option value="cur">Cặp đang xem</option><option value="all">Tất cả cặp</option></select></label>
         <label><input type="checkbox" id="jSkip"> Hiện lệnh bị bỏ qua (có entry đẹp hơn / đang có lệnh)</label>
+        <label><input type="checkbox" id="jOld"> Hiện lệnh của bản cũ</label>
         <button class="btn" id="jCsv">⬇ Tải CSV</button>
         <span class="note" id="jUpd"></span>
       </div>
@@ -133,6 +134,8 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
         <label class="f hide">Kiểu Entry<select id="cEntry"><option value="A">A — FVG 50%</option><option value="B">B — Order Block</option></select></label>
         <label class="f hide">RR tối thiểu (TP1)<input id="cRR" type="number" step="0.1" min="0.5" value="1.5"></label>
         <label class="f hide">Điểm tối thiểu<input id="cScore" type="number" step="5" min="50" max="100" value="85"></label>
+        <label class="f">Vốn tài khoản (USD)<input id="rBal" type="number" step="10" min="0" placeholder="VD: 1000"></label>
+        <label class="f">Rủi ro mỗi lệnh (%)<input id="rPct" type="number" step="0.1" min="0.1" max="5" value="1"></label>
         <label class="f full">Giá Exness/MT5 hiện tại (để căn chỉnh chênh lệch)<input id="cEx" type="number" step="0.01" placeholder="VD: 4003.25 — để trống = không chỉnh"></label>
         <button class="btn full" id="cApply">Áp dụng</button>
       </div>
@@ -144,7 +147,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script src="engine.js?v=15"></script>
-<script src="v3.js?v=5"></script>
-<script src="app.js?v=18"></script>
+<script src="v3.js?v=6"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>

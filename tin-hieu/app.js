@@ -307,6 +307,13 @@
   // ---------------- V3: tín hiệu hiện tại + nhật ký máy chủ ----------------
   const JR = 'https://raw.githubusercontent.com/letuan1111/doc-tieng-trung/bot-data/tinhieu-journal.json';
   const v3Active = () => (S.v3 || []).filter(s => s.state === 'PENDING' || s.state === 'OPEN').slice(-1)[0] || null;
+  // lot theo % rủi ro: Exness XAUUSDm 1 lot = 100 oz, BTCUSDm 1 lot = 1 BTC; làm tròn xuống 0.01
+  const CONTRACT = { XAU: 100, BTC: 1 };
+  function lotFor(sym, risk) {
+    const bal = +LS.get('risk.bal', 0), pct = +LS.get('risk.pct', 1); if (!(bal > 0) || !(risk > 0)) return null;
+    const usd = bal * pct / 100, lot = Math.floor(usd / (risk * CONTRACT[sym]) * 100) / 100;
+    return { lot, usd, real: lot * risk * CONTRACT[sym] };
+  }
   function v3Card() {
     const a = v3Active(), last = (S.v3 || []).filter(s => s.state !== 'SKIP').slice(-3).reverse();
     const rules = `<ul class="ck" style="margin-top:8px">
@@ -322,7 +329,8 @@
       <div class="lv">
         <span>Entry (FVG ${V3.CFG[a.tf].entry === 'ce' ? 'giữa' : 'mép'})</span><b>${fx(a.entry)}</b><span></span>
         <span>Stop Loss</span><b class="loss">${fx(a.sl)}</b><span>−1R · ${fx(a.risk)}</span>
-        <span>Take Profit</span><b class="win">${fx(a.tp)}</b><span>+2R</span>
+        <span>Take Profit</span><b class="win">${fx(a.tp)}</b><span>+${(a.rr || 2).toFixed(1)}R</span>
+        ${(() => { const L = lotFor(S.sym, a.risk); return L ? `<span>Lot gợi ý</span><b>${L.lot >= 0.01 ? L.lot.toFixed(2) : '< 0.01'}</b><span>${L.lot >= 0.01 ? `mất ${L.real.toFixed(2)} USD nếu SL · lời ${(L.real * (a.rr || 2)).toFixed(2)} USD nếu TP` : `vốn quá nhỏ cho SL ${fx(a.risk)}`}</span>` : '<span>Lot gợi ý</span><b>—</b><span>nhập vốn ở mục Cài đặt</span>'; })()}
         <span>Đã quét ${a.sweepName}</span><b>${fx(a.sweep)}</b><span>${b ? 'đáy' : 'đỉnh'} sóng ${fx(a.origin)}</span>
       </div>
       ${a.ctx ? `<p class="note" style="margin:8px 0 0">Bối cảnh: ${esc(V3.ctxText(a.ctx))}</p>` : ''}
@@ -345,8 +353,8 @@
   async function loadJournal() { try { S.journal = await getJSON(JR + '?t=' + Date.now()); S.jErr = ''; } catch (e) { S.jErr = e.message; } renderJournal(); }
   function jRows() {
     const J = S.journal; if (!J) return [];
-    const all = $('jSym').value === 'all', sk = $('jSkip').checked;
-    return J.trades.filter(t => (all || t.sym === S.sym) && (sk || t.state !== 'SKIP')).slice().reverse();
+    const all = $('jSym').value === 'all', sk = $('jSkip').checked, old = $('jOld').checked;
+    return J.trades.filter(t => (all || t.sym === S.sym) && (sk || t.state !== 'SKIP') && (old || t.ver === V3.version)).slice().reverse();
   }
   function renderJournal() {
     const J = S.journal;
@@ -523,7 +531,10 @@
 
   initChart(); refresh(true); loadBot();
   setInterval(tick, 15000); setInterval(loadBot, 15000);
-  $('jSym').onchange = renderJournal; $('jSkip').onchange = renderJournal; $('jCsv').onclick = journalCSV;
+  $('jSym').onchange = renderJournal; $('jSkip').onchange = renderJournal; $('jOld').onchange = renderJournal;
+  $('rBal').value = LS.get('risk.bal', '') || ''; $('rPct').value = LS.get('risk.pct', 1);
+  const saveRisk = () => { LS.set('risk.bal', +$('rBal').value || 0); LS.set('risk.pct', Math.min(5, Math.max(0.1, +$('rPct').value || 1))); if (S.v3) $('v3now').innerHTML = v3Card(); };
+  $('rBal').onchange = saveRisk; $('rPct').onchange = saveRisk; $('jCsv').onclick = journalCSV;
   loadJournal(); setInterval(loadJournal, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(false); });
 })();

@@ -8,18 +8,20 @@
 //|  3. PHÁ VỠ cấu trúc M5 (MSS/BOS): nến M5 đóng cửa vượt đỉnh/đáy     |
 //|     swing gần nhất trước điểm hồi                                   |
 //|  4. Nhịp phá vỡ có FVG M5 → VÀO NGAY ở nến kế tiếp                  |
+//|  SMC: CHoCH/BOS M5 + Order Block tại điểm hồi · SL tối đa 30 giá    |
 //|  SL: ngoài đáy/đỉnh quét + 0.3 ATR M15 + spread · TP: 2R            |
+//|  Lot mặc định: 0.02 cố định                                         |
 //|  Chỉ vào trong giờ VN: 0,8,11,12,14,17,20,21 (thắng cao nhất)       |
-//| Kiểm tra 12 tháng (OKX, 0.02 lot): giờ lọc 192 lệnh, thắng 48%.     |
+//| Kiểm tra 12 tháng (OKX, 0.02 lot): 158 lệnh, thắng 46%, +2203 USD.  |
 //| KHÔNG đảm bảo lời — chạy thử DEMO trước khi dùng tiền thật.         |
 //+------------------------------------------------------------------+
 #property copyright "tin-hieu V4 — EMA hoi"
-#property version   "1.00"
+#property version   "1.10"
 #include <Trade/Trade.mqh>
 
 input group "=== Khối lượng & rủi ro ==="
-input double InpRiskPct      = 0.5;    // Rủi ro mỗi lệnh (% số dư). 0 = dùng lot cố định
-input double InpFixedLot     = 0.01;   // Lot cố định (khi rủi ro % = 0)
+input double InpRiskPct      = 0;      // Rủi ro mỗi lệnh (% số dư). 0 = dùng lot cố định
+input double InpFixedLot     = 0.02;   // Lot cố định (khi rủi ro % = 0)
 input double InpMaxLot       = 0.10;   // Lot tối đa mỗi lệnh
 input double InpRR           = 2.0;    // TP = RR × khoảng SL
 input int    InpMaxPositions = 1;      // Số lệnh mở cùng lúc tối đa (EA này)
@@ -27,6 +29,7 @@ input int    InpMaxTradesDay = 4;      // Số lệnh tối đa mỗi ngày
 input double InpMaxDailyLoss = 2.0;    // Ngừng vào lệnh trong ngày nếu lỗ ≥ % số dư (0 = tắt)
 input double InpMaxSpreadUSD = 0.60;   // Không vào nếu spread > (giá)
 input int    InpHoldHours    = 48;     // Đóng lệnh sau tối đa (giờ)
+input double InpMaxSLPrice   = 30;     // Bỏ lệnh nếu SL xa hơn (giá) — 0.02 lot mất tối đa ~60 USD
 
 input group "=== Cấu trúc ICT/SMC ==="
 input ENUM_TIMEFRAMES InpEmaTF = PERIOD_M30; // Khung EMA34/89
@@ -37,6 +40,7 @@ input double InpDeepATR    = 1.0;  // Không thủng EMA89 quá x ATR
 input double InpSlATR      = 0.3;  // Đệm SL ngoài điểm quét (× ATR M15)
 input bool   InpNeedSweep  = true; // Bắt buộc quét SSL/BSL
 input bool   InpNeedFVG    = true; // Bắt buộc có FVG M5 trong nhịp phá
+input bool   InpNeedOB     = true; // SMC: bắt buộc Order Block (nến ngược chiều cuối cùng tại điểm hồi)
 
 input group "=== Giờ vào lệnh (giờ Việt Nam) ==="
 input bool   InpUseHours   = true;
@@ -154,7 +158,7 @@ void OnTick()
    if(b0 == 0 || b0 == lastBar) return;          // chỉ xét khi có nến M5 mới (nến 1 vừa đóng)
    lastBar = b0;
 
-   int need = InpLookBars + 80;
+   int need = InpLookBars + 130;
    MqlRates c[]; ArraySetAsSeries(c, false);
    int n = CopyRates(_Symbol, PERIOD_M5, 1, need, c);   // c[n-1] = nến M5 vừa đóng
    if(n < need) return;
@@ -210,10 +214,28 @@ void OnTick()
       bool fvg = false; double fTop = 0, fBot = 0;
       for(int m = pi + 2; m <= k; m++) { double bot = d > 0 ? c[m-2].high : c[m].high, top = d > 0 ? c[m].low : c[m-2].low; if(top > bot) { fvg = true; fTop = top; fBot = bot; } }
       if(InpNeedFVG && !fvg) continue;
+      // SMC: Order Block tại điểm hồi
+      bool hasOB = false; double obTop = 0, obBot = 0;
+      for(int u = pi; u >= MathMax(0, pi - 3); u--) if(d * (c[u].close - c[u].open) < 0) { hasOB = true; obTop = MathMax(c[u].open, c[u].close); obBot = MathMin(c[u].open, c[u].close); break; }
+      if(InpNeedOB && !hasOB) continue;
+      // SMC: CHoCH (trước điểm hồi cấu trúc M5 đi ngược: đỉnh sau thấp hơn đỉnh trước với BUY) hay BOS (tiếp diễn)
+      double sw[2]; int ns = 0;
+      for(int i = pi - 1; i >= MathMax(L, pi - 60) && ns < 2; i--)
+      {
+         if(i + L > k) continue;
+         bool okB = true;
+         for(int q = 1; q <= L; q++)
+         {
+            if(d > 0) { if(c[i-q].high >= c[i].high || c[i+q].high > c[i].high) { okB = false; break; } }
+            else      { if(c[i-q].low  <= c[i].low  || c[i+q].low  < c[i].low)  { okB = false; break; } }
+         }
+         if(okB) sw[ns++] = d > 0 ? c[i].high : c[i].low;
+      }
+      string brk = (ns == 2 && (d > 0 ? sw[0] < sw[1] : sw[0] > sw[1])) ? "CHoCH" : "BOS";
 
       int hv = HourVN(c[k].time);
-      string msg = StringFormat("EMA hoi %s %s · %dh VN · quet %s %.2f -> pha vo M5 %.2f · FVG %.2f-%.2f · EMA34 %.2f / EMA89 %.2f",
-                                _Symbol, d > 0 ? "BUY" : "SELL", hv, d > 0 ? "SSL" : "BSL", pP, P, fBot, fTop, e34k, e89k);
+      string msg = StringFormat("EMA hoi %s %s · %dh VN · quet %s %.2f -> %s M5 %.2f · FVG %.2f-%.2f · OB %.2f-%.2f · EMA34 %.2f / EMA89 %.2f",
+                                _Symbol, d > 0 ? "BUY" : "SELL", hv, d > 0 ? "SSL" : "BSL", pP, brk, P, fBot, fTop, obBot, obTop, e34k, e89k);
       if(!hourOK[hv]) { Print("Bỏ qua (ngoài giờ tốt): ", msg); continue; }
 
       // kiểm tra an toàn
@@ -230,6 +252,7 @@ void OnTick()
       double tp = entry + d * InpRR * risk;
       double stops = (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * _Point;
       if(risk < stops) { Print("Bỏ qua: SL quá sát (stops level) · ", msg); continue; }
+      if(InpMaxSLPrice > 0 && risk > InpMaxSLPrice) { Print("Bỏ qua: SL ", DoubleToString(risk, 2), " giá > ", DoubleToString(InpMaxSLPrice, 0), " · ", msg); continue; }
       int dg = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
       sl = NormalizeDouble(sl, dg); tp = NormalizeDouble(tp, dg);
       msg += StringFormat(" · Entry %.2f SL %.2f TP %.2f", entry, sl, tp);

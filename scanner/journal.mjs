@@ -63,7 +63,7 @@ function tgText(t) {
   const lv = `Entry <b>${f(t.entry)}</b> · SL <b>${f(t.sl)}</b> · TP <b>${f(t.tp)}</b> (${(t.rr || 2).toFixed(1)}R)`;
   const sw = `Đã quét ${esc(t.sweepName)} ${f(t.sweep)} → MSS + FVG`;
   switch (t.state) {
-    case 'PENDING': if (t.grade === 'E') return `🆕 ${head}\n⏰ ${t.hour}h — khung giờ thắng cao\nEMA34 M30 ${f(t.ema34)} ${t.side > 0 ? '>' : '<'} EMA89 M30 ${f(t.ema89)} · giá hồi về EMA34 lúc ${vnT(t.pullT)}\nĐã quét ${esc(t.sweepName)} ${f(t.sweep)} → phá vỡ M5 + FVG M5 ${f(t.fvg && t.fvg.bot)} – ${f(t.fvg && t.fvg.top)}\n${lv}\n<a href="${PAGE}">Mở trang</a>`;
+    case 'PENDING': if (t.grade === 'E') return `🆕 ${head}\n⏰ ${t.hour}h — khung giờ thắng cao\nEMA34 M30 ${f(t.ema34)} ${t.side > 0 ? '>' : '<'} EMA89 M30 ${f(t.ema89)} · giá hồi về EMA34 lúc ${vnT(t.pullT)}\nĐã quét ${esc(t.sweepName)} ${f(t.sweep)} → ${t.breakType || 'MSS'} M5 + FVG M5 ${f(t.fvg && t.fvg.bot)} – ${f(t.fvg && t.fvg.top)}${t.ob ? `\nOrder Block ${f(t.ob.bot)} – ${f(t.ob.top)}` : ''}\n${lv} · 0.02 lot\n<a href="${PAGE}">Mở trang</a>`;
       if (t.grade === 'W') return `🆕 ${head}\n${sw.replace(' → MSS + FVG', ' → MSS M5 + FVG M5')}\n${zone}\n${lv} · mục tiêu sóng <b>${f(Math.abs(t.tp - t.entry))} giá</b>\nHuỷ nếu chưa khớp trước ${vnT(t.ct + WAVE.CFG.expiry * 3e5)}\n<a href="${PAGE}">Mở trang</a>`;
       return `🆕 ${head}\n${sw}\n${zone}\n${lv}\n${t.ctx ? '<i>' + esc(V3.ctxText(t.ctx)) + '</i>\n' : ''}Huỷ nếu chưa khớp trước ${vnT(t.ct + (t.grade === 'S' ? V3.BOS15.expiry[t.tf] : V3.CFG[t.tf].expiry) * MS[t.tf])}\n<a href="${PAGE}">Mở trang</a>`;
     case 'OPEN': return `🎯 Đã khớp ${head}\n${lv}\nKhớp lúc ${vnT(t.fillT)}`;

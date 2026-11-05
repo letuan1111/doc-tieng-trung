@@ -5,10 +5,11 @@
  *  4. Nhịp phá vỡ có FVG M5 → VÀO NGAY giá đóng nến phá · SL ngoài đáy/đỉnh quét + 0.3 ATR M15 + spread · TP 2R · giữ tối đa 2 ngày.
  *  Kiểm tra (research/emastrict.mjs, 0.02 lot): 10 ngày gần 17 lệnh thắng 71% +802 USD · 12 tháng 677 lệnh thắng 35% +3652 USD
  *  (6 tháng trước +3660, 6 tháng gần −8: mạnh khi có xu hướng rõ, hoà khi đi ngang).
+ *  SMC: ghi kiểu phá vỡ CHoCH/BOS, bắt buộc Order Block (nến ngược chiều cuối cùng tại điểm hồi), bỏ lệnh SL > 30 giá (0.02 lot mất tối đa ~60 USD).
  *  Telegram chỉ gửi lệnh trong các giờ VN CFG.tgHours (thắng cao nhất, chạm TP nhiều nhất); mọi lệnh vẫn ghi nhật ký.
  */
 (function (root, factory) { const E = factory(); if (typeof module === 'object' && module.exports) module.exports = E; else root.EMAPB = E; })(typeof self !== 'undefined' ? self : this, function () {
-  const CFG = { look: 36, L: 2, touch: 0.1, deep: 1.0, slATR: 0.3, rr: 2, holdMs: 2 * 864e5, needSweep: true, needFVG: true, emaTF: 'm30',
+  const CFG = { look: 36, L: 2, touch: 0.1, deep: 1.0, slATR: 0.3, rr: 2, holdMs: 2 * 864e5, needSweep: true, needFVG: true, needOB: true, maxSL: 30, emaTF: 'm30', // SMC: bắt buộc Order Block tại điểm hồi · bỏ lệnh SL > 30 giá
     // giờ VN gửi Telegram: thắng ≥ 43% trong 12 tháng (research/tghours.mjs: 192 lệnh, thắng 48%, lời cả 2 nửa năm) — giờ khác chỉ ghi nhật ký
     tgHours: [0, 8, 11, 12, 14, 17, 20, 21] };
   function resample(c, ms) { const out = []; let cur = null; for (const x of c) { const s = Math.floor(x.t / ms) * ms; if (!cur || cur.t !== s) { if (cur) out.push(cur); cur = { t: s, ct: s + ms, o: x.o, h: x.h, l: x.l, c: x.c, last: x.ct }; } else { cur.h = Math.max(cur.h, x.h); cur.l = Math.min(cur.l, x.l); cur.c = x.c; cur.last = x.ct; } } if (cur && cur.last >= cur.ct) out.push(cur); return out; }
@@ -38,11 +39,22 @@
         if (cfg.needSweep && !swept) continue; // bắt buộc quét SSL (BUY) / BSL (SELL)
         let f = null; for (let m = pi + 2; m <= k; m++) { const bot = d > 0 ? c[m - 2].h : c[m].h, top = d > 0 ? c[m].l : c[m - 2].l; if (top > bot) f = { top, bot }; }
         if (cfg.needFVG && !f) continue; // bắt buộc có FVG trong nhịp phá vỡ
+        // SMC: kiểu phá vỡ (CHoCH = đổi tính chất: trước điểm hồi cấu trúc M5 đi ngược / BOS = tiếp diễn), Order Block tại điểm hồi, Premium/Discount M30
+        const hiB = (d > 0 ? sh : sl).filter(q => q.i < pi && q.i >= pi - 60), loB = (d > 0 ? sl : sh).filter(q => q.i < pi && q.i >= pi - 60);
+        const lowerHighs = hiB.length >= 2 && (d > 0 ? hiB[hiB.length - 1].p < hiB[hiB.length - 2].p : hiB[hiB.length - 1].p > hiB[hiB.length - 2].p);
+        const breakType = lowerHighs ? 'CHoCH' : 'BOS';
+        let ob = null; for (let u = pi; u >= Math.max(0, pi - 3); u--) if (d * (c[u].c - c[u].o) < 0) { ob = { top: Math.max(c[u].o, c[u].c), bot: Math.min(c[u].o, c[u].c), hi: c[u].h, lo: c[u].l }; break; }
+        let rHi = -Infinity, rLo = Infinity; for (let u = Math.max(0, k - 288); u <= k; u++) { rHi = Math.max(rHi, c[u].h); rLo = Math.min(rLo, c[u].l); } // dealing range 24 giờ
+        const pd = rHi > rLo ? (d > 0 ? (c[k].c - rLo) / (rHi - rLo) : (rHi - c[k].c) / (rHi - rLo)) : 0.5; // 0 = discount sâu (BUY) / premium cao (SELL)
+        if (cfg.needOB && !ob) continue;
+        if (cfg.breakType && cfg.breakType !== breakType) continue;
+        if (cfg.pdMax != null && pd > cfg.pdMax) continue;
         const entry = c[k].c, slP = pP - d * (cfg.slATR * a + spread), risk = Math.abs(entry - slP); if (!(risk > 0)) continue;
+        if (cfg.maxSL && risk > cfg.maxSL) continue;
         const tp = entry + d * cfg.rr * risk;
         const s = { id: `e5-${c[k].t}-${d > 0 ? 'B' : 'S'}`, tf: 'm5', model: 'EMA hồi', grade: 'E', side: d, t: c[k].t, ct: c[k].ct, entry, sl: slP, tp, risk, rr: cfg.rr,
           sweep: pP, sweepName: swept ? (d > 0 ? 'SSL (đáy hồi)' : 'BSL (đỉnh hồi)') : (d > 0 ? 'đáy hồi EMA34' : 'đỉnh hồi EMA34'), origin: pP, fvg: f, spread,
-          ema34: E34[k], ema89: E89[k], emaTF: D.emaC ? 'tuỳ chọn' : cfg.emaTF.toUpperCase(), hour: (new Date(c[k].t).getUTCHours() + 7) % 24, tgOK: cfg.tgHours.includes((new Date(c[k].t).getUTCHours() + 7) % 24), pullT: c[pi].t, state: 'OPEN', fillT: c[k].t, exitT: null, exitP: null, r: null, pts: null };
+          ema34: E34[k], ema89: E89[k], breakType, ob, pd: +pd.toFixed(2), emaTF: D.emaC ? 'tuỳ chọn' : cfg.emaTF.toUpperCase(), hour: (new Date(c[k].t).getUTCHours() + 7) % 24, tgOK: cfg.tgHours.includes((new Date(c[k].t).getUTCHours() + 7) % 24), pullT: c[pi].t, state: 'OPEN', fillT: c[k].t, exitT: null, exitP: null, r: null, pts: null };
         for (let u = k + 1; u < n; u++) { const x = c[u];
           if (d > 0 ? x.l <= slP : x.h >= slP) { s.state = 'LOSS'; s.exitP = slP; s.exitT = x.ct; break; }
           if (d > 0 ? x.h >= tp : x.l <= tp) { s.state = 'WIN'; s.exitP = tp; s.exitT = x.ct; break; }
@@ -54,5 +66,5 @@
     return out;
   }
   const FINAL = { WIN: 1, LOSS: 1, TIME: 1 };
-  return { run, CFG, FINAL, version: 'emapb3-2026-11-05', telegram: true };
+  return { run, CFG, FINAL, version: 'emapb4-2026-11-05', telegram: true };
 });

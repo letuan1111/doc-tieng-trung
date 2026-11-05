@@ -293,7 +293,7 @@
     $('stats').innerHTML = `<div><b>${st.total}</b><small>Setup</small></div><div><b>${st.filled}</b><small>Đã khớp</small></div>
       <div><b class="win">${st.wins}</b><small>Chạm TP1</small></div><div><b class="loss">${st.losses}</b><small>Dính SL</small></div>
       <div><b>${(st.winRate * 100).toFixed(0)}%</b><small>Tỷ lệ thắng</small></div><div><b class="${st.netR >= 0 ? 'win' : 'loss'}">${st.netR >= 0 ? '+' : ''}${st.netR.toFixed(2)}R</b><small>Tổng R</small></div>
-      <div><b>${isFinite(st.pf) ? st.pf.toFixed(2) : '∞'}</b><small>Profit factor</small></div><div><b>${st.maxDD.toFixed(1)}R</b><small>Sụt giảm tối đa</small></div>${(() => { const a = V3.stats(rows.filter(t => t.state !== 'SKIP' && t.grade !== 'B')), b = V3.stats(rows.filter(t => t.state !== 'SKIP' && t.grade === 'B')); return `<div><b class="${a.netR >= 0 ? 'win' : 'loss'}">${a.netR >= 0 ? '+' : ''}${a.netR.toFixed(1)}R</b><small>⭐ Chuẩn (${a.closed} lệnh)</small></div><div><b class="${b.netR >= 0 ? 'win' : 'loss'}">${b.netR >= 0 ? '+' : ''}${b.netR.toFixed(1)}R</b><small>🔎 Ghi nhận (${b.closed} lệnh)</small></div>`; })()}`;
+      <div><b>${isFinite(st.pf) ? st.pf.toFixed(2) : '∞'}</b><small>Profit factor</small></div><div><b>${st.maxDD.toFixed(1)}R</b><small>Sụt giảm tối đa</small></div>${(() => { const a = V3.stats(rows.filter(t => t.state !== 'SKIP' && (t.grade || 'A') === 'A')), b = V3.stats(rows.filter(t => t.state !== 'SKIP' && t.grade === 'B')), w = V3.stats(rows.filter(t => t.grade === 'W')); return `<div><b class="${a.netR >= 0 ? 'win' : 'loss'}">${a.netR >= 0 ? '+' : ''}${a.netR.toFixed(1)}R</b><small>⭐ Chuẩn (${a.closed} lệnh)</small></div><div><b class="${b.netR >= 0 ? 'win' : 'loss'}">${b.netR >= 0 ? '+' : ''}${b.netR.toFixed(1)}R</b><small>🔎 Ghi nhận (${b.closed} lệnh)</small></div><div><b class="${w.netR >= 0 ? 'win' : 'loss'}">${w.netR >= 0 ? '+' : ''}${w.netR.toFixed(1)}R</b><small>🌊 Sóng 15 (${w.closed} lệnh)</small></div>`; })()}`;
     const TS = S.res.tierStats;
     $('tiers').innerHTML = `<table><thead><tr><th>Hạng</th><th>Setup</th><th>Đã đóng</th><th>Thắng</th><th>R/lệnh</th><th>Tổng R</th><th>PF</th></tr></thead><tbody>` +
       Object.entries(TS).map(([k, v]) => `<tr${k === 'Tất cả' ? ' class="muted"' : ''}><td><b>${k}</b></td><td>${v.total}</td><td>${v.closed}</td><td>${v.closed ? (v.winRate * 100).toFixed(0) + '%' : '—'}</td>
@@ -306,7 +306,7 @@
 
   // ---------------- V3: tín hiệu hiện tại + nhật ký máy chủ ----------------
   const JR = 'https://raw.githubusercontent.com/letuan1111/doc-tieng-trung/bot-data/tinhieu-journal.json';
-  const GR = (s) => s.grade === 'B' ? '<span class="chip" title="Setup quét thanh khoản ICT/SMC — chỉ ghi nhận, chưa đạt bộ lọc chuẩn">Ghi nhận</span>' : '<span class="chip buy" title="Đạt quy tắc chuẩn đã kiểm chứng">Chuẩn</span>';
+  const GR = (s) => s.grade === 'W' ? '<span class="chip" style="background:rgba(56,189,248,.15);color:#38bdf8" title="Kịch bản Sóng 15: quét thanh khoản → MSS M5 → limit mép FVG M5, TP ≥ 15 giá">🌊 Sóng 15</span>' : s.grade === 'B' ? '<span class="chip" title="Setup quét thanh khoản ICT/SMC — chỉ ghi nhận, chưa đạt bộ lọc chuẩn">Ghi nhận</span>' : '<span class="chip buy" title="Đạt quy tắc chuẩn đã kiểm chứng">Chuẩn</span>';
   const v3Active = () => { const L = (S.v3 || []).filter(s => s.state === 'PENDING' || s.state === 'OPEN'); return L.filter(s => s.grade !== 'B').slice(-1)[0] || L.slice(-1)[0] || null; };
   // lot theo % rủi ro: Exness XAUUSDm 1 lot = 100 oz, BTCUSDm 1 lot = 1 BTC; làm tròn xuống 0.01
   const CONTRACT = { XAU: 100, BTC: 1 };
@@ -356,7 +356,7 @@
   function jRows() {
     const J = S.journal; if (!J) return [];
     const all = $('jSym').value === 'all', sk = $('jSkip').checked, old = $('jOld').checked, g = $('jGrade').value;
-    return J.trades.filter(t => (all || t.sym === S.sym) && (sk || t.state !== 'SKIP') && (old || t.ver === V3.version) && (g === 'all' || (t.grade || 'A') === g)).slice().reverse();
+    return J.trades.filter(t => (all || t.sym === S.sym) && (sk || t.state !== 'SKIP') && (old || t.ver === V3.version || (window.WAVE && t.ver === WAVE.version)) && (g === 'all' || (t.grade || 'A') === g)).slice().reverse();
   }
   function renderJournal() {
     const J = S.journal;
@@ -372,7 +372,7 @@
     $('jBody').innerHTML = rows.length ? shown.map(t => `<tr><td>${ft(t.ct)}</td><td>${t.sym} · ${t.tf.toUpperCase()} ${GR(t)}</td><td><span class="chip ${t.side > 0 ? 'buy' : 'sell'}">${t.side > 0 ? 'BUY' : 'SELL'}</span></td>
       <td class="mono">${t.sweepName} ${p(t, t.sweep)}</td><td class="mono">${p(t, t.entry)}${t.fvg ? `<br><small class="note">FVG ${t.tf.toUpperCase()} ${p(t, t.fvg.bot)}–${p(t, t.fvg.top)}</small>` : ''}</td><td class="mono">${p(t, t.sl)}</td><td class="mono">${p(t, t.tp)}</td>
       <td class="${t.r > 0 ? 'win' : t.r < 0 ? 'loss' : 'muted'}">${V3.STATE_VI[t.state] || t.state}${t.r != null ? ` (${t.r > 0 ? '+' : ''}${t.r.toFixed(2)}R)` : ''}</td>
-      <td class="note">${t.ctx ? '<span title="Bối cảnh giá lúc tín hiệu">' + esc(V3.ctxText(t.ctx)) + '</span><br>' : ''}${t.ver && t.ver !== V3.version ? '[' + esc(t.ver) + '] ' : (!t.ver ? '[v3 cũ] ' : '')}${esc(t.why || '')}${t.live === false ? ' · tính lại từ lịch sử' : ''}${t.fillT ? ' · khớp ' + ft(t.fillT) : ''}${t.exitT && t.state !== 'PENDING' && t.state !== 'OPEN' ? ' · đóng ' + ft(t.exitT) : ''} · ${esc(t.src || '')}</td></tr>`).join('') + (rows.length > lim ? `<tr><td colspan="9" style="text-align:center"><button class="btn" id="jMore">Hiện thêm (${rows.length - lim} lệnh cũ hơn)</button></td></tr>` : '')
+      <td class="note">${t.ctx ? '<span title="Bối cảnh giá lúc tín hiệu">' + esc(V3.ctxText(t.ctx)) + '</span><br>' : ''}${t.grade === 'W' ? `Quét ${esc(t.sweepName)} lúc ${ft(t.sweepT)} → MSS M5 sau ${t.mssMin} phút · mục tiêu ${p(t, Math.abs(t.tp - t.entry))} giá${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.ver && t.ver !== V3.version ? '[' + esc(t.ver) + '] ' : (!t.ver ? '[v3 cũ] ' : '')}${esc(t.why || '')}${t.live === false ? ' · tính lại từ lịch sử' : ''}${t.fillT ? ' · khớp ' + ft(t.fillT) : ''}${t.exitT && t.state !== 'PENDING' && t.state !== 'OPEN' ? ' · đóng ' + ft(t.exitT) : ''} · ${esc(t.src || '')}</td></tr>`).join('') + (rows.length > lim ? `<tr><td colspan="9" style="text-align:center"><button class="btn" id="jMore">Hiện thêm (${rows.length - lim} lệnh cũ hơn)</button></td></tr>` : '')
       : '<tr><td colspan="9" class="muted">Chưa có lệnh nào trong nhật ký.</td></tr>';
   }
   function journalCSV() {
@@ -483,7 +483,11 @@
       if (MT5.db && !S.isMT5) $('src').textContent += ' (MT5 chưa kết nối)'; $('upd').textContent = 'Cập nhật ' + new Date().toLocaleTimeString('vi-VN');
       $('offNote').textContent = off ? `Đã căn theo giá Exness: chênh ${off >= 0 ? '+' : ''}${fx(off)} so với nguồn dữ liệu.` : '';
       $('proj').innerHTML = projCard(); // engine cũ (entry M5) đã bỏ khỏi trang
-      $('v3now').innerHTML = v3Card(); renderJournal(); renderChart(full); v3Alerts(!firstRun[sym]); firstRun[sym] = true;
+      $('v3now').innerHTML = v3Card(); renderJournal();
+      if ($('wnow')) { if (S.sym === 'XAU' && window.WAVE) { const W = WAVE.run({ m5: cd.m5, m15: cd.m15 }, { spread: 0.35 }), act = W.filter(s => s.state === 'PENDING' || s.state === 'OPEN'), last = W.slice(-3).reverse();
+        const row = (s) => `<div class="note" style="margin:4px 0"><span class="chip ${s.side > 0 ? 'buy' : 'sell'}">${s.side > 0 ? 'BUY' : 'SELL'} LIMIT</span> ${ft(s.ct)} · quét ${esc(s.sweepName)} · FVG M5 ${fx(s.fvg.bot)}–${fx(s.fvg.top)}<br>Entry <b>${fx(s.entry)}</b> · SL <b class="loss">${fx(s.sl)}</b> · TP <b class="win">${fx(s.tp)}</b> (${fx(Math.abs(s.tp - s.entry))} giá) · <i>${V3.STATE_VI[s.state] || s.state}</i></div>`;
+        $('wnow').innerHTML = (act.length ? act.map(row).join('') : '<p class="note">Chưa có lệnh Sóng 15 đang chờ. Gần nhất:</p>' + last.map(row).join('')) + '<p class="note" style="margin-top:6px">Quét PDH/PDL · tuần · London · phiên Á → MSS M5 → limit mép FVG M5 · SL ngoài điểm quét +0.3 ATR · TP max(2R, 15 giá). Kịch bản ghi nhận: 12 tháng ~1.2 lệnh/tuần, thắng 34%, +3.2R.</p>'; }
+        else $('wnow').innerHTML = '<p class="note">Kịch bản Sóng 15 chỉ chạy cho vàng (XAU).</p>'; } renderChart(full); v3Alerts(!firstRun[sym]); firstRun[sym] = true;
     } catch (e) {
       console.error(e); $('src').textContent = 'Lỗi tải dữ liệu'; $('v3now').innerHTML = `<p class="err">Không tải được dữ liệu (${e.message}). Thử tải lại trang.</p>`;
     } finally { busy = false; }

@@ -91,7 +91,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
       <div class="toggles" style="margin:0 0 8px">
         <label><select id="jSym"><option value="all">Tất cả cặp</option><option value="cur">Cặp đang xem</option></select></label>
         <label><input type="checkbox" id="jSkip"> Hiện lệnh bị bỏ qua (có entry đẹp hơn / đang có lệnh)</label>
-        <label><select id="jGrade"><option value="all">Mọi lệnh quét thanh khoản</option><option value="A">Chỉ lệnh Chuẩn</option><option value="B">Chỉ lệnh Ghi nhận</option></select></label>
+        <label><select id="jGrade"><option value="all">Mọi lệnh quét thanh khoản</option><option value="A">Chỉ lệnh Chuẩn</option><option value="B">Chỉ lệnh Ghi nhận</option><option value="W">Chỉ Sóng 15 (vàng M5)</option></select></label>
         <label><input type="checkbox" id="jOld"> Hiện lệnh của bản cũ</label>
         <button class="btn" id="jCsv">⬇ Tải CSV</button>
         <span class="note" id="jUpd"></span>
@@ -113,6 +113,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
   <aside class="side">
     <div class="card"><h3>Bot MT5 đang phân tích</h3><div id="bot"></div></div>
     <div class="card"><h3>Tín hiệu V4 — M15 · M30 · H1: quét PDH/PDL → MSS → FVG</h3><div id="v3now"></div></div>
+    <div class="card"><h3>🌊 Sóng 15 — vàng M5: bắt sóng ≥ 15 giá</h3><div id="wnow"></div></div>
     <div class="card hide"><h3>Phân tích cấu trúc (engine cũ, tham khảo)</h3><div id="now"></div></div>
     <div class="card"><h3>Dự kiến đường giá</h3><div id="proj"></div></div>
     <div class="card hide"><h3>Tiến trình BUY</h3><div id="pBuy"></div></div>
@@ -149,6 +150,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script src="engine.js?v=15"></script>
 <script src="v3.js?v=8"></script>
-<script src="app.js?v=23"></script>
+<script src="wave.js?v=2"></script>
+<script src="app.js?v=26"></script>
 </body>
 </html>

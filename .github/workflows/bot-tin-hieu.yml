@@ -10,6 +10,7 @@ on:
       - "scanner/**"
       - "bot-tin-hieu/ict.js"
       - "tin-hieu/v3.js"
+      - "tin-hieu/wave.js"
       - ".github/workflows/bot-tin-hieu.yml"
 
 permissions:

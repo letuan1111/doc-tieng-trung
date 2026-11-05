@@ -86,3 +86,11 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
   - Limit 50% sóng gốc→MSS, TP 2R: 0.7 lệnh/ngày, +627 USD/năm (0.02 lot), nhưng 6 tháng gần −176 USD.
   - Limit CE FVG M5, TP 2R: 0.2 lệnh/ngày, có lời ở cả hai nửa năm (+55 USD / +217 USD).
   - Chưa có cách nào vừa nhiều lệnh vừa có lời ổn định.
+
+## Kịch bản Sóng 15 (vàng M5) — tin-hieu/wave.js, đưa lên nhật ký + Telegram (05/11/2026)
+1. Râu nến M5 quét PDH/PDL, đỉnh/đáy tuần trước hoặc đỉnh/đáy London, rồi đóng cửa quay lại trong ≤ 3 nến. Không dùng phiên Á, vì yếu.
+2. MSS M5: đóng cửa vượt đỉnh/đáy swing M5 gần nhất trước cú quét, trong vòng 6 giờ, chưa phá cực trị quét.
+3. Limit tại mép FVG M5 nằm giữa cực trị quét và nến MSS, chờ khớp 1 giờ.
+4. SL ngoài cực trị quét + 0.3 ATR M15 + spread. TP = max(2R, 15 giá). Giữ lệnh tối đa 2 ngày.
+- **Kết quả 12 tháng:** 58 lệnh (~1.2/tuần), 20 TP / 37 SL, thắng 34%, TP trung bình ~32 giá, +3.2R (+94 USD với 0.02 lot). Dương ở cả hai nửa năm, nhưng lợi thế mỏng.
+- **Các cách khác đều kém:** thêm phiên Á, entry CE FVG, TP cố định 15 giá, TP 3R, SL +0.5 ATR.

@@ -70,3 +70,19 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
   - BTC 6 tháng trước: 16 lệnh · 6 TP / 8 SL · +3.3R · −68 USD
   - BTC 6 tháng gần: 32 lệnh · 15 TP / 14 SL · +16.2R · +260 USD
 - **Tổng 12 tháng** (XAU+BTC+ETH): +37R, dương ở cả 6 phần dữ liệu, sụt giảm tối đa khoảng 4R.
+
+## Mọi sóng ≥ 15 giá vàng trên M5, 12 tháng (research/moves.mjs, 05/11/2026)
+- **Số lượng:** 5163 sóng, tức 15 sóng/ngày, dài TB 34 giá trong ~1h45. Nhiều nhất lúc 19h–23h VN (New York) và 7h–8h.
+- **Điểm bắt đầu:** 83% sóng bắt đầu ở một vùng thanh khoản. PDH/PDL 30%, đỉnh/đáy swing M15 29%, London 10%, PWH/PWL 10%, phiên Á 3%; 17% không quét gì.
+- **Cấu trúc H1/H4 không cho biết chiều sóng 15 giá:** 50% cùng chiều, 50% ngược chiều.
+- **Sóng lớn đến sau sóng ngược chiều nhỏ:** sóng trước nhỏ hơn thì sóng này dài TB 50 giá, 88% có MSS. Sóng trước lớn hơn thì sóng này chỉ là nhịp hồi, TB 24 giá.
+- **Trước khi chạy:** 41% sóng có giá đi ngang hẹp (<3 ATR M15 trong 2h).
+- **Mô hình xuất hiện trước:**
+  - MSS M5 xuất hiện ở 50% sóng, trung bình sau 64 phút, lúc đó giá **đã chạy 61% sóng**.
+  - 74% có FVG M5, nhưng chỉ **9%** hồi về CE FVG / 50% trước khi đi tiếp.
+- **Xác suất nền:** sau khi quét PDH/PDL, 70% lần giá chạy ngược lại đủ 15 giá tính từ điểm quét; nếu có thêm MSS M5 thì 89–91%. Nhưng điểm quét chỉ biết sau khi đã qua.
+- **Vào lệnh thật (sau MSS, SL ngoài điểm quét):**
+  - Vào ngay khi MSS, TP 15 giá: thắng 52% nhưng lỗ, vì SL thường xa hơn 15 giá.
+  - Limit 50% sóng gốc→MSS, TP 2R: 0.7 lệnh/ngày, +627 USD/năm (0.02 lot), nhưng 6 tháng gần −176 USD.
+  - Limit CE FVG M5, TP 2R: 0.2 lệnh/ngày, có lời ở cả hai nửa năm (+55 USD / +217 USD).
+  - Chưa có cách nào vừa nhiều lệnh vừa có lời ổn định.

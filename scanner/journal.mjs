@@ -47,6 +47,8 @@ const closed = (c) => c.filter(x => x.ct <= NOW());
 const RULES = 'Quét PDH/PDL → MSS có displacement → limit tại FVG · M15: cấu trúc swing H4 cùng chiều, ngoài phiên Á (mép, SL+0.5ATR) · M30: mọi setup (CE, SL+1ATR) · H1: cả hai chiều (mép, SL+1ATR) · chờ khớp M15 6h / M30 10h / H1 16h · TP 2R';
 let J = { version: V3.version, rules: RULES, trades: [] };
 try { J = { ...J, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) }; } catch (_) {}
+// đổi bản quy tắc: bỏ các lệnh "tính lại" của bản cũ (sẽ tính lại theo bản mới), giữ nguyên lệnh đã ghi trực tiếp
+if (J.version !== V3.version) J.trades = J.trades.filter(t => t.live);
 J.version = V3.version; J.rules = RULES;
 const byId = new Map(J.trades.map(x => [x.id, x]));
 let added = 0, changed = 0; const errs = [];

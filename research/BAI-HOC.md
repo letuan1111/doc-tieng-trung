@@ -174,3 +174,9 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
   · A: M15 EMA34, TP 1.5R: 878 lệnh (3.4/ngày), 41%, +953$, DD 341 — nhạy spread (0.7 → +105$), BUY 6 tháng gần lỗ.
   · B: M30 EMA21, TP 1R: 539 (2.1/ngày), 52%, +651$, DD 153 — spread 0.7 thì nửa gần lỗ.
   · C (bền nhất): M30 EMA21 + EMA34>89 M30, TP 2R: 332 (1.3/ngày), 37%, +791$ (349 · 442), DD 149; spread 0.7 vẫn +590$; mọi biến thể thông số đều lời; BTC hoà (+20$).
+
+## Chốt "🧲 Test EMA21 M30" vào EA + web + Telegram (2026-11-05)
+- Cách thắng cao nhất trong các cách bền: M30 EMA21 + EMA34>89 M30 + nến M5 bật lại · TP 1R (TP 0.6R thắng 63% nhưng 6 tháng gần lỗ → không chọn).
+- Lọc giờ: chọn giờ xấu theo 6 tháng đầu KHÔNG giúp 6 tháng sau (51% vs 52%). Chỉ bỏ giờ xấu ở CẢ 2 nửa: 8h (17%/23% thắng) và 23h VN.
+- Kết quả cuối (module tin-hieu/ema21.js = logic EA, research/ema21-ea-replay.mjs): 322 lệnh (1.2/ngày), thắng 56%, SL TB 6.3 giá, +666$ (428 · 238), DD 132$, thua liên tiếp 5; spread 0.6 → 53%, +513$.
+- EA mt5/EMA21_Test_M30.mq5 (magic 21530) compile 0 lỗi; web grade R, Telegram gửi mọi lệnh R (đã bỏ 8h/23h).

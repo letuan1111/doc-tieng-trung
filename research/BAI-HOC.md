@@ -154,3 +154,9 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
 - TP cố định 2–3 giá: thắng 74–78% nhưng SL phải ~8–10 giá → hoà/lỗ (TP 2 giá: −57…−547$; TP 3 giá tốt nhất +72$/năm).
 - Tốt nhất (cụm ổn định, lời cả 2 nửa năm): xu hướng M15 (EMA34>EMA89 hoặc ngược lại), giá rời EMA34 M15 ≥ 0.8 ATR, cực trị M5 vừa QUÉT đỉnh/đáy swing, nến M5 NHẤN CHÌM quay đầu → vào nến sau, TP = EMA34 M15 − 2 giá, SL ngoài cực trị + 0.5. 1276 lệnh (4.9/ngày), thắng 38%, TP TB 14 / SL TB 7, +954$/năm (0.02 lot, spread 0.35), DD 482, thua liên tiếp 13.
 - Cạnh rất mỏng: spread 0.5 → +520$, spread 0.7 → +47$. BTC cùng luật lỗ (−234$). Lời chủ yếu ở lệnh SELL. Chọn từ 752 cấu hình → có thiên lệch chọn lọc. Chỉ nên chạy thử ghi nhật ký, chưa dùng tiền thật.
+
+## Ý tưởng: M15 tăng nhỏ → EMA34/89 M5 cắt xuống + quét BSL + MSS M5 → SELL LIMIT ở FVG/OB/OTE M5 → TP EMA34/89 M15 (m5cross.mjs, m5mss-limit.mjs, 2026-11-05)
+- Lúc EMA M5 cắt: 57% giá đã qua cả EMA89 M15, 43% nằm giữa EMA34–89, chỉ 1% chưa chạm EMA34 M15 → mục tiêu hầu như đã đạt trước khi có tín hiệu.
+- Phần còn lại: EMA89 M15 chỉ cách vài giá, trong khi SL trên đỉnh quét cách ~25 giá (trung vị) → chỉ 25–58 lệnh/năm đủ RR ≥ 0.7, thắng 20–39%, kết quả quanh hoà vốn (−58…+225$), không đủ để tin.
+- Vào sớm hơn (quét + MSS, chưa chờ EMA M5 cắt), limit ở FVG/CE/OB/50%/OTE, TP EMA34 hoặc EMA89 M15: 18/18 biến thể đều lỗ (−162…−1571$).
+- Kết luận: EMA M5 cắt ngược xu hướng M15 = dấu hiệu giá ĐÃ hồi về EMA M15 → dùng để chuẩn bị lệnh THEO xu hướng M15 (EMA hồi), không SELL/BUY ngược.

@@ -15,14 +15,12 @@
  */
 (function (root) {
   'use strict';
-  const MS = { m5: 3e5, m15: 9e5, m30: 18e5, h1: 36e5, h4: 144e5 };
+  const MS = { m15: 9e5, m30: 18e5, h1: 36e5, h4: 144e5 };
   const TFS = ['h1', 'm30', 'm15'];
   const CFG = {
     m15: { entry: 'edge', slATR: 0.5, expiry: 12, hold: 96, window: false, sides: [1, -1], filter: (x) => x.emaH4 && x.sess !== 'Á', rule: 'EMA H4 cùng chiều · ngoài phiên Á' },
     m30: { entry: 'ce',   slATR: 1.0, expiry: 10, hold: 72, window: false, sides: [1, -1], filter: null, rule: 'mọi setup quét PDH/PDL → MSS → FVG' },
     h1:  { entry: 'edge', slATR: 1.0, expiry: 8,  hold: 72, window: false, sides: [-1], filter: null, rule: 'chỉ SELL sau quét PDH' },
-    // bản V3 cũ — chỉ để theo dõi nốt các lệnh cũ trong nhật ký
-    m5:  { entry: 'ce',   slATR: 0.5, expiry: 12, hold: 96, window: true, sides: [], legacy: true },
   };
   const RR = 2, L = 3, WARM = 100; // bỏ 100 nến đầu (ATR/cấu trúc chưa ổn định)
   // gộp nến (chỉ giữ nến khung lớn đã đủ, không nhìn trước)
@@ -112,7 +110,7 @@
 
   // cập nhật trạng thái một lệnh đã ghi (giữ nguyên entry/SL/TP đã lưu) bằng các nến đóng mới của khung đó
   function track(s, c) {
-    if (FINAL[s.state]) return s;
+    if (FINAL[s.state] || !CFG[s.tf]) return s; // không còn khung M5
     const cfg = CFG[s.tf], ms = MS[s.tf], d = s.side, cost = (s.spread || 0) / s.risk;
     const expiryT = s.ct + cfg.expiry * ms;
     for (const x of c) {
@@ -137,7 +135,7 @@
   // chạy cả 3 khung cho một cặp: D = {m15, h1} (+ m30 nếu có; nếu không thì dựng từ M15) — chỉ nến đã đóng, spread theo giá
   function run(D, opt) {
     opt = opt || {}; const spread = opt.spread || 0, all = [];
-    const C = { m5: D.m5 || null, m15: D.m15, m30: D.m30 || (D.m15 ? resample(D.m15, MS.m30) : null), h1: D.h1 };
+    const C = { m15: D.m15, m30: D.m30 || (D.m15 ? resample(D.m15, MS.m30) : null), h1: D.h1 };
     for (const tf of TFS) { const c = C[tf]; if (!c || c.length < 60) continue; for (const e of setups(c, tf, { h1: C.h1 })) { const s = simulate(c, e, spread); if (s) all.push(s); } }
     all.sort((a, b) => a.ct - b.ct || TFS.indexOf(a.tf) - TFS.indexOf(b.tf));
     let busyUntil = -Infinity, busyId = null;

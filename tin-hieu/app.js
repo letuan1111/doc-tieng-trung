@@ -58,7 +58,7 @@
 
   // ---------------- trạng thái ----------------
   const S = {
-    sym: LS.get('smc.sym', 'XAU'), tf: 'm5', view: 'chart', srcIdx: {}, raw: {}, res: null, offset: LS.get('smc.off', {}),
+    sym: LS.get('smc.sym', 'XAU'), tf: 'm15', view: 'chart', srcIdx: {}, raw: {}, res: null, offset: LS.get('smc.off', {}),
     cfg: Object.assign({ mode: 'strict', entry: 'A', minRR: 1.5, minScore: 85, tier: 'A' }, LS.get('smc.cfg', {})), seen: LS.get('smc.seen', {}), notif: LS.get('smc.notif', false),
   };
 
@@ -141,7 +141,7 @@
     for (const e of (r.buy.events[S.tf] || []).slice(S.tf === 'm5' ? -8 : -16)) if (e.t >= t0)
       mk.push({ time: snap(e.t), position: e.dir > 0 ? 'belowBar' : 'aboveBar', color: e.type === 'CHoCH' ? '#f59e0b' : (e.dir > 0 ? '#22c55e' : '#f43f5e'), shape: e.dir > 0 ? 'arrowUp' : 'arrowDown', text: e.type });
     for (const s of (S.v3 || [])) if (s.state !== 'SKIP' && s.t >= t0) {
-      mk.push({ time: snap(s.t), position: s.side > 0 ? 'belowBar' : 'aboveBar', color: '#a855f7', shape: 'circle', text: `V3 ${s.side > 0 ? 'BUY' : 'SELL'} ${s.tf.toUpperCase()}` });
+      mk.push({ time: snap(s.t), position: s.side > 0 ? 'belowBar' : 'aboveBar', color: '#a855f7', shape: 'circle', text: `V4 ${s.side > 0 ? 'BUY' : 'SELL'} ${s.tf.toUpperCase()}` });
       if (s.r != null && s.exitT) mk.push({ time: snap(s.exitT - TFMS[s.tf]), position: 'inBar', color: s.r > 0 ? '#22c55e' : '#f43f5e', shape: 'square', text: s.state === 'WIN' ? 'TP' : s.state === 'LOSS' ? 'SL' : 'Đóng' });
     }
     mk.sort((a, b) => a.time - b.time); cs.setMarkers(mk);
@@ -149,7 +149,7 @@
     const a = v3Active();
     if (a) {
       const add = (p, col, t, st = 0) => p != null && plines.push(cs.createPriceLine({ price: p, color: col, lineWidth: 2, lineStyle: st, axisLabelVisible: true, title: t }));
-      add(a.entry, '#a855f7', `V3 ENTRY ${a.tf.toUpperCase()}`); add(a.sl, '#f43f5e', 'SL', 2); add(a.tp, '#22c55e', 'TP 2R', 2);
+      add(a.entry, '#a855f7', `V4 ENTRY ${a.tf.toUpperCase()}`); add(a.sl, '#f43f5e', 'SL', 2); add(a.tp, '#22c55e', 'TP 2R', 2);
       add(a.sweep, '#f59e0b', a.sweepName + ' đã quét', 1);
     }
     let fut = 6;
@@ -224,10 +224,9 @@
       hl(u.tSweep, u.sweep, `BOT quét ${u.liqKind} ${fx(u.sweep)}`);
       hl(u.tMss, u.brk, `BOT ${u.kind} ${fx(u.brk)}`);
     }
-    // vùng FVG/OB của setup
-    for (const s of r.all.slice(-8)) {
-      const col = s.side === 'buy' ? '34,197,94' : '244,63,94', z = s.eType === 'A' && s.fvg ? s.fvg : s.ob;
-      if (z) box(s.t - 2 * 3e5, s.exit ? s.exit.t : null, z.bot, z.top, `rgba(168,85,247,.16)`, `rgba(168,85,247,.8)`, s.eType === 'A' ? 'FVG M5' : 'OB M5');
+    // vùng FVG của tín hiệu V4 (M15 · M30 · H1) — không còn entry M5
+    for (const s of (S.v3 || []).filter(x => x.state !== 'SKIP').slice(-6)) {
+      const z = s.fvg; if (z) box(s.t, s.exitT || null, z.bot, z.top, `rgba(168,85,247,.16)`, `rgba(168,85,247,.8)`, `FVG ${s.tf.toUpperCase()}`);
     }
   }
 
@@ -336,10 +335,10 @@
       const prev = seen[s.id]; if (prev === s.state) continue; seen[s.id] = s.state;
       if (first && !prev) continue;
       const tag = `${nm} ${s.side > 0 ? 'BUY' : 'SELL'} ${s.tf.toUpperCase()}`;
-      if (s.state === 'PENDING') alertUser(`🆕 V3 ${tag}`, `Quét ${s.sweepName} ${fx(s.sweep)} · Entry ${fx(s.entry)} · SL ${fx(s.sl)} · TP ${fx(s.tp)} (2R)`);
-      else if (s.state === 'OPEN') alertUser(`🎯 V3 khớp ${tag}`, `Entry ${fx(s.entry)} · SL ${fx(s.sl)} · TP ${fx(s.tp)}`);
-      else if (s.state === 'WIN') alertUser(`✅ V3 ${tag} chạm TP`, `+${s.r.toFixed(2)}R`);
-      else if (s.state === 'LOSS') alertUser(`❌ V3 ${tag} dính SL`, `${s.r.toFixed(2)}R`);
+      if (s.state === 'PENDING') alertUser(`🆕 V4 ${tag}`, `Quét ${s.sweepName} ${fx(s.sweep)} · Entry ${fx(s.entry)} · SL ${fx(s.sl)} · TP ${fx(s.tp)} (2R)`);
+      else if (s.state === 'OPEN') alertUser(`🎯 V4 khớp ${tag}`, `Entry ${fx(s.entry)} · SL ${fx(s.sl)} · TP ${fx(s.tp)}`);
+      else if (s.state === 'WIN') alertUser(`✅ V4 ${tag} chạm TP`, `+${s.r.toFixed(2)}R`);
+      else if (s.state === 'LOSS') alertUser(`❌ V4 ${tag} dính SL`, `${s.r.toFixed(2)}R`);
     }
     LS.set('smc.seen', S.seen);
   }
@@ -471,10 +470,10 @@
       $('src').textContent = S.srcName; $('src').className = 'chip ' + (S.isMT5 ? 'buy' : (MT5.db ? 'warn' : ''));
       if (MT5.db && !S.isMT5) $('src').textContent += ' (MT5 chưa kết nối)'; $('upd').textContent = 'Cập nhật ' + new Date().toLocaleTimeString('vi-VN');
       $('offNote').textContent = off ? `Đã căn theo giá Exness: chênh ${off >= 0 ? '+' : ''}${fx(off)} so với nguồn dữ liệu.` : '';
-      $('now').innerHTML = nowCard(); $('proj').innerHTML = projCard(); $('pBuy').innerHTML = progress('buy'); $('pSell').innerHTML = progress('sell');
-      $('v3now').innerHTML = v3Card(); statsHist(); renderJournal(); renderChart(full); v3Alerts(!firstRun[sym]); firstRun[sym] = true;
+      $('proj').innerHTML = projCard(); // engine cũ (entry M5) đã bỏ khỏi trang
+      $('v3now').innerHTML = v3Card(); renderJournal(); renderChart(full); v3Alerts(!firstRun[sym]); firstRun[sym] = true;
     } catch (e) {
-      console.error(e); $('src').textContent = 'Lỗi tải dữ liệu'; $('now').innerHTML = `<p class="err">Không tải được dữ liệu (${e.message}). Thử tải lại trang.</p>`;
+      console.error(e); $('src').textContent = 'Lỗi tải dữ liệu'; $('v3now').innerHTML = `<p class="err">Không tải được dữ liệu (${e.message}). Thử tải lại trang.</p>`;
     } finally { busy = false; }
   }
   async function tick() { // giá trực tiếp + phân tích lại khi có nến M5 mới đóng

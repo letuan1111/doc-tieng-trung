@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cut">
 <title>Tín hiệu EMA·SMC</title>
-<meta name="description" content="Tín hiệu EMA 34/89 + ICT/SMC đa khung H4→H1→M15→M5 cho XAUUSD và BTCUSD: Entry, SL, TP theo cấu trúc.">
+<meta name="description" content="Tín hiệu EMA 34/89 + ICT/SMC đa khung H4→H1→M30→M15 cho XAUUSD và BTCUSD: Entry, SL, TP theo cấu trúc.">
 <meta name="theme-color" content="#0d1117">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -60,7 +60,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 </head>
 <body>
 <header><div class="bar">
-  <div class="brand">EMA 34/89 · ICT · SMC <small>H4 → H1 → M15 → M5</small></div>
+  <div class="brand">EMA 34/89 · ICT · SMC <small>Vào lệnh M15 · M30 · H1</small></div>
   <div class="seg" id="symSeg"><button data-s="XAU" class="on">XAUUSD</button><button data-s="BTC">BTCUSD</button></div>
   <a class="btn" href="../bot-tin-hieu/" style="text-decoration:none">← Bot tín hiệu</a>
   <button class="btn" id="notifBtn">🔔 Bật thông báo</button>
@@ -75,7 +75,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
     <div class="card">
       <div class="tfbar">
         <div class="seg" id="viewSeg"><button data-v="chart" class="on">Biểu đồ tín hiệu</button><button data-v="tv">TradingView</button></div>
-        <div class="seg" id="tfSeg"><button data-tf="m5" class="on">M5</button><button data-tf="m15">M15</button><button data-tf="h1">H1</button><button data-tf="h4">H4</button></div>
+        <div class="seg" id="tfSeg"><button data-tf="m5">M5</button><button data-tf="m15" class="on">M15</button><button data-tf="h1">H1</button><button data-tf="h4">H4</button></div>
       </div>
       <div class="toggles"><label><input type="checkbox" data-show="m15"> Vùng M15</label><label><input type="checkbox" data-show="h1"> Vùng H1</label><label><input type="checkbox" data-show="h4"> Vùng H4</label><label><input type="checkbox" data-show="liq"> Thanh khoản BSL/SSL</label><label><input type="checkbox" data-show="proj"> Đường dự kiến</label><label><input type="checkbox" data-show="bot"> Bot MT5</label></div>
       <div id="chartWrap"><div id="chart"></div><canvas id="ov"></canvas></div>
@@ -98,7 +98,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
       <div class="tw"><table><thead><tr><th>Thời gian</th><th>Cặp · Khung</th><th>Lệnh</th><th>Quét</th><th>Entry</th><th>SL</th><th>TP 2R</th><th>Kết quả</th><th>Bối cảnh giá · ghi chú</th></tr></thead><tbody id="jBody"></tbody></table></div>
       <p class="note">GitHub Actions chạy engine V4 mỗi 5 phút và lưu từng lệnh vào <code>tinhieu-journal.json</code> (nhánh bot-data): tạo → chờ khớp → đang chạy → TP/SL/hết giờ/hết hạn/huỷ. Giá theo MT5 Exness khi EA bridge đang chạy, nếu không thì OKX. Kết quả đã trừ spread. Đây là ghi nhận để kiểm chứng, không phải khuyến nghị đầu tư.</p>
     </div>
-    <div class="card">
+    <div class="card hide">
       <h3>Mô phỏng engine cũ (tham khảo, trên dữ liệu đã tải)</h3>
       <div class="stat" id="stats"></div>
       <p class="note" style="margin:0 0 4px"><b>Hiệu quả theo hạng</b> — cùng dữ liệu đã tải, không repaint. Hạng nào có R/lệnh dương ổn định thì giữ.</p>
@@ -111,10 +111,10 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
   <aside class="side">
     <div class="card"><h3>Bot MT5 đang phân tích</h3><div id="bot"></div></div>
     <div class="card"><h3>Tín hiệu V4 — M15 · M30 · H1: quét PDH/PDL → MSS → FVG</h3><div id="v3now"></div></div>
-    <div class="card"><h3>Phân tích cấu trúc (engine cũ, tham khảo)</h3><div id="now"></div></div>
+    <div class="card hide"><h3>Phân tích cấu trúc (engine cũ, tham khảo)</h3><div id="now"></div></div>
     <div class="card"><h3>Dự kiến đường giá</h3><div id="proj"></div></div>
-    <div class="card"><h3>Tiến trình BUY</h3><div id="pBuy"></div></div>
-    <div class="card"><h3>Tiến trình SELL</h3><div id="pSell"></div></div>
+    <div class="card hide"><h3>Tiến trình BUY</h3><div id="pBuy"></div></div>
+    <div class="card hide"><h3>Tiến trình SELL</h3><div id="pSell"></div></div>
     <div class="card">
       <h3>Nguồn MT5 (Exness) — dữ liệu chuẩn</h3>
       <div class="grid2">
@@ -128,11 +128,11 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
     <div class="card">
       <h3>Cài đặt</h3>
       <div class="grid2">
-        <label class="f full">Chất lượng setup<select id="cTier"><option value="A+">A+ — đủ 8/8 điều kiện (ít lệnh nhất)</option><option value="A">A trở lên — đủ cấu trúc, thiếu tối đa 1 phụ</option><option value="all">Tất cả (nhiễu, chỉ để so sánh)</option></select></label>
-        <label class="f">Mức lọc<select id="cMode"><option value="strict">Chặt chẽ (sweep + MSS + FVG)</option><option value="balanced">Cân bằng (FVG tuỳ chọn)</option></select></label>
-        <label class="f">Kiểu Entry<select id="cEntry"><option value="A">A — FVG 50%</option><option value="B">B — Order Block</option></select></label>
-        <label class="f">RR tối thiểu (TP1)<input id="cRR" type="number" step="0.1" min="0.5" value="1.5"></label>
-        <label class="f">Điểm tối thiểu<input id="cScore" type="number" step="5" min="50" max="100" value="85"></label>
+        <label class="f full hide">Chất lượng setup<select id="cTier"><option value="A+">A+ — đủ 8/8 điều kiện (ít lệnh nhất)</option><option value="A">A trở lên — đủ cấu trúc, thiếu tối đa 1 phụ</option><option value="all">Tất cả (nhiễu, chỉ để so sánh)</option></select></label>
+        <label class="f hide">Mức lọc<select id="cMode"><option value="strict">Chặt chẽ (sweep + MSS + FVG)</option><option value="balanced">Cân bằng (FVG tuỳ chọn)</option></select></label>
+        <label class="f hide">Kiểu Entry<select id="cEntry"><option value="A">A — FVG 50%</option><option value="B">B — Order Block</option></select></label>
+        <label class="f hide">RR tối thiểu (TP1)<input id="cRR" type="number" step="0.1" min="0.5" value="1.5"></label>
+        <label class="f hide">Điểm tối thiểu<input id="cScore" type="number" step="5" min="50" max="100" value="85"></label>
         <label class="f full">Giá Exness/MT5 hiện tại (để căn chỉnh chênh lệch)<input id="cEx" type="number" step="0.01" placeholder="VD: 4003.25 — để trống = không chỉnh"></label>
         <button class="btn full" id="cApply">Áp dụng</button>
       </div>
@@ -144,7 +144,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script src="engine.js?v=15"></script>
-<script src="v3.js?v=2"></script>
-<script src="app.js?v=16"></script>
+<script src="v3.js?v=3"></script>
+<script src="app.js?v=17"></script>
 </body>
 </html>

@@ -149,3 +149,8 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
 - Giá rời EMA34 M15 (đóng cửa cách ≥ 1 ATR) ~7.7 lần/ngày. Rời CÙNG xu hướng (EMA34 đúng phía EMA89): về EMA34 trong 1h 36% · 4h 76% · 12h 96%. Rời NGƯỢC xu hướng: về EMA34 chỉ 33% trong 4h nhưng về EMA89 87%.
 - Trung vị: 105 phút về EMA34, ~2h về EMA89; trước khi về giá thường chạy thêm ~3 ATR. Giờ VN hay chạm EMA34 nhất: 06–08h và 18–21h.
 - Đặt LIMIT mù tại EMA34 / giữa 34–89 / EMA89 theo xu hướng (mô phỏng M5, ematest3.mjs): thắng 41–44%, gần như mọi biến thể lỗ cả năm (vd EMA34 · SL 1 ATR · TP 1R: 1274 lệnh, −856$). Giá test EMA là gần như chắc, nhưng thường đâm xuyên qua EMA → cần chờ xác nhận M5 (quét → MSS → FVG) = EMA hồi/EA, không đặt limit sẵn.
+
+## Bắt nhịp giá chạy VỀ EMA34 M15 bằng TP nhỏ (toema.mjs, toema-check.mjs, 2026-11-05)
+- TP cố định 2–3 giá: thắng 74–78% nhưng SL phải ~8–10 giá → hoà/lỗ (TP 2 giá: −57…−547$; TP 3 giá tốt nhất +72$/năm).
+- Tốt nhất (cụm ổn định, lời cả 2 nửa năm): xu hướng M15 (EMA34>EMA89 hoặc ngược lại), giá rời EMA34 M15 ≥ 0.8 ATR, cực trị M5 vừa QUÉT đỉnh/đáy swing, nến M5 NHẤN CHÌM quay đầu → vào nến sau, TP = EMA34 M15 − 2 giá, SL ngoài cực trị + 0.5. 1276 lệnh (4.9/ngày), thắng 38%, TP TB 14 / SL TB 7, +954$/năm (0.02 lot, spread 0.35), DD 482, thua liên tiếp 13.
+- Cạnh rất mỏng: spread 0.5 → +520$, spread 0.7 → +47$. BTC cùng luật lỗ (−234$). Lời chủ yếu ở lệnh SELL. Chọn từ 752 cấu hình → có thiên lệch chọn lọc. Chỉ nên chạy thử ghi nhật ký, chưa dùng tiền thật.

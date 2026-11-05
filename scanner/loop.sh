@@ -6,12 +6,13 @@ END=$(( $(date +%s) + ${LOOP_MIN:-50} * 60 ))
 push() {
   ( cd botdata && rm -rf .git && git init -q -b bot-data \
     && git config user.name "bot-tin-hieu" && git config user.email "41898282+github-actions[bot]@users.noreply.github.com" \
-    && printf '# Dữ liệu bot tín hiệu\nTự động cập nhật bởi GitHub Actions. Web đọc signals.json.\n' > README.md \
+    && printf '# Dữ liệu bot tín hiệu\nTự động cập nhật bởi GitHub Actions. Web đọc signals.json (bot Telegram) và tinhieu-journal.json (trang tin-hieu, nhật ký V3).\n' > README.md \
     && git add -A && git commit -qm "Cập nhật tín hiệu $(date -u +%FT%TZ)" \
     && git push -q -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:bot-data ) || echo "Lưu nhật ký lỗi"
 }
 while :; do
   node scanner/scan.mjs || echo "Lần quét lỗi"
+  node scanner/journal.mjs || echo "Nhật ký V3 lỗi"
   push
   [ $(( $(date +%s) + 300 )) -ge "$END" ] && break
   sleep 300

@@ -140,17 +140,17 @@
     const mk = [];
     for (const e of (r.buy.events[S.tf] || []).slice(S.tf === 'm5' ? -8 : -16)) if (e.t >= t0)
       mk.push({ time: snap(e.t), position: e.dir > 0 ? 'belowBar' : 'aboveBar', color: e.type === 'CHoCH' ? '#f59e0b' : (e.dir > 0 ? '#22c55e' : '#f43f5e'), shape: e.dir > 0 ? 'arrowUp' : 'arrowDown', text: e.type });
-    for (const s of r.all) if (s.t >= t0) {
-      mk.push({ time: snap(s.t), position: s.side === 'buy' ? 'belowBar' : 'aboveBar', color: '#a855f7', shape: 'circle', text: (s.side === 'buy' ? 'BUY ' : 'SELL ') + s.q.tier });
-      if (s.exit && s.exit.r != null) mk.push({ time: snap(s.exit.t), position: 'inBar', color: s.exit.r > 0 ? '#22c55e' : '#f43f5e', shape: 'square', text: s.state === 'BE' ? 'BE' : s.exit.r > 0 ? 'TP' : 'SL' });
+    for (const s of (S.v3 || [])) if (s.state !== 'SKIP' && s.t >= t0) {
+      mk.push({ time: snap(s.t), position: s.side > 0 ? 'belowBar' : 'aboveBar', color: '#a855f7', shape: 'circle', text: `V3 ${s.side > 0 ? 'BUY' : 'SELL'} ${s.tf.toUpperCase()}` });
+      if (s.r != null && s.exitT) mk.push({ time: snap(s.exitT - TFMS[s.tf]), position: 'inBar', color: s.r > 0 ? '#22c55e' : '#f43f5e', shape: 'square', text: s.state === 'WIN' ? 'TP' : s.state === 'LOSS' ? 'SL' : 'Đóng' });
     }
     mk.sort((a, b) => a.time - b.time); cs.setMarkers(mk);
     plines.forEach(p => cs.removePriceLine(p)); plines = [];
-    const a = current();
+    const a = v3Active();
     if (a) {
       const add = (p, col, t, st = 0) => p != null && plines.push(cs.createPriceLine({ price: p, color: col, lineWidth: 2, lineStyle: st, axisLabelVisible: true, title: t }));
-      add(a.entry, '#a855f7', 'ENTRY'); add(a.sl, '#f43f5e', 'SL', 2);
-      add(a.tp1, '#22c55e', `TP1 ${a.rr1.toFixed(1)}R`, 2); add(a.tp2, '#16a34a', 'TP2', 1); add(a.tp3, '#15803d', 'TP3', 1);
+      add(a.entry, '#a855f7', `V3 ENTRY ${a.tf.toUpperCase()}`); add(a.sl, '#f43f5e', 'SL', 2); add(a.tp, '#22c55e', 'TP 2R', 2);
+      add(a.sweep, '#f59e0b', a.sweepName + ' đã quét', 1);
     }
     let fut = 6;
     if (SHOW.proj && r.proj && r.proj.path.length) { const last = r.proj.path[r.proj.path.length - 1].t; fut = Math.min(220, Math.max(6, Math.ceil((last - c[c.length - 1].t) / TFMS[S.tf]) + 4)); }
@@ -305,6 +305,73 @@
       : '<tr><td colspan="8" class="muted">Chưa có setup nào đạt đủ điều kiện trong dữ liệu đã tải.</td></tr>';
   }
 
+  // ---------------- V3: tín hiệu hiện tại + nhật ký máy chủ ----------------
+  const JR = 'https://raw.githubusercontent.com/letuan1111/doc-tieng-trung/bot-data/tinhieu-journal.json';
+  const v3Active = () => (S.v3 || []).filter(s => s.state === 'PENDING' || s.state === 'OPEN').slice(-1)[0] || null;
+  function v3Card() {
+    const a = v3Active(), last = (S.v3 || []).filter(s => s.state !== 'SKIP').slice(-3).reverse();
+    const rules = `<ul class="ck" style="margin-top:8px">
+      <li><span class="y">1</span> Giá quét <b>PDH</b> (đỉnh hôm trước) hoặc <b>PDL</b> (đáy hôm trước) rồi đóng cửa quay lại</li>
+      <li><span class="y">2</span> MSS/CHoCH ngược chiều cú quét, sóng có displacement + FVG</li>
+      <li><span class="y">3</span> Limit tại FVG: M15 (13h–23h VN, giữa FVG, SL +0.5 ATR) · H1 chỉ SELL sau quét PDH (mép FVG, SL +1 ATR) · M5 chỉ tinh chỉnh</li>
+      <li><span class="y">4</span> TP 2R · nhiều khung cùng chiều → chọn entry giá đẹp nhất · một lệnh một lúc</li></ul>`;
+    const hist = last.length ? `<p class="note" style="margin:8px 0 2px">Gần nhất:</p><ul class="ck">${last.map(s => `<li><span class="chip ${s.side > 0 ? 'buy' : 'sell'}">${s.side > 0 ? 'BUY' : 'SELL'} ${s.tf.toUpperCase()}</span> ${ft(s.ct)} · ${fx(s.entry)} · <b class="${s.r > 0 ? 'win' : s.r < 0 ? 'loss' : ''}">${V3.STATE_VI[s.state]}${s.r != null ? ` (${s.r > 0 ? '+' : ''}${s.r.toFixed(2)}R)` : ''}</b></li>`).join('')}</ul>` : '';
+    if (!a) return `<div class="sig"><div class="t">Chưa có tín hiệu <span class="chip">ĐỨNG NGOÀI</span></div><p class="note" style="margin:8px 0 0">Chờ giá quét PDH/PDL rồi phá cấu trúc ngược lại.</p></div>${rules}${hist}`;
+    const b = a.side > 0, exp = a.ct + V3.CFG[a.tf].expiry * TFMS[a.tf];
+    return `<div class="sig ${b ? 'buy' : 'sell'}">
+      <div class="t">${b ? 'BUY' : 'SELL'} LIMIT ${a.tf.toUpperCase()} <span class="chip ${b ? 'buy' : 'sell'}">${a.state === 'OPEN' ? 'ĐÃ KHỚP · ĐANG CHẠY' : 'CHỜ GIÁ VỀ ENTRY'}</span></div>
+      <div class="lv">
+        <span>Entry (FVG ${V3.CFG[a.tf].entry === 'ce' ? 'giữa' : 'mép'})</span><b>${fx(a.entry)}</b><span></span>
+        <span>Stop Loss</span><b class="loss">${fx(a.sl)}</b><span>−1R · ${fx(a.risk)}</span>
+        <span>Take Profit</span><b class="win">${fx(a.tp)}</b><span>+2R</span>
+        <span>Đã quét ${a.sweepName}</span><b>${fx(a.sweep)}</b><span>${b ? 'đáy' : 'đỉnh'} sóng ${fx(a.origin)}</span>
+      </div>
+      <p class="note" style="margin:8px 0 0">Tạo lúc ${ft(a.ct)}${a.state === 'PENDING' ? ` · huỷ nếu chưa khớp trước ${ft(exp)}, nếu giá chạm TP trước hoặc đóng cửa vượt ${b ? 'đáy' : 'đỉnh'} sóng` : ` · khớp lúc ${ft(a.fillT)}`}.</p></div>${rules}${hist}`;
+  }
+  function v3Alerts(first) {
+    const seen = S.seen['v3' + S.sym] || (S.seen['v3' + S.sym] = {}), nm = SYMS[S.sym].name;
+    for (const s of (S.v3 || [])) {
+      if (s.state === 'SKIP') continue;
+      const prev = seen[s.id]; if (prev === s.state) continue; seen[s.id] = s.state;
+      if (first && !prev) continue;
+      const tag = `${nm} ${s.side > 0 ? 'BUY' : 'SELL'} ${s.tf.toUpperCase()}`;
+      if (s.state === 'PENDING') alertUser(`🆕 V3 ${tag}`, `Quét ${s.sweepName} ${fx(s.sweep)} · Entry ${fx(s.entry)} · SL ${fx(s.sl)} · TP ${fx(s.tp)} (2R)`);
+      else if (s.state === 'OPEN') alertUser(`🎯 V3 khớp ${tag}`, `Entry ${fx(s.entry)} · SL ${fx(s.sl)} · TP ${fx(s.tp)}`);
+      else if (s.state === 'WIN') alertUser(`✅ V3 ${tag} chạm TP`, `+${s.r.toFixed(2)}R`);
+      else if (s.state === 'LOSS') alertUser(`❌ V3 ${tag} dính SL`, `${s.r.toFixed(2)}R`);
+    }
+    LS.set('smc.seen', S.seen);
+  }
+  async function loadJournal() { try { S.journal = await getJSON(JR + '?t=' + Date.now()); S.jErr = ''; } catch (e) { S.jErr = e.message; } renderJournal(); }
+  function jRows() {
+    const J = S.journal; if (!J) return [];
+    const all = $('jSym').value === 'all', sk = $('jSkip').checked;
+    return J.trades.filter(t => (all || t.sym === S.sym) && (sk || t.state !== 'SKIP')).slice().reverse();
+  }
+  function renderJournal() {
+    const J = S.journal;
+    if (!J) { $('jBody').innerHTML = `<tr><td colspan="9" class="muted">${S.jErr ? 'Chưa đọc được nhật ký (' + esc(S.jErr) + '). Máy chủ ghi lần đầu sau khi workflow chạy.' : 'Đang tải nhật ký…'}</td></tr>`; return; }
+    const rows = jRows(), st = V3.stats(rows.filter(t => t.state !== 'SKIP')), p = (t, v) => v == null ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: t.dp || 2, maximumFractionDigits: t.dp || 2 });
+    $('jUpd').textContent = `Máy chủ cập nhật ${new Date(J.updated).toLocaleString('vi-VN')}${J.errors && J.errors.length ? ' · lỗi: ' + J.errors.join('; ') : ''}`;
+    $('jStats').innerHTML = `<div><b>${st.signals}</b><small>Tín hiệu</small></div><div><b>${st.closed}</b><small>Đã đóng</small></div>
+      <div><b class="win">${st.wins}</b><small>Thắng</small></div><div><b class="loss">${st.losses}</b><small>Dính SL</small></div>
+      <div><b>${(st.winRate * 100).toFixed(0)}%</b><small>Tỷ lệ thắng</small></div><div><b class="${st.netR >= 0 ? 'win' : 'loss'}">${st.netR >= 0 ? '+' : ''}${st.netR.toFixed(2)}R</b><small>Tổng R</small></div>
+      <div><b>${isFinite(st.pf) ? st.pf.toFixed(2) : '∞'}</b><small>Profit factor</small></div><div><b>${st.maxDD.toFixed(1)}R</b><small>Sụt giảm tối đa</small></div>`;
+    $('jBody').innerHTML = rows.length ? rows.map(t => `<tr><td>${ft(t.ct)}</td><td>${t.sym} · ${t.tf.toUpperCase()}</td><td><span class="chip ${t.side > 0 ? 'buy' : 'sell'}">${t.side > 0 ? 'BUY' : 'SELL'}</span></td>
+      <td class="mono">${t.sweepName} ${p(t, t.sweep)}</td><td class="mono">${p(t, t.entry)}</td><td class="mono">${p(t, t.sl)}</td><td class="mono">${p(t, t.tp)}</td>
+      <td class="${t.r > 0 ? 'win' : t.r < 0 ? 'loss' : 'muted'}">${V3.STATE_VI[t.state] || t.state}${t.r != null ? ` (${t.r > 0 ? '+' : ''}${t.r.toFixed(2)}R)` : ''}</td>
+      <td class="note">${esc(t.why || '')}${t.live === false ? ' · tính lại khi bật nhật ký' : ''}${t.fillT ? ' · khớp ' + ft(t.fillT) : ''}${t.exitT && t.state !== 'PENDING' && t.state !== 'OPEN' ? ' · đóng ' + ft(t.exitT) : ''} · ${esc(t.src || '')}</td></tr>`).join('')
+      : '<tr><td colspan="9" class="muted">Chưa có lệnh nào trong nhật ký.</td></tr>';
+  }
+  function journalCSV() {
+    const J = S.journal; if (!J) return;
+    const H = ['id', 'cap', 'khung', 'lenh', 'tao_luc', 'quet', 'muc_quet', 'entry', 'sl', 'tp', 'trang_thai', 'R', 'khop_luc', 'dong_luc', 'ghi_chu', 'nguon'];
+    const iso = (t) => t ? new Date(t).toISOString() : '';
+    const rows = J.trades.map(t => [t.id, t.sym, t.tf, t.side > 0 ? 'BUY' : 'SELL', iso(t.ct), t.sweepName, t.sweep, t.entry, t.sl, t.tp, t.state, t.r == null ? '' : t.r.toFixed(3), iso(t.fillT), iso(t.exitT), t.why || '', t.src || '']);
+    const csv = '\ufeff' + [H, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = `nhat-ky-v3-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
   // ---------------- Bot MT5 (EA v16.1 đẩy phân tích lên Firebase) ----------------
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
   let botLines = [];
@@ -394,7 +461,9 @@
       const sym = S.sym, d = await loadAll(sym, full);
       if (sym !== S.sym) return;
       const off = S.isMT5 ? 0 : (S.offset[sym] || 0);
-      S.res = SMC.analyze(closedOnly(d, off), { ...S.cfg, minBuf: SYMS[sym].minBuf, spread: SYMS[sym].spread });
+      const cd = closedOnly(d, off);
+      S.res = SMC.analyze(cd, { ...S.cfg, minBuf: SYMS[sym].minBuf, spread: SYMS[sym].spread });
+      S.v3 = V3.run({ m5: cd.m5, m15: cd.m15, h1: cd.h1 }, { spread: SYMS[sym].spread, now: Date.now() });
       const m5 = d.m5, last = m5[m5.length - 1], prevDay = m5[Math.max(0, m5.length - 289)];
       $('px').textContent = fx(last.c + off);
       const ch = (last.c - prevDay.c) / prevDay.c * 100; $('chg').textContent = (ch >= 0 ? '+' : '') + ch.toFixed(2) + '% 24h'; $('chg').className = 'chip ' + (ch >= 0 ? 'buy' : 'sell');
@@ -402,7 +471,7 @@
       if (MT5.db && !S.isMT5) $('src').textContent += ' (MT5 chưa kết nối)'; $('upd').textContent = 'Cập nhật ' + new Date().toLocaleTimeString('vi-VN');
       $('offNote').textContent = off ? `Đã căn theo giá Exness: chênh ${off >= 0 ? '+' : ''}${fx(off)} so với nguồn dữ liệu.` : '';
       $('now').innerHTML = nowCard(); $('proj').innerHTML = projCard(); $('pBuy').innerHTML = progress('buy'); $('pSell').innerHTML = progress('sell');
-      statsHist(); renderChart(full); checkAlerts(!firstRun[sym]); firstRun[sym] = true;
+      $('v3now').innerHTML = v3Card(); statsHist(); renderJournal(); renderChart(full); v3Alerts(!firstRun[sym]); firstRun[sym] = true;
     } catch (e) {
       console.error(e); $('src').textContent = 'Lỗi tải dữ liệu'; $('now').innerHTML = `<p class="err">Không tải được dữ liệu (${e.message}). Thử tải lại trang.</p>`;
     } finally { busy = false; }
@@ -426,7 +495,7 @@
 
   // ---------------- sự kiện ----------------
   function seg(id, attr, fn) { $(id).addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; [...$(id).children].forEach(x => x.classList.toggle('on', x === b)); fn(b.dataset[attr]); }); }
-  seg('symSeg', 's', (s) => { S.sym = s; LS.set('smc.sym', s); S.res = null; renderBot(); $('px').textContent = '—'; $('src').textContent = 'đang tải…'; $('cEx').value = ''; if (S.view === 'tv') renderTV(); refresh(true); });
+  seg('symSeg', 's', (s) => { S.sym = s; LS.set('smc.sym', s); S.res = null; S.v3 = null; renderBot(); renderJournal(); $('px').textContent = '—'; $('src').textContent = 'đang tải…'; $('cEx').value = ''; if (S.view === 'tv') renderTV(); refresh(true); });
   seg('tfSeg', 'tf', (tf) => { S.tf = tf; if (S.view === 'tv') renderTV(); else renderChart(true); });
   seg('viewSeg', 'v', (v) => { S.view = v; $('chartWrap').classList.toggle('hide', v !== 'chart'); $('tv').classList.toggle('hide', v !== 'tv'); if (v === 'tv') renderTV(); else setTimeout(() => renderChart(false), 50); });
   [...$('symSeg').children].forEach(b => b.classList.toggle('on', b.dataset.s === S.sym));
@@ -454,5 +523,7 @@
 
   initChart(); refresh(true); loadBot();
   setInterval(tick, 15000); setInterval(loadBot, 15000);
+  $('jSym').onchange = renderJournal; $('jSkip').onchange = renderJournal; $('jCsv').onclick = journalCSV;
+  loadJournal(); setInterval(loadJournal, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(false); });
 })();

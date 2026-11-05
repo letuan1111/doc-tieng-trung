@@ -100,6 +100,13 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
       <div class="tw"><table><thead><tr><th>Thời gian</th><th>Cặp · Khung</th><th>Lệnh</th><th>Quét</th><th>Entry</th><th>SL</th><th>TP 2R</th><th>Kết quả</th><th>Bối cảnh giá · ghi chú</th></tr></thead><tbody id="jBody"></tbody></table></div>
       <p class="note">GitHub Actions chạy engine V4 mỗi 5 phút và lưu từng lệnh vào <code>tinhieu-journal.json</code> (nhánh bot-data): tạo → chờ khớp → đang chạy → TP/SL/hết giờ/hết hạn/huỷ. Giá theo MT5 Exness khi EA bridge đang chạy, nếu không thì OKX. Kết quả đã trừ spread. Đây là ghi nhận để kiểm chứng, không phải khuyến nghị đầu tư.</p>
     </div>
+    <div class="card" id="demoCard">
+      <h3>💼 Tài khoản demo 500$ — chạy đúng luật EA (EMA hồi + Test EMA21 M30), 0.02 lot, mỗi lần 1 lệnh</h3>
+      <div class="stat" id="dStats"></div>
+      <div id="dOpen" class="note" style="margin-bottom:8px"></div>
+      <div class="tw"><table><thead><tr><th>Vào lúc</th><th>Mô hình</th><th>Lệnh</th><th>Entry</th><th>SL</th><th>TP</th><th>Kết quả</th><th>USD</th><th>Số dư</th></tr></thead><tbody id="dBody"></tbody></table></div>
+      <p class="note">Tài khoản giấy trên máy chủ (GitHub Actions, ~5 phút/lần) — không cần mở máy hay MT5. Nhận mọi tín hiệu EA sẽ vào: 🔁 EMA hồi trong giờ VN 0, 8, 11, 12, 14, 17, 20, 21 (SL ≤ 30 giá) và 🧲 Test EMA21 M30 (bỏ 8h, 23h); đang có lệnh thì bỏ tín hiệu mới. 0.02 lot vàng = 2$ mỗi giá, đã trừ spread. Không phải tiền thật.</p>
+    </div>
     <div class="card hide">
       <h3>Mô phỏng engine cũ (tham khảo, trên dữ liệu đã tải)</h3>
       <div class="stat" id="stats"></div>
@@ -153,6 +160,6 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 <script src="wave.js?v=2"></script>
 <script src="emapb.js?v=4"></script>
 <script src="ema21.js?v=1"></script>
-<script src="app.js?v=32"></script>
+<script src="app.js?v=33"></script>
 </body>
 </html>

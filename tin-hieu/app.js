@@ -358,8 +358,18 @@
     const all = $('jSym').value === 'all', sk = $('jSkip').checked, old = $('jOld').checked, g = $('jGrade').value;
     return J.trades.filter(t => (all || t.sym === S.sym) && (sk || t.state !== 'SKIP') && (old || t.ver === V3.version || (window.WAVE && t.ver === WAVE.version) || (window.EMAPB && t.ver === EMAPB.version) || (window.EMA21 && t.ver === EMA21.version)) && (g === 'all' || (g === 'T' ? !!t.tgOK : (t.grade || 'A') === g))).slice().reverse();
   }
+  function renderDemo(J) {
+    const D = J && J.demo, el = $('dStats'); if (!el) return;
+    if (!D) { el.innerHTML = '<div><b>—</b><small>Máy chủ mở tài khoản ở lần chạy tới</small></div>'; $('dBody').innerHTML = ''; $('dOpen').textContent = ''; return; }
+    const C = D.taken.filter(x => x.usd != null), pl = D.balance - D.bal0, wr = C.length ? D.wins / C.length : 0, p2 = (v) => v == null ? '—' : (+v).toFixed(2);
+    el.innerHTML = `<div><b>${D.balance.toFixed(2)}$</b><small>Số dư (vốn ${D.bal0}$)</small></div><div><b class="${pl >= 0 ? 'win' : 'loss'}">${pl >= 0 ? '+' : ''}${pl.toFixed(2)}$</b><small>Lời / lỗ</small></div>
+      <div><b>${C.length}</b><small>Lệnh đã đóng</small></div><div><b class="win">${D.wins}</b><small>Chạm TP</small></div><div><b class="loss">${D.losses}</b><small>Dính SL</small></div><div><b>${(wr * 100).toFixed(0)}%</b><small>Tỷ lệ thắng</small></div><div><b>${D.maxDD.toFixed(2)}$</b><small>Sụt tối đa</small></div><div><b>${ft(D.start)}</b><small>Mở tài khoản</small></div>`;
+    $('dOpen').innerHTML = D.open ? `🟢 Đang mở: ${D.open.grade === 'R' ? '🧲 Test EMA21' : '🔁 EMA hồi'} <b>${D.open.side > 0 ? 'BUY' : 'SELL'}</b> từ ${ft(D.open.ct)} · Entry ${p2(D.open.entry)} · SL ${p2(D.open.sl)} · TP ${p2(D.open.tp)}` : `Chưa có lệnh mở · cập nhật ${new Date(D.updated).toLocaleString('vi-VN')}`;
+    $('dBody').innerHTML = D.taken.length ? D.taken.slice().reverse().map(x => `<tr><td>${ft(x.ct)}</td><td>${x.grade === 'R' ? '🧲 Test EMA21' : '🔁 EMA hồi'}</td><td><span class="chip ${x.side > 0 ? 'buy' : 'sell'}">${x.side > 0 ? 'BUY' : 'SELL'}</span></td><td>${p2(x.entry)}</td><td>${p2(x.sl)}</td><td>${p2(x.tp)}</td><td>${x.state === 'WIN' ? '<span class="win">✅ TP</span>' : x.state === 'LOSS' ? '<span class="loss">❌ SL</span>' : x.state === 'TIME' ? '⏱ Hết giờ' : '🟢 Đang chạy'}${x.exitT && x.usd != null ? ' · ' + ft(x.exitT) : ''}</td><td class="${(x.usd || 0) >= 0 ? 'win' : 'loss'}">${x.usd == null ? '—' : (x.usd >= 0 ? '+' : '') + x.usd.toFixed(2)}</td><td>${x.bal == null ? '—' : x.bal.toFixed(2)}</td></tr>`).join('') : '<tr><td colspan="9" class="muted">Chưa có lệnh — tài khoản chờ tín hiệu EA đầu tiên.</td></tr>';
+  }
   function renderJournal() {
     const J = S.journal;
+    renderDemo(J);
     if (!J) { $('jBody').innerHTML = `<tr><td colspan="9" class="muted">${S.jErr ? 'Chưa đọc được nhật ký (' + esc(S.jErr) + '). Máy chủ ghi lần đầu sau khi workflow chạy.' : 'Đang tải nhật ký…'}</td></tr>`; return; }
     const rows = jRows(), st = V3.stats(rows.filter(t => t.state !== 'SKIP')), p = (t, v) => v == null ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: t.dp || 2, maximumFractionDigits: t.dp || 2 });
     setTimeout(() => { const b = $('jMore'); if (b) b.onclick = () => { S.jLimit = (S.jLimit || 200) + 300; renderJournal(); }; });

@@ -139,6 +139,25 @@ try {
 } catch (e) { errs.push('Mô hình M5 (Sóng 15 / EMA hồi / Test EMA21): ' + e.message); }
 // lệnh treo quá lâu ngoài cửa sổ dữ liệu
 for (const t of J.trades) if (t.grade !== 'W' && t.grade !== 'E' && t.grade !== 'R' && !V3.FINAL[t.state] && NOW() - t.ct > 30 * 864e5) { t.state = 'TIME'; t.why = 'Quá 30 ngày không cập nhật được'; }
+// ---- 💼 Tài khoản DEMO (giấy) 500 USD — chạy trên máy chủ, đúng luật 2 EA trên MT5:
+//  EMA_Hoi_ICT (lệnh 🔁 EMA hồi trong giờ cho phép, SL ≤ 30 giá) + EMA21_Test_M30 (lệnh 🧲 Test EMA21) · 0.02 lot · mỗi lần chỉ 1 lệnh trên vàng (giống InpOnlyOneOnSym)
+{ const D = J.demo = J.demo || { start: NOW(), bal0: 500, lot: 0.02, taken: [] };
+  const USDPT = 100 * D.lot, FIN = (st) => st === 'WIN' || st === 'LOSS' || st === 'TIME';
+  const pick = (t) => ({ id: t.id, grade: t.grade, side: t.side, ct: t.ct, hour: t.hour, entry: t.entry, sl: t.sl, tp: t.tp, risk: t.risk, state: t.state, exitT: t.exitT, exitP: t.exitP, pts: t.pts, live: t.live });
+  for (const x of D.taken) { const t = byId.get(x.id); if (t && !FIN(x.state)) Object.assign(x, pick(t)); }
+  const okEA = (t) => t.sym === 'XAU' && t.ct >= D.start && ((t.grade === 'E' && t.tgOK && t.risk <= 30) || t.grade === 'R');
+  const have = new Set(D.taken.map(x => x.id));
+  for (const t of J.trades.filter(t => okEA(t) && !have.has(t.id)).sort((a, b) => a.ct - b.ct)) {
+    if (D.taken.some(x => !FIN(x.state))) break;                                   // đang có lệnh → bỏ tín hiệu
+    const lastExit = Math.max(0, ...D.taken.map(x => x.exitT || 0)); if (t.ct < lastExit) continue; // tín hiệu lúc lệnh trước chưa đóng
+    D.taken.push(pick(t)); have.add(t.id); }
+  let bal = D.bal0, peak = D.bal0, dd = 0;
+  for (const x of D.taken) { if (FIN(x.state) && x.pts != null) { x.usd = +(x.pts * USDPT).toFixed(2); bal += x.usd; peak = Math.max(peak, bal); dd = Math.max(dd, peak - bal); x.bal = +bal.toFixed(2); }
+    if (FIN(x.state) && !x.tgDone) { x.tgDone = true; if (x.live !== false && NOW() - (x.exitT || 0) < 2 * 36e5) toSend.push(`💼 <b>Tài khoản demo</b> · ${x.grade === 'R' ? '🧲 Test EMA21' : '🔁 EMA hồi'} ${x.side > 0 ? 'BUY' : 'SELL'} XAU 0.02 lot\n${x.state === 'WIN' ? '✅ Chạm TP' : x.state === 'LOSS' ? '❌ Dính SL' : '⏱ Hết giờ'} <b>${x.usd >= 0 ? '+' : ''}${x.usd.toFixed(2)}$</b> (${x.pts >= 0 ? '+' : ''}${x.pts.toFixed(1)} giá)\nSố dư <b>${bal.toFixed(2)}$</b> (vốn ${D.bal0}$ · ${bal - D.bal0 >= 0 ? '+' : ''}${(bal - D.bal0).toFixed(2)}$)`); } }
+  const C = D.taken.filter(x => FIN(x.state));
+  D.balance = +bal.toFixed(2); D.maxDD = +dd.toFixed(2); D.wins = C.filter(x => x.state === 'WIN').length; D.losses = C.filter(x => x.state === 'LOSS').length; D.timeouts = C.filter(x => x.state === 'TIME').length;
+  D.open = D.taken.find(x => !FIN(x.state)) || null; D.updated = NOW();
+}
 J.trades.sort((a, b) => a.ct - b.ct);
 J.updated = NOW(); J.errors = errs;
 J.stats = {}; for (const sym of Object.keys(SYMS)) J.stats[sym] = { chuan: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'A')), song15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'W')), bos15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'S')), emaHoi: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'E')), test21: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'R')), tatca: V3.stats(J.trades.filter(t => t.sym === sym)) };

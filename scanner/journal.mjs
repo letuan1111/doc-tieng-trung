@@ -1,4 +1,4 @@
-// Nhật ký giao dịch V3 cho trang tin-hieu — chạy trên GitHub Actions mỗi 5 phút (không cần mở web).
+// Nhật ký giao dịch V4 cho trang tin-hieu — chạy trên GitHub Actions mỗi 5 phút (không cần mở web) + báo Telegram.
 // Ghi MỌI tín hiệu: mới → chờ khớp → đang chạy → TP/SL/hết giờ/hết hạn/huỷ, và tín hiệu bị bỏ qua vì có entry đẹp hơn.
 // Nguồn giá: MT5 Exness (Firebase, nếu EA bridge đang chạy và dữ liệu < 15 phút) → nếu không có thì OKX.
 import fs from 'node:fs';
@@ -42,6 +42,35 @@ async function load(sym) {
   return { D, src: 'OKX ' + S.okx };
 }
 const NOW = () => process.env.MOCK_END ? +process.env.MOCK_END : Date.now();
+
+// ---- Telegram: báo lệnh V4 (mới / khớp / TP / SL / hết giờ / huỷ) — chỉ lệnh ghi trực tiếp, không báo lệnh "tính lại"
+const TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim(), FIXED_CHAT = (process.env.TELEGRAM_CHAT_ID || '').trim();
+let OWNER = null; try { OWNER = JSON.parse(fs.readFileSync(path.join(DATA, 'state.json'), 'utf8')).owner; } catch (_) {}
+const CHATS = FIXED_CHAT ? FIXED_CHAT.split(',').map(s => s.trim()).filter(Boolean) : (OWNER ? [String(OWNER)] : []);
+const PAGE = 'https://letuan1111.github.io/doc-tieng-trung/tin-hieu/';
+const vnT = (t) => t ? new Date(t + 7 * 36e5).toISOString().slice(5, 16).replace('T', ' ').replace(/^(\d\d)-(\d\d)/, '$2/$1') : '';
+const esc = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+async function tgSend(text) {
+  if (!TOKEN || process.env.MOCK_DIR || !CHATS.length) { console.log('[TG]', text.replace(/<[^>]+>/g, '')); return; }
+  for (const id of CHATS) { try { await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: id, text, parse_mode: 'HTML', disable_web_page_preview: true }), signal: AbortSignal.timeout(15000) }); } catch (_) {} await sleep(350); }
+}
+function tgText(t) {
+  const f = (v) => v == null ? '—' : (+v).toFixed(t.dp ?? 2), side = t.side > 0 ? 'BUY' : 'SELL', tag = t.grade === 'B' ? '🔎 Ghi nhận' : '⭐ Chuẩn';
+  const head = `<b>${t.sym} · ${t.tf.toUpperCase()} · ${side} LIMIT</b> — ${tag}`;
+  const zone = `Vùng FVG ${t.tf.toUpperCase()}: ${f(t.fvg && t.fvg.bot)} – ${f(t.fvg && t.fvg.top)}`;
+  const lv = `Entry <b>${f(t.entry)}</b> · SL <b>${f(t.sl)}</b> · TP <b>${f(t.tp)}</b> (${(t.rr || 2).toFixed(1)}R)`;
+  const sw = `Đã quét ${esc(t.sweepName)} ${f(t.sweep)} → MSS + FVG`;
+  switch (t.state) {
+    case 'PENDING': return `🆕 ${head}\n${sw}\n${zone}\n${lv}\n${t.ctx ? '<i>' + esc(V3.ctxText(t.ctx)) + '</i>\n' : ''}Huỷ nếu chưa khớp trước ${vnT(t.ct + V3.CFG[t.tf].expiry * MS[t.tf])}\n<a href="${PAGE}">Mở trang</a>`;
+    case 'OPEN': return `🎯 Đã khớp ${head}\n${lv}\nKhớp lúc ${vnT(t.fillT)}`;
+    case 'WIN': return `✅ Chạm TP ${head}\n${lv}\nKết quả <b>+${t.r.toFixed(2)}R</b> · đóng ${vnT(t.exitT)}`;
+    case 'LOSS': return `❌ Dính SL ${head}\n${lv}\nKết quả <b>${t.r.toFixed(2)}R</b> · đóng ${vnT(t.exitT)}`;
+    case 'TIME': return `⏱ Hết giờ giữ lệnh ${head}\nĐóng ${f(t.exitP)} · <b>${t.r >= 0 ? '+' : ''}${t.r.toFixed(2)}R</b>`;
+    default: return `⚪ Huỷ ${head}\n${esc(V3.STATE_VI[t.state] || t.state)}${t.why ? ' — ' + esc(t.why) : ''}`;
+  }
+}
+const toSend = [];
+const notify = (t) => { if (!t.live) return; t.tg = t.tg || []; if (t.state === 'OPEN' && !t.tg.includes('PENDING')) { t.tg.push('PENDING'); toSend.push(tgText({ ...t, state: 'PENDING' })); } if (V3.FINAL[t.state] && t.fillT && !t.tg.includes('OPEN') && t.state !== 'SKIP') { t.tg.push('OPEN'); toSend.push(tgText({ ...t, state: 'OPEN' })); } if (t.tg.includes(t.state)) return; t.tg.push(t.state); toSend.push(tgText(t)); };
 const closed = (c) => c.filter(x => x.ct <= NOW());
 
 const RULES = 'Ghi nhận mọi setup ICT/SMC quét thanh khoản (PDH/PDL, tuần, London, phiên Á, swing) → MSS + FVG; nhãn Chuẩn = Quét PDH/PDL → MSS có displacement → limit tại FVG · M15: cấu trúc swing H4 cùng chiều, ngoài phiên Á (mép, SL+0.5ATR) · M30: mọi setup (CE, SL+1ATR) · H1: cả hai chiều (mép, SL+1ATR) · chờ khớp M15 6h / M30 10h / H1 16h · TP 2R';
@@ -64,12 +93,12 @@ for (const sym of Object.keys(SYMS)) {
       const rec = { ...s, id, sym, ver: V3.version, src: L.src, seen: NOW(), lastT: D[s.tf][D[s.tf].length - 1].ct, dp: SYMS[sym].dp };
       // tín hiệu tạo trước lúc nhật ký thấy nó > 1 nến: đánh dấu "tính lại"
       rec.live = NOW() - s.ct < 2 * MS[s.tf] + 10 * 60e3;
-      J.trades.push(rec); byId.set(id, rec); added++; continue;
+      J.trades.push(rec); byId.set(id, rec); added++; notify(rec); continue;
     }
     if (V3.FINAL[old.state]) continue;
-    if (s.state === 'SKIP' && old.state === 'PENDING' && old.grade === 'A') { old.state = 'SKIP'; old.why = s.why; old.exitT = NOW(); changed++; continue; }
+    if (s.state === 'SKIP' && old.state === 'PENDING' && old.grade === 'A') { old.state = 'SKIP'; old.why = s.why; old.exitT = NOW(); changed++; notify(old); continue; }
     if (!D[old.tf]) continue; // lệnh M5 của bản V3 cũ: không còn dữ liệu M5
-    const before = old.state; V3.track(old, D[old.tf]); if (old.state !== before) changed++;
+    const before = old.state; V3.track(old, D[old.tf]); if (old.state !== before) { changed++; notify(old); }
   }
 }
 // lệnh treo quá lâu ngoài cửa sổ dữ liệu
@@ -78,5 +107,7 @@ J.trades.sort((a, b) => a.ct - b.ct);
 J.updated = NOW(); J.errors = errs;
 J.stats = {}; for (const sym of Object.keys(SYMS)) J.stats[sym] = { chuan: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'A')), tatca: V3.stats(J.trades.filter(t => t.sym === sym)) };
 fs.mkdirSync(DATA, { recursive: true });
+J.telegram = { chats: CHATS.length, token: !!TOKEN };
 fs.writeFileSync(FILE, JSON.stringify(J));
+for (const m of toSend.slice(0, 20)) await tgSend(m);
 console.log(`Nhật ký V4: ${J.trades.length} dòng (+${added} mới, ${changed} đổi trạng thái)${errs.length ? ' · lỗi: ' + errs.join('; ') : ''}`);

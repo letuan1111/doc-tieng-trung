@@ -8,15 +8,18 @@ import { DIR, load } from './core.mjs';
 const V3 = createRequire(import.meta.url)(path.join(DIR, '..', 'tin-hieu', 'v3.js'));
 const sym = process.argv[2] || 'XAU', FROM = Date.parse(process.argv[3] || '2026-05-05T00:00:00Z');
 const SP = { XAU: 0.35, BTC: 18, ETH: 1.2 }[sym], LOT = +(process.argv[4] || 0.02), CONTRACT = { XAU: 100, BTC: 1, ETH: 1 }[sym], TO = process.argv[5] ? Date.parse(process.argv[5]) : Infinity; // Exness XAUUSDm 1 lot = 100 oz, BTCUSDm 1 lot = 1 BTC
-const NEED = { m15: +(process.env.N15 || 1500), h1: +(process.env.NH1 || 1000) }, MS = V3.MS;
-const A = { m15: load(sym, 'm15'), h1: load(sym, 'h1') };
-const ptr = { m15: 0, h1: 0 };
+const NEED = { m5: 2000, m15: +(process.env.N15 || 3000), h1: +(process.env.NH1 || 2200) }, MS = V3.MS;
+// TFS=m5,m15,m30 → chỉ chạy các khung này; M5 dùng cùng quy tắc với M15 (EMA H4 cùng chiều, ngoài phiên Á, mép FVG, SL+0.5ATR)
+if (process.env.TFS) { const want = process.env.TFS.split(','); V3.CFG.m5 = { ...V3.CFG.m15 }; V3.TFS.splice(0, V3.TFS.length, ...['h1', 'm30', 'm15', 'm5'].filter(t => want.includes(t))); }
+const USE5 = V3.TFS.includes('m5');
+const A = { m15: load(sym, 'm15'), h1: load(sym, 'h1'), ...(USE5 ? { m5: load(sym, 'm5') } : {}) };
+const ptr = { m5: 0, m15: 0, h1: 0 };
 const trades = [], byId = new Map();
 const t0 = Date.now(); let steps = 0;
-for (const bar of A.m15) {
+for (const bar of (USE5 ? A.m5 : A.m15)) {
   const NOW = bar.ct; if (NOW < FROM) continue; if (NOW > TO) break; steps++;
   const D = {};
-  for (const tf of ['m15', 'h1']) { const c = A[tf]; while (ptr[tf] < c.length && c[ptr[tf]].ct <= NOW) ptr[tf]++; D[tf] = c.slice(Math.max(0, ptr[tf] - NEED[tf]), ptr[tf]); }
+  for (const tf of (USE5 ? ['m5', 'm15', 'h1'] : ['m15', 'h1'])) { const c = A[tf]; while (ptr[tf] < c.length && c[ptr[tf]].ct <= NOW) ptr[tf]++; D[tf] = c.slice(Math.max(0, ptr[tf] - NEED[tf]), ptr[tf]); }
   D.m30 = V3.resample(D.m15, MS.m30);
   const res = V3.run(D, { spread: SP, now: NOW });
   for (const s of res) {

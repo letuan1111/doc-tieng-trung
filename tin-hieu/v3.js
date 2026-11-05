@@ -137,7 +137,7 @@
   // chạy cả 3 khung cho một cặp: D = {m15, h1} (+ m30 nếu có; nếu không thì dựng từ M15) — chỉ nến đã đóng, spread theo giá
   function run(D, opt) {
     opt = opt || {}; const spread = opt.spread || 0, all = [];
-    const C = { m15: D.m15, m30: D.m30 || (D.m15 ? resample(D.m15, MS.m30) : null), h1: D.h1 };
+    const C = { m5: D.m5 || null, m15: D.m15, m30: D.m30 || (D.m15 ? resample(D.m15, MS.m30) : null), h1: D.h1 };
     for (const tf of TFS) { const c = C[tf]; if (!c || c.length < 60) continue; for (const e of setups(c, tf, { h1: C.h1 })) { const s = simulate(c, e, spread); if (s) all.push(s); } }
     all.sort((a, b) => a.ct - b.ct || TFS.indexOf(a.tf) - TFS.indexOf(b.tf));
     let busyUntil = -Infinity, busyId = null;

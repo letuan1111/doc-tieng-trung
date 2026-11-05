@@ -144,3 +144,8 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
 - Lúc EMA34 M5 cắt EMA89 M5 ngược xu hướng M15, 99% số lần giá ĐÃ chạm/vượt EMA34 M15 rồi (EMA89 M5 ≈ EMA30 M15) → tín hiệu luôn đến muộn, không còn đường tới mục tiêu.
 - Tín hiệu sớm hơn (giá M5 đóng cửa vượt EMA34 M5, giá còn cách EMA34 M15 ≥ 1 ATR, + quét + MSS + FVG): 280 lệnh, thắng 43%, TP TB 11 / SL TB 15 giá → −408$ (0.02 lot). Mọi biến thể đều lỗ cả năm; cách xa EMA hơn thì thắng còn thấp hơn (≥2 ATR: 26%).
 - Kết luận: không dùng làm chiến lược. Giữ EMA hồi (vào cùng xu hướng sau khi giá đã hồi về EMA) như cũ.
+
+## Khi nào giá quay lại test EMA34/89 M15 (12 tháng, 2026-11-05)
+- Giá rời EMA34 M15 (đóng cửa cách ≥ 1 ATR) ~7.7 lần/ngày. Rời CÙNG xu hướng (EMA34 đúng phía EMA89): về EMA34 trong 1h 36% · 4h 76% · 12h 96%. Rời NGƯỢC xu hướng: về EMA34 chỉ 33% trong 4h nhưng về EMA89 87%.
+- Trung vị: 105 phút về EMA34, ~2h về EMA89; trước khi về giá thường chạy thêm ~3 ATR. Giờ VN hay chạm EMA34 nhất: 06–08h và 18–21h.
+- Đặt LIMIT mù tại EMA34 / giữa 34–89 / EMA89 theo xu hướng (mô phỏng M5, ematest3.mjs): thắng 41–44%, gần như mọi biến thể lỗ cả năm (vd EMA34 · SL 1 ATR · TP 1R: 1274 lệnh, −856$). Giá test EMA là gần như chắc, nhưng thường đâm xuyên qua EMA → cần chờ xác nhận M5 (quét → MSS → FVG) = EMA hồi/EA, không đặt limit sẵn.

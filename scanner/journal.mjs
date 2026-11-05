@@ -44,7 +44,7 @@ async function load(sym) {
 const NOW = () => process.env.MOCK_END ? +process.env.MOCK_END : Date.now();
 const closed = (c) => c.filter(x => x.ct <= NOW());
 
-const RULES = 'Quét PDH/PDL → MSS có displacement → limit tại FVG · M15: cấu trúc swing H4 cùng chiều, ngoài phiên Á (mép, SL+0.5ATR) · M30: mọi setup (CE, SL+1ATR) · H1: chỉ SELL sau quét PDH (mép, SL+1ATR) · TP 2R';
+const RULES = 'Quét PDH/PDL → MSS có displacement → limit tại FVG · M15: cấu trúc swing H4 cùng chiều, ngoài phiên Á (mép, SL+0.5ATR) · M30: mọi setup (CE, SL+1ATR) · H1: cả hai chiều (mép, SL+1ATR) · chờ khớp M15 6h / M30 10h / H1 16h · TP 2R';
 let J = { version: V3.version, rules: RULES, trades: [] };
 try { J = { ...J, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) }; } catch (_) {}
 J.version = V3.version; J.rules = RULES;

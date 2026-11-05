@@ -60,3 +60,13 @@ Tua từng nến bản v4.1 (0.02 lot):
 | ETH | 13 lệnh · −1.0R | 19 lệnh · +2.4R |
 
 So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng trước không còn lỗ.
+
+## Bản tốt nhất đưa lên link (v4.2, 05/11/2026)
+- **Quy tắc:** v4.1, cộng chờ khớp lâu gấp đôi (M15 6h, M30 10h, H1 16h) và H1 cả BUY lẫn SELL.
+- **TP:** giữ 2R. Đã thử TP theo thanh khoản đối diện (đích của con sóng). Đích này gần như luôn dưới 2R, nên kết quả như nhau. TP 3R làm thua nhiều hơn, TP 1.5R làm mất lời.
+- **Tua từng nến, 0.02 lot:**
+  - XAU 6 tháng trước: 26 lệnh · 10 TP / 12 SL · +10.3R · +1289 USD
+  - XAU 6 tháng gần: 19 lệnh · 8 TP / 8 SL · +8.3R · +346 USD
+  - BTC 6 tháng trước: 16 lệnh · 6 TP / 8 SL · +3.3R · −68 USD
+  - BTC 6 tháng gần: 32 lệnh · 15 TP / 14 SL · +16.2R · +260 USD
+- **Tổng 12 tháng** (XAU+BTC+ETH): +37R, dương ở cả 6 phần dữ liệu, sụt giảm tối đa khoảng 4R.

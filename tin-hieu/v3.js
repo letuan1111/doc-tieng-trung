@@ -7,11 +7,12 @@
  *       M15 — bias ICT: cấu trúc swing H4 (strong high/low) cùng chiều lệnh, KHÔNG vào phiên Á (7h–13h VN); entry = mép FVG; SL ngoài đỉnh/đáy quét + 0.5 ATR
  *             (rà lại 05/11: cấu trúc H4 tốt hơn EMA H4 — cùng số lệnh, +8.2R thay vì +5.6R, dương ở mọi giai đoạn; killzone, ép entry discount, OTE đều làm kém đi)
  *       M30 — (dựng từ M15) mọi setup, cả hai chiều; entry = CE (giữa) FVG; SL + 1 ATR
- *       H1  — chỉ SELL sau quét PDH (phá giả PDH ~61% số lần); entry = mép FVG; SL + 1 ATR
+ *       H1  — cả BUY và SELL; entry = mép FVG; SL + 1 ATR
+ *     Chờ khớp: M15 24 nến (6h), M30 20 nến (10h), H1 16 nến (16h). TP 2R (thử TP theo thanh khoản đối diện: gần như luôn < 2R, kết quả như nhau).
  *     Chọn cách phối bền nhất: dương ở cả 6 tháng trước lẫn 6 tháng gần đây trên XAU/BTC/ETH (chỉ BTC 6 tháng trước −0.7R).
  *     Nhiều khung cùng chiều đang chờ khớp → giữ entry giá đẹp nhất (mua thấp nhất / bán cao nhất). Một lệnh một lúc mỗi cặp.
  *     Mỗi tín hiệu ghi lại BỐI CẢNH GIÁ lúc đó (ctx): phiên, EMA khung vào/H1/H4, độ sâu quét, độ mạnh sóng, ngày đã chạy bao nhiêu % ADR.
- *  4. TP cố định 2R. Huỷ nếu không khớp sau 12 nến (H1: 8), nếu giá chạm TP trước khi khớp, hoặc đóng cửa vượt đỉnh/đáy quét.
+ *  4. TP cố định 2R. Huỷ nếu hết thời gian chờ khớp, nếu giá chạm TP trước khi khớp, hoặc đóng cửa vượt đỉnh/đáy quét.
  *     Giữ lệnh tối đa 96 nến (H1: 72) rồi đóng theo giá.
  */
 (function (root) {
@@ -20,9 +21,9 @@
   const TFS = ['h1', 'm30', 'm15'];
   // liq: nguồn thanh khoản bị quét ('pd' = PDH/PDL, 'london', 'asia', 'pw', 'swing'); back: số nến tối đa để đóng cửa quay lại
   const CFG = {
-    m15: { entry: 'edge', slATR: 0.5, expiry: 12, hold: 96, window: false, sides: [1, -1], liq: ['pd'], back: 3, filter: (x) => x.st4 && x.sess !== 'Á', rule: 'cấu trúc swing H4 cùng chiều · ngoài phiên Á' },
-    m30: { entry: 'ce',   slATR: 1.0, expiry: 10, hold: 72, window: false, sides: [1, -1], liq: ['pd'], back: 3, filter: null, rule: 'mọi setup quét PDH/PDL → MSS → FVG' },
-    h1:  { entry: 'edge', slATR: 1.0, expiry: 8,  hold: 72, window: false, sides: [-1], liq: ['pd'], back: 3, filter: null, rule: 'chỉ SELL sau quét PDH' },
+    m15: { entry: 'edge', slATR: 0.5, expiry: 24, hold: 96, window: false, sides: [1, -1], liq: ['pd'], back: 3, filter: (x) => x.st4 && x.sess !== 'Á', rule: 'cấu trúc swing H4 cùng chiều · ngoài phiên Á' },
+    m30: { entry: 'ce',   slATR: 1.0, expiry: 20, hold: 72, window: false, sides: [1, -1], liq: ['pd'], back: 3, filter: null, rule: 'mọi setup quét PDH/PDL → MSS → FVG' },
+    h1:  { entry: 'edge', slATR: 1.0, expiry: 16, hold: 72, window: false, sides: [1, -1], liq: ['pd'], back: 3, filter: null, rule: 'mọi setup, cả hai chiều' },
   };
   const RR = 2, L = 3, WARM = 100, PER_TF = false; // true = mỗi khung giữ một lệnh riêng // bỏ 100 nến đầu (ATR/cấu trúc chưa ổn định)
   // gộp nến (chỉ giữ nến khung lớn đã đủ, không nhìn trước)
@@ -122,7 +123,11 @@
         Object.assign(ctx, { st1: s1 ? s1.d === d : null, st4: s4 ? s4.d === d : null, kzSweep: KZ(c[oi].t), kzMss: KZ(x.t),
           retCE: ret(ce), retEdge: ret(edge), fvgOTE: Math.max(d > 0 ? fvg.bot : fvg.bot, Math.min(ext - d * 0.62 * leg, ext - d * 0.79 * leg)) <= Math.min(fvg.top, Math.max(ext - d * 0.62 * leg, ext - d * 0.79 * leg)),
           pd4: pdR(ce, s4), pd1: pdR(ce, s1) });
-        const e = { tf, k, d, oi, oP, lvl, lvName, a, fvg, ext, ct: c[k].ct, t: c[k].t, ctx };
+        // thanh khoản đối diện (đích của con sóng): PDH/PDL hôm nay + đỉnh/đáy swing chưa bị phá, vượt quá cực trị sóng
+        const opp = (d > 0 ? sh : sl).filter(q => q.i >= k - 400 && (d > 0 ? q.p > ext : q.p < ext)).map(q => q.p);
+        const pdx = d > 0 ? PD[k].pH : PD[k].pL; if (pdx != null && (d > 0 ? pdx > ext : pdx < ext)) opp.push(pdx);
+        const liq = opp.length ? (d > 0 ? Math.min(...opp) : Math.max(...opp)) : null;
+        const e = { tf, k, d, oi, oP, lvl, lvName, a, fvg, ext, liq, ct: c[k].ct, t: c[k].t, ctx };
         if (cfg.filter && !cfg.filter(ctx)) { e.filtered = true; if (!H.keepFiltered) continue; }
         out.push(e);
       }
@@ -137,9 +142,12 @@
     if (!(d > 0 ? entry < c[k].c && entry > e.oP : entry > c[k].c && entry < e.oP)) return null;
     const sl = e.oP - d * (cfg.slATR * e.a + spread), risk = Math.abs(entry - sl);
     if (risk < 0.6 * e.a || risk > 10 * e.a) return null;
-    const tp = entry + d * RR * risk, cost = spread / risk;
+    // TP: cfg.tp = số R cố định (mặc định 2) hoặc 'liq' = thanh khoản đối diện (tối thiểu tpMin R, tối đa tpMax R)
+    let rr = typeof cfg.tp === 'number' ? cfg.tp : RR;
+    if (cfg.tp === 'liq') { const lr = e.liq != null ? Math.abs(e.liq - entry) / risk : 0; rr = lr >= (cfg.tpMin || 2) ? Math.min(lr, cfg.tpMax || 5) : (cfg.tpMin || 2); }
+    const tp = entry + d * rr * risk, cost = spread / risk;
     const s = { id: `${e.tf}-${e.t}-${d > 0 ? 'B' : 'S'}`, tf: e.tf, side: d, t: e.t, ct: e.ct, entry, sl, tp, risk, sweep: e.lvl, sweepName: e.lvName || (d > 0 ? 'PDL' : 'PDH'), origin: e.oP,
-      fvg: { top: e.fvg.top, bot: e.fvg.bot }, spread, ctx: e.ctx, state: 'PENDING', fillT: null, exitT: null, exitP: null, r: null };
+      fvg: { top: e.fvg.top, bot: e.fvg.bot }, liq: e.liq, rr: +rr.toFixed(2), spread, ctx: e.ctx, state: 'PENDING', fillT: null, exitT: null, exitP: null, r: null };
     let j = k + 1, fill = -1;
     for (; j < c.length && j <= k + cfg.expiry; j++) {
       const x = c[j];
@@ -152,7 +160,7 @@
     for (let u = fill; u < c.length; u++) {
       const x = c[u];
       if (d > 0 ? x.l <= sl : x.h >= sl) { s.state = 'LOSS'; s.exitT = x.ct; s.exitP = sl; s.r = -1 - cost; return s; }
-      if (u > fill && (d > 0 ? x.h >= tp : x.l <= tp)) { s.state = 'WIN'; s.exitT = x.ct; s.exitP = tp; s.r = RR - cost; return s; }
+      if (u > fill && (d > 0 ? x.h >= tp : x.l <= tp)) { s.state = 'WIN'; s.exitT = x.ct; s.exitP = tp; s.r = rr - cost; return s; }
       if (u - fill >= cfg.hold) { s.state = 'TIME'; s.exitT = x.ct; s.exitP = x.c; s.r = d * (x.c - entry) / risk - cost; return s; }
     }
     return s;
@@ -175,7 +183,7 @@
         else if (x.ct >= expiryT) { s.state = 'EXPIRED'; s.exitT = x.ct; break; }
       } else if (s.state === 'OPEN') {
         if (d > 0 ? x.l <= s.sl : x.h >= s.sl) { s.state = 'LOSS'; s.exitT = x.ct; s.exitP = s.sl; s.r = -1 - cost; break; }
-        if (d > 0 ? x.h >= s.tp : x.l <= s.tp) { s.state = 'WIN'; s.exitT = x.ct; s.exitP = s.tp; s.r = RR - cost; break; }
+        if (d > 0 ? x.h >= s.tp : x.l <= s.tp) { s.state = 'WIN'; s.exitT = x.ct; s.exitP = s.tp; s.r = Math.abs(s.tp - s.entry) / s.risk - cost; break; }
         if (x.t - s.fillT >= cfg.hold * ms) { s.state = 'TIME'; s.exitT = x.ct; s.exitP = x.c; s.r = d * (x.c - s.entry) / s.risk - cost; break; }
       }
       s.lastT = x.ct;
@@ -214,8 +222,8 @@
     const gw = done.filter(s => s.r > 0).reduce((a, s) => a + s.r, 0), gl = -done.filter(s => s.r <= 0).reduce((a, s) => a + s.r, 0);
     return { signals: list.filter(s => s.state !== 'SKIP').length, closed: done.length, wins: w, losses: done.filter(s => s.state === 'LOSS').length, winRate: done.length ? w / done.length : 0, netR: R, pf: gl ? gw / gl : (gw ? Infinity : 0), maxDD: dd };
   }
-  const STATE_VI = { PENDING: 'Chờ khớp', OPEN: 'Đang chạy', WIN: 'Chạm TP (+2R)', LOSS: 'Dính SL', TIME: 'Hết giờ, đóng theo giá', MISSED: 'Lỡ (chạm TP trước khi khớp)', EXPIRED: 'Hết hạn chờ', INVALID: 'Huỷ (phá đỉnh/đáy quét)', SKIP: 'Bỏ qua' };
-  const V3 = { run, stats, setups, simulate, track, resample, ctxText, CFG, TFS, MS, RR, FINAL, STATE_VI, inWindow, version: 'v4.1-2026-11-05' };
+  const STATE_VI = { PENDING: 'Chờ khớp', OPEN: 'Đang chạy', WIN: 'Chạm TP', LOSS: 'Dính SL', TIME: 'Hết giờ, đóng theo giá', MISSED: 'Lỡ (chạm TP trước khi khớp)', EXPIRED: 'Hết hạn chờ', INVALID: 'Huỷ (phá đỉnh/đáy quét)', SKIP: 'Bỏ qua' };
+  const V3 = { run, stats, setups, simulate, track, resample, ctxText, CFG, TFS, MS, RR, FINAL, STATE_VI, inWindow, version: 'v4.2-2026-11-05' };
   if (typeof module === 'object' && module.exports) module.exports = V3;
   root.V3 = V3;
 })(typeof window !== 'undefined' ? window : globalThis);

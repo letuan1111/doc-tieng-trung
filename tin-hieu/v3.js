@@ -3,23 +3,34 @@
  *
  *  1. Thanh khoản: giá QUÉT đỉnh hôm trước (PDH) hoặc đáy hôm trước (PDL): râu vượt rồi đóng cửa quay lại trong ≤3 nến.
  *  2. Xác nhận: phá cấu trúc (MSS/CHoCH) ngược chiều cú quét, sóng phá có displacement (nến thân lớn hoặc FVG).
- *  3. Entry (lệnh limit):
- *       M15 — mọi chiều, chỉ khi sự kiện xảy ra 13h–23h giờ VN; entry = CE (giữa) FVG của sóng; SL ngoài đỉnh/đáy quét + 0.5 ATR
- *       H1  — chỉ SELL sau quét PDH (phá giả PDH ~61% số lần); entry = mép FVG; SL ngoài đỉnh quét + 1 ATR
- *       M5  — chỉ để TINH CHỈNH: chỉ nhận khi trong 3h trước đó M15/H1 đã có setup cùng chiều; entry CE, SL + 0.5 ATR
+ *  3. Entry (lệnh limit) — bản V4 (05/11/2026), học từ bối cảnh giá của 578 setup trong 12 tháng (XAU, BTC, ETH):
+ *       M15 — EMA34/89 H4 cùng chiều lệnh, KHÔNG vào phiên Á (7h–13h VN); entry = mép FVG; SL ngoài đỉnh/đáy quét + 0.5 ATR
+ *       M30 — (dựng từ M15) mọi setup, cả hai chiều; entry = CE (giữa) FVG; SL + 1 ATR
+ *       H1  — chỉ SELL sau quét PDH (phá giả PDH ~61% số lần); entry = mép FVG; SL + 1 ATR
+ *     Chọn cách phối bền nhất: dương ở cả 6 tháng trước lẫn 6 tháng gần đây trên XAU/BTC/ETH (chỉ BTC 6 tháng trước −0.7R).
  *     Nhiều khung cùng chiều đang chờ khớp → giữ entry giá đẹp nhất (mua thấp nhất / bán cao nhất). Một lệnh một lúc mỗi cặp.
+ *     Mỗi tín hiệu ghi lại BỐI CẢNH GIÁ lúc đó (ctx): phiên, EMA khung vào/H1/H4, độ sâu quét, độ mạnh sóng, ngày đã chạy bao nhiêu % ADR.
  *  4. TP cố định 2R. Huỷ nếu không khớp sau 12 nến (H1: 8), nếu giá chạm TP trước khi khớp, hoặc đóng cửa vượt đỉnh/đáy quét.
  *     Giữ lệnh tối đa 96 nến (H1: 72) rồi đóng theo giá.
  */
 (function (root) {
   'use strict';
-  const MS = { m5: 3e5, m15: 9e5, h1: 36e5 };
+  const MS = { m5: 3e5, m15: 9e5, m30: 18e5, h1: 36e5, h4: 144e5 };
+  const TFS = ['h1', 'm30', 'm15'];
   const CFG = {
-    m5:  { entry: 'ce',   slATR: 0.5, expiry: 12, hold: 96, window: true, sides: [1, -1] },
-    m15: { entry: 'ce',   slATR: 0.5, expiry: 12, hold: 96, window: true, sides: [1, -1] },
-    h1:  { entry: 'edge', slATR: 1.0, expiry: 8,  hold: 72, window: false, sides: [-1] },
+    m15: { entry: 'edge', slATR: 0.5, expiry: 12, hold: 96, window: false, sides: [1, -1], filter: (x) => x.emaH4 && x.sess !== 'Á', rule: 'EMA H4 cùng chiều · ngoài phiên Á' },
+    m30: { entry: 'ce',   slATR: 1.0, expiry: 10, hold: 72, window: false, sides: [1, -1], filter: null, rule: 'mọi setup quét PDH/PDL → MSS → FVG' },
+    h1:  { entry: 'edge', slATR: 1.0, expiry: 8,  hold: 72, window: false, sides: [-1], filter: null, rule: 'chỉ SELL sau quét PDH' },
+    // bản V3 cũ — chỉ để theo dõi nốt các lệnh cũ trong nhật ký
+    m5:  { entry: 'ce',   slATR: 0.5, expiry: 12, hold: 96, window: true, sides: [], legacy: true },
   };
-  const RR = 2, REFINE_MS = 3 * 36e5, L = 3, WARM = 100; // bỏ 100 nến đầu (ATR/cấu trúc chưa ổn định)
+  const RR = 2, L = 3, WARM = 100; // bỏ 100 nến đầu (ATR/cấu trúc chưa ổn định)
+  // gộp nến (chỉ giữ nến khung lớn đã đủ, không nhìn trước)
+  function resample(c, ms) { const out = []; let cur = null; for (const x of c) { const s = Math.floor(x.t / ms) * ms; if (!cur || cur.t !== s) { if (cur) out.push(cur); cur = { t: s, ct: s + ms, o: x.o, h: x.h, l: x.l, c: x.c, last: x.ct }; } else { cur.h = Math.max(cur.h, x.h); cur.l = Math.min(cur.l, x.l); cur.c = x.c; cur.last = x.ct; } } if (cur && cur.last >= cur.ct) out.push(cur); return out.map(({ last, ...r }) => r); }
+  function ema(v, p) { const k = 2 / (p + 1), o = new Array(v.length); let e = v[0]; for (let i = 0; i < v.length; i++) { e = i ? v[i] * k + e * (1 - k) : v[0]; o[i] = e; } return o; }
+  const emaDir = (c) => { const a = ema(c.map(x => x.c), 34), b = ema(c.map(x => x.c), 89); return c.map((_, i) => a[i] > b[i] ? 1 : -1); };
+  function mapHTF(c, H, vals) { const out = new Array(c.length).fill(null); let j = -1; for (let i = 0; i < c.length; i++) { while (j + 1 < H.length && H[j + 1].ct <= c[i].ct) j++; if (j >= 0) out[i] = vals[j]; } return out; }
+  const SESS = (h) => h >= 7 && h < 13 ? 'Á' : h >= 13 && h < 19 ? 'London' : h >= 19 ? 'New York' : 'đêm';
 
   function atr(c, p) { const o = new Array(c.length); let a = c[0].h - c[0].l; for (let i = 0; i < c.length; i++) { const tr = i ? Math.max(c[i].h - c[i].l, Math.abs(c[i].h - c[i - 1].c), Math.abs(c[i].l - c[i - 1].c)) : c[i].h - c[i].l; a = i < p ? (a * i + tr) / (i + 1) : (a * (p - 1) + tr) / p; o[i] = a; } return o; }
   function pivots(c) { const H = [], Lw = []; for (let i = L; i < c.length - L; i++) { let ph = true, pl = true; for (let k = 1; k <= L; k++) { if (c[i - k].h >= c[i].h || c[i + k].h > c[i].h) ph = false; if (c[i - k].l <= c[i].l || c[i + k].l < c[i].l) pl = false; } if (ph) H.push({ i, p: c[i].h, conf: i + L }); if (pl) Lw.push({ i, p: c[i].l, conf: i + L }); } return { H, L: Lw }; }
@@ -30,8 +41,12 @@
   const inWindow = (t) => { const h = hourVN(t); return h >= 13 && h < 23; };
 
   // các setup của một khung
-  function setups(c, tf) {
+  function setups(c, tf, H) {
     const n = c.length, A = atr(c, 14), PD = prevDay(c), pv = pivots(c), cfg = CFG[tf], out = [];
+    H = H || {}; const h1 = H.h1 || (tf === 'h1' ? c : null), h4 = h1 ? resample(h1, MS.h4) : null;
+    const eTF = emaDir(c), eH1 = h1 ? mapHTF(c, h1, emaDir(h1)) : [], eH4 = h4 ? mapHTF(c, h4, emaDir(h4)) : [], e89 = ema(c.map(x => x.c), 89);
+    const day = h1 ? resample(h1, 864e5) : [], adr = day.map((_, i) => { if (i < 14) return null; let q = 0; for (let u = i - 14; u < i; u++) q += day[u].h - day[u].l; return q / 14; });
+    const dayAt = new Map(day.map((d, i) => [d.t, i]));
     let ih = 0, il = 0; const sh = [], sl = [], bH = new Set(), bL = new Set();
     for (let k = 3; k < n; k++) {
       while (ih < pv.H.length && pv.H[ih].conf <= k) sh.push(pv.H[ih++]);
@@ -52,7 +67,15 @@
         let fvg = null; for (let m = oi + 2; m <= k; m++) { const bot = d > 0 ? c[m - 2].h : c[m].h, top = d > 0 ? c[m].l : c[m - 2].l; if (!(top > bot)) continue; let ok = true; for (let u = m + 1; u <= k; u++) if (d > 0 ? c[u].l <= bot : c[u].h >= top) { ok = false; break; } if (ok && (!fvg || top - bot > fvg.top - fvg.bot)) fvg = { m, top, bot }; }
         if (fvg && fvg.top - fvg.bot >= 0.15 * a) disp = true;
         if (!disp || !fvg) continue;
-        out.push({ tf, k, d, oi, oP, lvl, a, fvg, ext, ct: c[k].ct, t: c[k].t });
+        // bối cảnh giá lúc tín hiệu
+        const x = c[k], dk = Math.floor(x.t / 864e5) * 864e5, di = dayAt.get(dk); let dh = -Infinity, dl = Infinity;
+        for (let u = k; u >= 0 && c[u].t >= dk; u--) { dh = Math.max(dh, c[u].h); dl = Math.min(dl, c[u].l); }
+        const ctx = { price: x.c, hour: hourVN(x.t), sess: SESS(hourVN(x.t)), emaTF: eTF[k] === d, emaH1: eH1[k] == null ? null : eH1[k] === d, emaH4: eH4[k] == null ? null : eH4[k] === d,
+          depth: +(Math.abs(oP - lvl) / a).toFixed(2), legBars: k - oi, fvgATR: +((fvg.top - fvg.bot) / a).toFixed(2), moveATR: +(Math.abs(ext - oP) / a).toFixed(2),
+          ext89: +(d * (x.c - e89[k]) / a).toFixed(2), dayUsed: di != null && adr[di] ? +((dh - dl) / adr[di]).toFixed(2) : null, atr: a };
+        const e = { tf, k, d, oi, oP, lvl, a, fvg, ext, ct: c[k].ct, t: c[k].t, ctx };
+        if (cfg.filter && !cfg.filter(ctx)) { e.filtered = true; if (!H.keepFiltered) continue; }
+        out.push(e);
       }
     }
     return out;
@@ -67,7 +90,7 @@
     if (risk < 0.6 * e.a || risk > 10 * e.a) return null;
     const tp = entry + d * RR * risk, cost = spread / risk;
     const s = { id: `${e.tf}-${e.t}-${d > 0 ? 'B' : 'S'}`, tf: e.tf, side: d, t: e.t, ct: e.ct, entry, sl, tp, risk, sweep: e.lvl, sweepName: d > 0 ? 'PDL' : 'PDH', origin: e.oP,
-      fvg: { top: e.fvg.top, bot: e.fvg.bot }, spread, state: 'PENDING', fillT: null, exitT: null, exitP: null, r: null };
+      fvg: { top: e.fvg.top, bot: e.fvg.bot }, spread, ctx: e.ctx, state: 'PENDING', fillT: null, exitT: null, exitP: null, r: null };
     let j = k + 1, fill = -1;
     for (; j < c.length && j <= k + cfg.expiry; j++) {
       const x = c[j];
@@ -111,24 +134,29 @@
     return s;
   }
 
-  // chạy cả 3 khung cho một cặp: D = {m5, m15, h1} (chỉ nến đã đóng), spread theo giá
+  // chạy cả 3 khung cho một cặp: D = {m15, h1} (+ m30 nếu có; nếu không thì dựng từ M15) — chỉ nến đã đóng, spread theo giá
   function run(D, opt) {
     opt = opt || {}; const spread = opt.spread || 0, all = [];
-    for (const tf of ['h1', 'm15', 'm5']) { const c = D[tf]; if (!c || c.length < 60) continue; for (const e of setups(c, tf)) { const s = simulate(c, e, spread); if (s) all.push(s); } }
-    all.sort((a, b) => a.ct - b.ct || (a.tf === 'h1' ? -1 : 1));
-    const hi = all.filter(s => s.tf !== 'm5');
+    const C = { m15: D.m15, m30: D.m30 || (D.m15 ? resample(D.m15, MS.m30) : null), h1: D.h1 };
+    for (const tf of TFS) { const c = C[tf]; if (!c || c.length < 60) continue; for (const e of setups(c, tf, { h1: C.h1 })) { const s = simulate(c, e, spread); if (s) all.push(s); } }
+    all.sort((a, b) => a.ct - b.ct || TFS.indexOf(a.tf) - TFS.indexOf(b.tf));
     let busyUntil = -Infinity, busyId = null;
     const now = opt.now || Infinity;
     for (let i = 0; i < all.length; i++) {
       const s = all[i];
-      if (s.tf === 'm5' && !hi.some(h => h.side === s.side && h.ct <= s.ct && s.ct - h.ct <= REFINE_MS)) { s.state = 'SKIP'; s.why = 'M5 không có setup M15/H1 cùng chiều trong 3h'; s.r = null; continue; }
       if (s.ct <= busyUntil) { s.state = 'SKIP'; s.why = 'Đang có lệnh khác (' + busyId + ')'; s.r = null; continue; }
       const waitEnd = s.fillT != null ? s.fillT : (s.exitT != null ? s.exitT : now);
-      const better = all.slice(i + 1).find(x => x.ct < waitEnd && x.side === s.side && x.state !== 'SKIP' && (s.side > 0 ? x.entry < s.entry : x.entry > s.entry) && (x.tf !== 'm5' || hi.some(h => h.side === x.side && h.ct <= x.ct && x.ct - h.ct <= REFINE_MS)));
+      const better = all.slice(i + 1).find(x => x.ct < waitEnd && x.side === s.side && x.state !== 'SKIP' && (s.side > 0 ? x.entry < s.entry : x.entry > s.entry));
       if (better) { s.state = 'SKIP'; s.why = `Có entry đẹp hơn ở ${better.tf.toUpperCase()} (${better.entry.toFixed(2)})`; s.r = null; continue; }
       busyUntil = s.exitT != null ? s.exitT : Infinity; busyId = s.tf.toUpperCase() + ' ' + (s.side > 0 ? 'BUY' : 'SELL');
     }
     return all;
+  }
+  // mô tả bối cảnh bằng lời
+  function ctxText(x, side) {
+    if (!x) return '';
+    const yn = (v) => v == null ? '?' : v ? 'cùng' : 'ngược';
+    return `phiên ${x.sess} ${x.hour}h · EMA ${yn(x.emaTF)}/H1 ${yn(x.emaH1)}/H4 ${yn(x.emaH4)} · quét sâu ${x.depth} ATR · sóng ${x.moveATR} ATR trong ${x.legBars} nến · FVG ${x.fvgATR} ATR${x.dayUsed != null ? ` · ngày đã chạy ${Math.round(x.dayUsed * 100)}% ADR` : ''}`;
   }
   function stats(list) {
     const done = list.filter(s => s.r != null), w = done.filter(s => s.r > 0).length, R = done.reduce((a, s) => a + s.r, 0);
@@ -137,7 +165,7 @@
     return { signals: list.filter(s => s.state !== 'SKIP').length, closed: done.length, wins: w, losses: done.filter(s => s.state === 'LOSS').length, winRate: done.length ? w / done.length : 0, netR: R, pf: gl ? gw / gl : (gw ? Infinity : 0), maxDD: dd };
   }
   const STATE_VI = { PENDING: 'Chờ khớp', OPEN: 'Đang chạy', WIN: 'Chạm TP (+2R)', LOSS: 'Dính SL', TIME: 'Hết giờ, đóng theo giá', MISSED: 'Lỡ (chạm TP trước khi khớp)', EXPIRED: 'Hết hạn chờ', INVALID: 'Huỷ (phá đỉnh/đáy quét)', SKIP: 'Bỏ qua' };
-  const V3 = { run, stats, setups, simulate, track, CFG, RR, FINAL, STATE_VI, inWindow, version: 'v3-2026-11-05' };
+  const V3 = { run, stats, setups, simulate, track, resample, ctxText, CFG, TFS, MS, RR, FINAL, STATE_VI, inWindow, version: 'v4-2026-11-05' };
   if (typeof module === 'object' && module.exports) module.exports = V3;
   root.V3 = V3;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -3,8 +3,8 @@
   'use strict';
   const $ = (id) => document.getElementById(id);
   const LS = { get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} } };
-  const TFMS = { m5: 3e5, m15: 9e5, h1: 36e5, h4: 144e5 };
-  const NEED = { m5: 3000, m15: 1500, h1: 1000, h4: 600 };
+  const TFMS = { m5: 3e5, m15: 9e5, m30: 18e5, h1: 36e5, h4: 144e5 };
+  const NEED = { m5: 3000, m15: 1500, h1: 2200, h4: 600 }; // H1 dài để EMA34/89 H4 của V4 ổn định
   const SYMS = {
     XAU: { name: 'XAUUSD', dp: 2, minBuf: 0.8, spread: 0.3, tv: 'OANDA:XAUUSD', src: [
       { n: 'Binance Futures XAUUSDT', f: (iv, tot) => binance('XAUUSDT', iv, tot, true) },
@@ -313,7 +313,7 @@
     const rules = `<ul class="ck" style="margin-top:8px">
       <li><span class="y">1</span> Giá quét <b>PDH</b> (đỉnh hôm trước) hoặc <b>PDL</b> (đáy hôm trước) rồi đóng cửa quay lại</li>
       <li><span class="y">2</span> MSS/CHoCH ngược chiều cú quét, sóng có displacement + FVG</li>
-      <li><span class="y">3</span> Limit tại FVG: M15 (13h–23h VN, giữa FVG, SL +0.5 ATR) · H1 chỉ SELL sau quét PDH (mép FVG, SL +1 ATR) · M5 chỉ tinh chỉnh</li>
+      <li><span class="y">3</span> Limit tại FVG · <b>M15</b>: EMA34/89 H4 cùng chiều, ngoài phiên Á 7h–13h (mép FVG, SL +0.5 ATR) · <b>M30</b>: mọi setup (giữa FVG, SL +1 ATR) · <b>H1</b>: chỉ SELL sau quét PDH (mép FVG, SL +1 ATR)</li>
       <li><span class="y">4</span> TP 2R · nhiều khung cùng chiều → chọn entry giá đẹp nhất · một lệnh một lúc</li></ul>`;
     const hist = last.length ? `<p class="note" style="margin:8px 0 2px">Gần nhất:</p><ul class="ck">${last.map(s => `<li><span class="chip ${s.side > 0 ? 'buy' : 'sell'}">${s.side > 0 ? 'BUY' : 'SELL'} ${s.tf.toUpperCase()}</span> ${ft(s.ct)} · ${fx(s.entry)} · <b class="${s.r > 0 ? 'win' : s.r < 0 ? 'loss' : ''}">${V3.STATE_VI[s.state]}${s.r != null ? ` (${s.r > 0 ? '+' : ''}${s.r.toFixed(2)}R)` : ''}</b></li>`).join('')}</ul>` : '';
     if (!a) return `<div class="sig"><div class="t">Chưa có tín hiệu <span class="chip">ĐỨNG NGOÀI</span></div><p class="note" style="margin:8px 0 0">Chờ giá quét PDH/PDL rồi phá cấu trúc ngược lại.</p></div>${rules}${hist}`;
@@ -326,6 +326,7 @@
         <span>Take Profit</span><b class="win">${fx(a.tp)}</b><span>+2R</span>
         <span>Đã quét ${a.sweepName}</span><b>${fx(a.sweep)}</b><span>${b ? 'đáy' : 'đỉnh'} sóng ${fx(a.origin)}</span>
       </div>
+      ${a.ctx ? `<p class="note" style="margin:8px 0 0">Bối cảnh: ${esc(V3.ctxText(a.ctx))}</p>` : ''}
       <p class="note" style="margin:8px 0 0">Tạo lúc ${ft(a.ct)}${a.state === 'PENDING' ? ` · huỷ nếu chưa khớp trước ${ft(exp)}, nếu giá chạm TP trước hoặc đóng cửa vượt ${b ? 'đáy' : 'đỉnh'} sóng` : ` · khớp lúc ${ft(a.fillT)}`}.</p></div>${rules}${hist}`;
   }
   function v3Alerts(first) {
@@ -360,14 +361,14 @@
     $('jBody').innerHTML = rows.length ? rows.map(t => `<tr><td>${ft(t.ct)}</td><td>${t.sym} · ${t.tf.toUpperCase()}</td><td><span class="chip ${t.side > 0 ? 'buy' : 'sell'}">${t.side > 0 ? 'BUY' : 'SELL'}</span></td>
       <td class="mono">${t.sweepName} ${p(t, t.sweep)}</td><td class="mono">${p(t, t.entry)}</td><td class="mono">${p(t, t.sl)}</td><td class="mono">${p(t, t.tp)}</td>
       <td class="${t.r > 0 ? 'win' : t.r < 0 ? 'loss' : 'muted'}">${V3.STATE_VI[t.state] || t.state}${t.r != null ? ` (${t.r > 0 ? '+' : ''}${t.r.toFixed(2)}R)` : ''}</td>
-      <td class="note">${esc(t.why || '')}${t.live === false ? ' · tính lại khi bật nhật ký' : ''}${t.fillT ? ' · khớp ' + ft(t.fillT) : ''}${t.exitT && t.state !== 'PENDING' && t.state !== 'OPEN' ? ' · đóng ' + ft(t.exitT) : ''} · ${esc(t.src || '')}</td></tr>`).join('')
+      <td class="note">${t.ctx ? '<span title="Bối cảnh giá lúc tín hiệu">' + esc(V3.ctxText(t.ctx)) + '</span><br>' : ''}${t.ver && t.ver !== V3.version ? '[' + esc(t.ver) + '] ' : (!t.ver ? '[v3 cũ] ' : '')}${esc(t.why || '')}${t.live === false ? ' · tính lại khi bật nhật ký' : ''}${t.fillT ? ' · khớp ' + ft(t.fillT) : ''}${t.exitT && t.state !== 'PENDING' && t.state !== 'OPEN' ? ' · đóng ' + ft(t.exitT) : ''} · ${esc(t.src || '')}</td></tr>`).join('')
       : '<tr><td colspan="9" class="muted">Chưa có lệnh nào trong nhật ký.</td></tr>';
   }
   function journalCSV() {
     const J = S.journal; if (!J) return;
-    const H = ['id', 'cap', 'khung', 'lenh', 'tao_luc', 'quet', 'muc_quet', 'entry', 'sl', 'tp', 'trang_thai', 'R', 'khop_luc', 'dong_luc', 'ghi_chu', 'nguon'];
+    const H = ['id', 'cap', 'khung', 'lenh', 'tao_luc', 'quet', 'muc_quet', 'entry', 'sl', 'tp', 'trang_thai', 'R', 'khop_luc', 'dong_luc', 'ghi_chu', 'nguon', 'phien', 'gio_vn', 'ema_khung', 'ema_h1', 'ema_h4', 'quet_sau_atr', 'song_atr', 'so_nen_song', 'fvg_atr', 'ngay_da_chay_adr', 'gia_luc_tin_hieu', 'phien_ban'];
     const iso = (t) => t ? new Date(t).toISOString() : '';
-    const rows = J.trades.map(t => [t.id, t.sym, t.tf, t.side > 0 ? 'BUY' : 'SELL', iso(t.ct), t.sweepName, t.sweep, t.entry, t.sl, t.tp, t.state, t.r == null ? '' : t.r.toFixed(3), iso(t.fillT), iso(t.exitT), t.why || '', t.src || '']);
+    const rows = J.trades.map(t => [t.id, t.sym, t.tf, t.side > 0 ? 'BUY' : 'SELL', iso(t.ct), t.sweepName, t.sweep, t.entry, t.sl, t.tp, t.state, t.r == null ? '' : t.r.toFixed(3), iso(t.fillT), iso(t.exitT), t.why || '', t.src || '', ...(t.ctx ? [t.ctx.sess, t.ctx.hour, t.ctx.emaTF, t.ctx.emaH1, t.ctx.emaH4, t.ctx.depth, t.ctx.moveATR, t.ctx.legBars, t.ctx.fvgATR, t.ctx.dayUsed, t.ctx.price] : Array(11).fill('')), t.ver || 'v3']);
     const csv = '\ufeff' + [H, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = `nhat-ky-v3-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
@@ -463,7 +464,7 @@
       const off = S.isMT5 ? 0 : (S.offset[sym] || 0);
       const cd = closedOnly(d, off);
       S.res = SMC.analyze(cd, { ...S.cfg, minBuf: SYMS[sym].minBuf, spread: SYMS[sym].spread });
-      S.v3 = V3.run({ m5: cd.m5, m15: cd.m15, h1: cd.h1 }, { spread: SYMS[sym].spread, now: Date.now() });
+      S.v3 = V3.run({ m15: cd.m15, h1: cd.h1 }, { spread: SYMS[sym].spread, now: Date.now() });
       const m5 = d.m5, last = m5[m5.length - 1], prevDay = m5[Math.max(0, m5.length - 289)];
       $('px').textContent = fx(last.c + off);
       const ch = (last.c - prevDay.c) / prevDay.c * 100; $('chg').textContent = (ch >= 0 ? '+' : '') + ch.toFixed(2) + '% 24h'; $('chg').className = 'chip ' + (ch >= 0 ? 'buy' : 'sell');

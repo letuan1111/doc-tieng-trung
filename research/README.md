@@ -9,6 +9,9 @@ Dữ liệu: nến OKX M5/M15/H1 của XAU, BTC, ETH (12 tháng). Tải bằng `
 | `learn.mjs` | Tua lại từng tháng (walk-forward), chọn cấu hình bằng dữ liệu quá khứ |
 | `robust.mjs` | Độ bền của từng cấu hình qua các tháng, trên cả XAU và BTC |
 | `holdout.mjs` | Kiểm tra trên 6 tháng chưa dùng để chọn + ETH |
+| `ctx.mjs` / `ctxstats.mjs` | Ghi bối cảnh giá (phiên, EMA H1/H4, độ sâu quét, sóng, % ADR) cho mọi setup M15/M30/H1 và thống kê |
+| `replay.mjs` | Tua lại từng nến M15 như máy chủ, lot cố định → SL/TP/USD |
+| `BAI-HOC.md` | Những điều học được về cách giá chạy + cách vào lệnh V4 |
 
 Kết luận chính: các quy tắc ICT/SMC máy móc trung bình ≈ 0R/lệnh sau chi phí; M5 đứng riêng luôn lỗ; H1 ổn định nhất; quét PDH (phá giả ~61%) là quy luật mạnh nhất.
 Cách vào lệnh rút ra được triển khai ở `tin-hieu/v3.js` (12 tháng: 66 lệnh, +14R, DD 4.9R — mẫu nhỏ, cần theo dõi thật qua nhật ký).

@@ -9,11 +9,11 @@ const req = createRequire(import.meta.url), __dir = path.dirname(fileURLToPath(i
 const V3 = req(path.join(__dir, '..', 'tin-hieu', 'v3.js'));
 const DATA = process.env.DATA_DIR || 'botdata', FILE = path.join(DATA, 'tinhieu-journal.json');
 const FB = (process.env.MT5_DB || 'https://letuan-mt5-default-rtdb.asia-southeast1.firebasedatabase.app').replace(/\/+$/, '');
-const MS = { m5: 3e5, m15: 9e5, h1: 36e5 }, NEED = { m5: 2000, m15: 1500, h1: 1000 };
+const MS = V3.MS, NEED = { m15: 3000, h1: 2200 }; // H1 dài để EMA34/89 H4 ổn định; M30 dựng từ M15
 const SYMS = { XAU: { okx: 'XAU-USDT-SWAP', mt5: 'XAUUSDm', spread: 0.35, dp: 2 }, BTC: { okx: 'BTC-USDT-SWAP', mt5: 'BTCUSDm', spread: 18, dp: 1 } };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 async function j(u) { for (let k = 0; k < 4; k++) { try { const r = await fetch(u, { signal: AbortSignal.timeout(20000) }); if (r.ok) return await r.json(); } catch (_) {} await sleep(1500 * (k + 1)); } throw new Error('Không tải được ' + u.slice(0, 80)); }
-const BAR = { m5: '5m', m15: '15m', h1: '1H' };
+const BAR = { m15: '15m', h1: '1H' };
 async function okx(inst, tf) {
   let out = (await j(`https://www.okx.com/api/v5/market/candles?instId=${inst}&bar=${BAR[tf]}&limit=300`)).data || [];
   while (out.length < NEED[tf]) { const a = (await j(`https://www.okx.com/api/v5/market/history-candles?instId=${inst}&bar=${BAR[tf]}&limit=100&after=${out[out.length - 1][0]}`)).data || []; if (!a.length) break; out = out.concat(a); await sleep(120); }
@@ -27,43 +27,46 @@ async function load(sym) {
   const S = SYMS[sym], now = Date.now();
   if (process.env.MOCK_DIR) { // chạy thử bằng dữ liệu có sẵn: MOCK_END = mốc thời gian giả lập "bây giờ"
     const end = +process.env.MOCK_END, D = {};
-    for (const tf of ['m5', 'm15', 'h1']) D[tf] = JSON.parse(fs.readFileSync(path.join(process.env.MOCK_DIR, `${sym}_${tf}.json`), 'utf8')).map(k => ({ t: k[0], ct: k[0] + MS[tf], o: k[1], h: k[2], l: k[3], c: k[4] })).filter(x => x.ct <= end).slice(-NEED[tf]);
+    for (const tf of ['m15', 'h1']) D[tf] = JSON.parse(fs.readFileSync(path.join(process.env.MOCK_DIR, `${sym}_${tf}.json`), 'utf8')).map(k => ({ t: k[0], ct: k[0] + MS[tf], o: k[1], h: k[2], l: k[3], c: k[4] })).filter(x => x.ct <= end).slice(-NEED[tf]);
     return { D, src: 'MOCK' };
   }
   try {
     const live = await j(`${FB}/mt5/${S.mt5}/live.json`);
     if (live && now - live.t < 15 * 60e3) {
-      const D = {}; for (const tf of ['m5', 'm15', 'h1']) D[tf] = await mt5(S.mt5, tf);
-      if (D.m5 && D.m15 && D.h1 && now - D.m5[D.m5.length - 1].t < 20 * 60e3) return { D, src: 'MT5 Exness ' + S.mt5 };
+      const D = {}; for (const tf of ['m15', 'h1']) D[tf] = await mt5(S.mt5, tf);
+      // MT5 chỉ dùng khi đủ dài (EMA H4 cần ~1500 nến H1) và còn mới
+      if (D.m15 && D.h1 && D.h1.length >= 1500 && now - D.m15[D.m15.length - 1].t < 35 * 60e3) return { D, src: 'MT5 Exness ' + S.mt5 };
     }
   } catch (_) {}
-  const D = {}; for (const tf of ['m5', 'm15', 'h1']) D[tf] = await okx(S.okx, tf);
+  const D = {}; for (const tf of ['m15', 'h1']) D[tf] = await okx(S.okx, tf);
   return { D, src: 'OKX ' + S.okx };
 }
 const NOW = () => process.env.MOCK_END ? +process.env.MOCK_END : Date.now();
 const closed = (c) => c.filter(x => x.ct <= NOW());
 
-let J = { version: V3.version, rules: 'Quét PDH/PDL → MSS có displacement → limit tại FVG · M15 13h–23h VN (CE, SL+0.5ATR) · H1 chỉ SELL sau quét PDH (mép FVG, SL+1ATR) · M5 tinh chỉnh · TP 2R', trades: [] };
+const RULES = 'Quét PDH/PDL → MSS có displacement → limit tại FVG · M15: EMA H4 cùng chiều, ngoài phiên Á (mép, SL+0.5ATR) · M30: mọi setup (CE, SL+1ATR) · H1: chỉ SELL sau quét PDH (mép, SL+1ATR) · TP 2R';
+let J = { version: V3.version, rules: RULES, trades: [] };
 try { J = { ...J, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) }; } catch (_) {}
-J.version = V3.version;
+J.version = V3.version; J.rules = RULES;
 const byId = new Map(J.trades.map(x => [x.id, x]));
 let added = 0, changed = 0; const errs = [];
 for (const sym of Object.keys(SYMS)) {
   let L;
   try { L = await load(sym); } catch (e) { errs.push(sym + ': ' + e.message); continue; }
-  const D = { m5: closed(L.D.m5), m15: closed(L.D.m15), h1: closed(L.D.h1) };
+  const D = { m15: closed(L.D.m15), h1: closed(L.D.h1) }; D.m30 = V3.resample(D.m15, MS.m30);
   const res = V3.run(D, { spread: SYMS[sym].spread, now: NOW() });
   for (const s of res) {
     if (s.state === 'SKIP' && /^M5 không có/.test(s.why || '')) continue; // M5 đứng riêng: không phải tín hiệu
     const id = `${sym}-${s.id}`, old = byId.get(id);
     if (!old) {
-      const rec = { ...s, id, sym, src: L.src, seen: NOW(), lastT: D[s.tf][D[s.tf].length - 1].ct, dp: SYMS[sym].dp };
+      const rec = { ...s, id, sym, ver: V3.version, src: L.src, seen: NOW(), lastT: D[s.tf][D[s.tf].length - 1].ct, dp: SYMS[sym].dp };
       // tín hiệu tạo trước lúc nhật ký thấy nó > 1 nến: đánh dấu "tính lại"
       rec.live = NOW() - s.ct < 2 * MS[s.tf] + 10 * 60e3;
       J.trades.push(rec); byId.set(id, rec); added++; continue;
     }
     if (V3.FINAL[old.state]) continue;
     if (s.state === 'SKIP' && old.state === 'PENDING') { old.state = 'SKIP'; old.why = s.why; old.exitT = NOW(); changed++; continue; }
+    if (!D[old.tf]) continue; // lệnh M5 của bản V3 cũ: không còn dữ liệu M5
     const before = old.state; V3.track(old, D[old.tf]); if (old.state !== before) changed++;
   }
 }
@@ -74,4 +77,4 @@ J.updated = NOW(); J.errors = errs;
 J.stats = {}; for (const sym of Object.keys(SYMS)) J.stats[sym] = V3.stats(J.trades.filter(t => t.sym === sym));
 fs.mkdirSync(DATA, { recursive: true });
 fs.writeFileSync(FILE, JSON.stringify(J));
-console.log(`Nhật ký V3: ${J.trades.length} dòng (+${added} mới, ${changed} đổi trạng thái)${errs.length ? ' · lỗi: ' + errs.join('; ') : ''}`);
+console.log(`Nhật ký V4: ${J.trades.length} dòng (+${added} mới, ${changed} đổi trạng thái)${errs.length ? ' · lỗi: ' + errs.join('; ') : ''}`);

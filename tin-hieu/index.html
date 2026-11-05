@@ -87,7 +87,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
       </div>
     </div>
     <div class="card">
-      <h3>Nhật ký giao dịch V3 — máy chủ ghi 24/7, kể cả khi không mở trang</h3>
+      <h3>Nhật ký giao dịch V4 (M15 · M30 · H1) — máy chủ ghi 24/7, kể cả khi không mở trang</h3>
       <div class="toggles" style="margin:0 0 8px">
         <label><select id="jSym"><option value="cur">Cặp đang xem</option><option value="all">Tất cả cặp</option></select></label>
         <label><input type="checkbox" id="jSkip"> Hiện lệnh bị bỏ qua (có entry đẹp hơn / đang có lệnh)</label>
@@ -95,8 +95,8 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
         <span class="note" id="jUpd"></span>
       </div>
       <div class="stat" id="jStats"></div>
-      <div class="tw"><table><thead><tr><th>Thời gian</th><th>Cặp · Khung</th><th>Lệnh</th><th>Quét</th><th>Entry</th><th>SL</th><th>TP 2R</th><th>Kết quả</th><th>Ghi chú</th></tr></thead><tbody id="jBody"></tbody></table></div>
-      <p class="note">GitHub Actions chạy engine V3 mỗi 5 phút và lưu từng lệnh vào <code>tinhieu-journal.json</code> (nhánh bot-data): tạo → chờ khớp → đang chạy → TP/SL/hết giờ/hết hạn/huỷ. Giá theo MT5 Exness khi EA bridge đang chạy, nếu không thì OKX. Kết quả đã trừ spread. Đây là ghi nhận để kiểm chứng, không phải khuyến nghị đầu tư.</p>
+      <div class="tw"><table><thead><tr><th>Thời gian</th><th>Cặp · Khung</th><th>Lệnh</th><th>Quét</th><th>Entry</th><th>SL</th><th>TP 2R</th><th>Kết quả</th><th>Bối cảnh giá · ghi chú</th></tr></thead><tbody id="jBody"></tbody></table></div>
+      <p class="note">GitHub Actions chạy engine V4 mỗi 5 phút và lưu từng lệnh vào <code>tinhieu-journal.json</code> (nhánh bot-data): tạo → chờ khớp → đang chạy → TP/SL/hết giờ/hết hạn/huỷ. Giá theo MT5 Exness khi EA bridge đang chạy, nếu không thì OKX. Kết quả đã trừ spread. Đây là ghi nhận để kiểm chứng, không phải khuyến nghị đầu tư.</p>
     </div>
     <div class="card">
       <h3>Mô phỏng engine cũ (tham khảo, trên dữ liệu đã tải)</h3>
@@ -110,7 +110,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 
   <aside class="side">
     <div class="card"><h3>Bot MT5 đang phân tích</h3><div id="bot"></div></div>
-    <div class="card"><h3>Tín hiệu V3 — quét PDH/PDL → MSS → FVG</h3><div id="v3now"></div></div>
+    <div class="card"><h3>Tín hiệu V4 — M15 · M30 · H1: quét PDH/PDL → MSS → FVG</h3><div id="v3now"></div></div>
     <div class="card"><h3>Phân tích cấu trúc (engine cũ, tham khảo)</h3><div id="now"></div></div>
     <div class="card"><h3>Dự kiến đường giá</h3><div id="proj"></div></div>
     <div class="card"><h3>Tiến trình BUY</h3><div id="pBuy"></div></div>
@@ -144,7 +144,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script src="engine.js?v=15"></script>
-<script src="v3.js?v=1"></script>
-<script src="app.js?v=15"></script>
+<script src="v3.js?v=2"></script>
+<script src="app.js?v=16"></script>
 </body>
 </html>

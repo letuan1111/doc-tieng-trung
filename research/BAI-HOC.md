@@ -127,3 +127,8 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
 - **12 tháng:** 968 lệnh (~20/tuần), thắng 34%, +2808 USD, nhưng 6 tháng trước +2752 USD còn 6 tháng gần chỉ +56 USD.
   - Mô hình chỉ thắng khi có xu hướng mạnh. Các bộ lọc xu hướng (khoảng cách EMA, EMA H1/H4) đều không tách được giai đoạn tốt.
   - Vì vậy chỉ ghi nhật ký, không gửi Telegram.
+- **Bản siết chuỗi (emapb2):** bắt buộc quét SSL/BSL ở điểm hồi và có FVG M5 trong nhịp phá vỡ, rồi vào ngay.
+  - 10 ngày gần: 17 lệnh, thắng 71%, +802 USD.
+  - 12 tháng: 677 lệnh, thắng 35%, +3652 USD. 6 tháng trước +3660 USD, 6 tháng gần −8 USD.
+  - Đã bật Telegram.
+  - Vào limit tại FVG thì kém hơn: 12 tháng +196 USD với limit mép FVG, −42 USD với limit giữa FVG.

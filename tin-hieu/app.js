@@ -312,7 +312,7 @@
     const rules = `<ul class="ck" style="margin-top:8px">
       <li><span class="y">1</span> Giá quét <b>PDH</b> (đỉnh hôm trước) hoặc <b>PDL</b> (đáy hôm trước) rồi đóng cửa quay lại</li>
       <li><span class="y">2</span> MSS/CHoCH ngược chiều cú quét, sóng có displacement + FVG</li>
-      <li><span class="y">3</span> Limit tại FVG · <b>M15</b>: EMA34/89 H4 cùng chiều, ngoài phiên Á 7h–13h (mép FVG, SL +0.5 ATR) · <b>M30</b>: mọi setup (giữa FVG, SL +1 ATR) · <b>H1</b>: chỉ SELL sau quét PDH (mép FVG, SL +1 ATR)</li>
+      <li><span class="y">3</span> Limit tại FVG · <b>M15</b>: cấu trúc swing H4 cùng chiều (bias ICT), ngoài phiên Á 7h–13h (mép FVG, SL +0.5 ATR) · <b>M30</b>: mọi setup (giữa FVG, SL +1 ATR) · <b>H1</b>: chỉ SELL sau quét PDH (mép FVG, SL +1 ATR)</li>
       <li><span class="y">4</span> TP 2R · nhiều khung cùng chiều → chọn entry giá đẹp nhất · một lệnh một lúc</li></ul>`;
     const hist = last.length ? `<p class="note" style="margin:8px 0 2px">Gần nhất:</p><ul class="ck">${last.map(s => `<li><span class="chip ${s.side > 0 ? 'buy' : 'sell'}">${s.side > 0 ? 'BUY' : 'SELL'} ${s.tf.toUpperCase()}</span> ${ft(s.ct)} · ${fx(s.entry)} · <b class="${s.r > 0 ? 'win' : s.r < 0 ? 'loss' : ''}">${V3.STATE_VI[s.state]}${s.r != null ? ` (${s.r > 0 ? '+' : ''}${s.r.toFixed(2)}R)` : ''}</b></li>`).join('')}</ul>` : '';
     if (!a) return `<div class="sig"><div class="t">Chưa có tín hiệu <span class="chip">ĐỨNG NGOÀI</span></div><p class="note" style="margin:8px 0 0">Chờ giá quét PDH/PDL rồi phá cấu trúc ngược lại.</p></div>${rules}${hist}`;

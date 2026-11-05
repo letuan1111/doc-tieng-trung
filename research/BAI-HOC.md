@@ -41,3 +41,22 @@ Lệnh ở đây là **R/lệnh**. TP = 2R, đã trừ spread.
 ## Mỗi lệnh trong nhật ký ghi lại
 Phiên và giờ VN, EMA khung vào/H1/H4 (cùng hay ngược chiều), độ sâu quét (ATR), sóng phá (ATR, số nến), cỡ FVG (ATR), ngày đã chạy (% ADR), giá lúc tín hiệu.
 Sau vài tuần, chạy lại `research/ctxstats.mjs` trên nhật ký thật để học tiếp.
+
+## Rà lại theo ICT/SMC chuẩn (05/11/2026, bản v4.1)
+Đã thử bật đủ mô hình ICT cho M15/M30: bias cấu trúc H4, MSS trong killzone (London 14–17h, NY 19–23h VN), entry ở discount/premium của sóng, OTE 70.5%.
+- **Bật đủ cả mô hình:** chỉ còn 4–8 lệnh/năm. M30 bị lỗ, nên quá chặt để dùng.
+- **Bias bằng cấu trúc swing H4 thay EMA H4 cho M15:** cùng 30 lệnh, +8.2R thay vì +5.6R, dương ở mọi giai đoạn. **Đã áp dụng.**
+- **Killzone bắt buộc:** làm kém cả M15 (+0.1R) lẫn M30 (+3.1R).
+- **Ép entry ở nửa discount của sóng:** M15 còn +0.4R, M30 còn +5.1R, số lệnh giảm một nửa.
+- **OTE 70.5%:** M15 ít lệnh hơn, lời gần như cũ; M30 bị lỗ.
+- **M30 giữ mô hình đảo chiều quét PDH/PDL → MSS (turtle soup), không lọc bias.** Thêm bias cấu trúc H4 làm số lệnh giảm một nửa và lời giảm.
+
+Tua từng nến bản v4.1 (0.02 lot):
+
+| | 6 tháng trước | 6 tháng gần |
+|---|---|---|
+| XAU | 22 lệnh · 8 TP / 11 SL · +7.3R · +630 USD | 13 lệnh · 6 TP / 5 SL · +8.0R · +409 USD |
+| BTC | 12 lệnh · 5 TP / 5 SL · +4.3R · +21 USD | 28 lệnh · 11 TP / 13 SL · +9.7R · +149 USD |
+| ETH | 13 lệnh · −1.0R | 19 lệnh · +2.4R |
+
+So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng trước không còn lỗ.

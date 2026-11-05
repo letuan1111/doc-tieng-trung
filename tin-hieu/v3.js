@@ -95,6 +95,7 @@
         let lvl = null, lvName = null;
         for (const src of (cfg.liq || ['pd'])) {
           let L2 = null, nm = null;
+          if (src === 'none') { lvl = oP; lvName = 'MSS (không quét)'; break; }
           if (src === 'pd') { L2 = d > 0 ? PD[oi].pL : PD[oi].pH; nm = d > 0 ? 'PDL' : 'PDH'; }
           else if (src === 'asia') { L2 = d > 0 ? SL[oi].aL : SL[oi].aH; nm = d > 0 ? 'Đáy phiên Á' : 'Đỉnh phiên Á'; }
           else if (src === 'london') { L2 = d > 0 ? SL[oi].lL : SL[oi].lH; nm = d > 0 ? 'Đáy London' : 'Đỉnh London'; }

@@ -157,6 +157,14 @@ for (const t of J.trades) if (t.grade !== 'W' && t.grade !== 'E' && t.grade !== 
   const C = D.taken.filter(x => FIN(x.state));
   D.balance = +bal.toFixed(2); D.maxDD = +dd.toFixed(2); D.wins = C.filter(x => x.state === 'WIN').length; D.losses = C.filter(x => x.state === 'LOSS').length; D.timeouts = C.filter(x => x.state === 'TIME').length;
   D.open = D.taken.find(x => !FIN(x.state)) || null; D.updated = NOW();
+  // báo số dư hằng ngày về Telegram (lần chạy đầu tiên sau 22h giờ VN) + báo mở tài khoản
+  const vnD = (t) => new Date(t + 7 * 36e5), today = vnD(NOW()).toISOString().slice(0, 10), vh = vnD(NOW()).getUTCHours();
+  const dayStart = Date.parse(today + 'T00:00:00Z') - 7 * 36e5, T = C.filter(x => (x.exitT || 0) >= dayStart), tU = T.reduce((a, x) => a + x.usd, 0);
+  const pl = D.balance - D.bal0, wr = C.length ? Math.round(100 * D.wins / C.length) : 0;
+  const openTxt = D.open ? `\n🟢 Đang mở: ${D.open.grade === 'R' ? '🧲 Test EMA21' : '🔁 EMA hồi'} ${D.open.side > 0 ? 'BUY' : 'SELL'} · Entry ${(+D.open.entry).toFixed(2)} · SL ${(+D.open.sl).toFixed(2)} · TP ${(+D.open.tp).toFixed(2)}` : '\nKhông có lệnh đang mở';
+  if (!D.openMsg) { D.openMsg = NOW(); if (!process.env.MOCK_DIR) toSend.push(`💼 <b>Đã mở tài khoản demo ${D.bal0}$</b> (giấy, trên máy chủ)\nVào lệnh đúng luật 2 EA: 🔁 EMA hồi (giờ tốt, SL ≤ 30) + 🧲 Test EMA21 M30 · 0.02 lot · mỗi lần 1 lệnh\nBáo kết quả mỗi lệnh và số dư lúc 22h mỗi ngày\n<a href="${PAGE}">Mở trang</a>`); }
+  if (D.dailyDay !== today && vh >= 22) { D.dailyDay = today;
+    toSend.push(`💼 <b>Số dư tài khoản demo ${vnD(NOW()).toISOString().slice(8, 10)}/${vnD(NOW()).toISOString().slice(5, 7)}</b>\nSố dư <b>${D.balance.toFixed(2)}$</b> (vốn ${D.bal0}$ · ${pl >= 0 ? '+' : ''}${pl.toFixed(2)}$)\nHôm nay: ${T.length} lệnh đóng · ${T.filter(x => x.state === 'WIN').length} TP · ${T.filter(x => x.state === 'LOSS').length} SL · ${tU >= 0 ? '+' : ''}${tU.toFixed(2)}$\nTừ đầu: ${C.length} lệnh · thắng ${wr}% · sụt tối đa ${D.maxDD.toFixed(2)}$${openTxt}\n<a href="${PAGE}">Mở trang</a>`); }
 }
 J.trades.sort((a, b) => a.ct - b.ct);
 J.updated = NOW(); J.errors = errs;

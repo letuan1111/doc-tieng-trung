@@ -106,3 +106,24 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
   - Tính một lần: 43 lệnh, 25 TP / 18 SL, thắng 58%, +347 USD (0.02 lot). 6 tháng trước +268 USD, 6 tháng gần +79 USD, 3 tháng gần thắng 67% (+186 USD).
   - Tua từng nến như máy chủ: 48 lệnh, thắng 52%, +240 USD.
 - **Đã sửa lỗi:** đỉnh/đáy tuần trước bị tính sai khi máy chủ chỉ có một phần tuần, làm sinh ra lệnh "quét PWL" giả.
+
+## Tua từng nến M15 27/10 → 05/11 (chart TradingView của người dùng) — mô hình 🔁 EMA hồi
+- **Sóng giảm 106 giá (30/10):**
+  1. EMA34 nằm dưới EMA89.
+  2. Giá hồi chạm EMA34 lúc 12h15.
+  3. Quét SSL, FVG giảm, BOS ↓ lúc 13h30.
+  4. Hồi lần nữa sát EMA34 (cách 0.3 ATR) lúc 15h45, rồi sập với chuỗi FVG giảm.
+- **Sóng tăng 122 giá (04/11):**
+  1. EMA34 cắt lên EMA89 lúc 6h30.
+  2. BSL sweep → MSS ↑ ngay tại EMA lúc 6h45.
+  3. Hồi xuống dưới EMA lúc 7h30, BOS ↑ lúc 8h00, chạy +44 giá.
+  4. Hồi lần nữa (dưới EMA34 khoảng 0.9 ATR) lúc 10h, rồi tăng 122 giá.
+- **Quy tắc rút ra (tin-hieu/emapb.js):**
+  1. EMA34/89 M15 theo xu hướng.
+  2. Giá hồi chạm EMA34, không thủng EMA89 quá 1 ATR.
+  3. MSS M5 theo xu hướng.
+  4. Vào ngay, SL ngoài đáy/đỉnh hồi, TP 2R.
+- **Tuần 29/10–05/11:** 16/23 lệnh TP, +1118 USD (0.02 lot).
+- **12 tháng:** 968 lệnh (~20/tuần), thắng 34%, +2808 USD, nhưng 6 tháng trước +2752 USD còn 6 tháng gần chỉ +56 USD.
+  - Mô hình chỉ thắng khi có xu hướng mạnh. Các bộ lọc xu hướng (khoảng cách EMA, EMA H1/H4) đều không tách được giai đoạn tốt.
+  - Vì vậy chỉ ghi nhật ký, không gửi Telegram.

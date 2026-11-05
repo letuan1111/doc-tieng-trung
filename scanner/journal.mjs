@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 const req = createRequire(import.meta.url), __dir = path.dirname(fileURLToPath(import.meta.url));
 const V3 = req(path.join(__dir, '..', 'tin-hieu', 'v3.js'));
 const WAVE = req(path.join(__dir, '..', 'tin-hieu', 'wave.js'));
+const EMAPB = req(path.join(__dir, '..', 'tin-hieu', 'emapb.js'));
 const DATA = process.env.DATA_DIR || 'botdata', FILE = path.join(DATA, 'tinhieu-journal.json');
 const FB = (process.env.MT5_DB || 'https://letuan-mt5-default-rtdb.asia-southeast1.firebasedatabase.app').replace(/\/+$/, '');
 const MS = { ...V3.MS, m5: 3e5 }, NEED = { m15: 3000, h1: 2200 }; // H1 dài để EMA34/89 H4 ổn định; M30 dựng từ M15
@@ -79,12 +80,12 @@ const RULES = 'Ghi nhận mọi setup ICT/SMC quét thanh khoản (PDH/PDL, tu�
 let J = { version: V3.version, rules: RULES, trades: [] };
 try { J = { ...J, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) }; } catch (_) {}
 // đổi bản quy tắc: bỏ các lệnh "tính lại" của bản cũ (sẽ tính lại theo bản mới), giữ nguyên lệnh đã ghi trực tiếp
-if (J.version !== V3.version) J.trades = J.trades.filter(t => t.live || (t.grade === 'W' && t.ver === WAVE.version));
+if (J.version !== V3.version) J.trades = J.trades.filter(t => t.live || (t.grade === 'W' && t.ver === WAVE.version) || (t.grade === 'E' && t.ver === EMAPB.version));
 J.version = V3.version; J.rules = RULES;
 const byId = new Map(J.trades.map(x => [x.id, x]));
 // nạp sẵn lịch sử 12 tháng (tính lại từ OKX) — chỉ thêm lệnh chưa có, cùng bản quy tắc
 try { const SEED = JSON.parse(fs.readFileSync(path.join(__dir, 'journal-seed.json'), 'utf8'));
-  if (SEED.version === V3.version) { let n = 0; for (const t of SEED.trades) if (!byId.has(t.id) && (t.grade !== 'W' || t.ver === WAVE.version)) { J.trades.push(t); byId.set(t.id, t); n++; } if (n) console.log(`Nạp ${n} lệnh lịch sử 12 tháng`); } } catch (_) {}
+  if (SEED.version === V3.version) { let n = 0; for (const t of SEED.trades) if (!byId.has(t.id) && (t.grade !== 'W' || t.ver === WAVE.version) && (t.grade !== 'E' || t.ver === EMAPB.version)) { J.trades.push(t); byId.set(t.id, t); n++; } if (n) console.log(`Nạp ${n} lệnh lịch sử 12 tháng`); } } catch (_) {}
 let added = 0, changed = 0, XAU15 = null; const errs = [];
 for (const sym of Object.keys(SYMS)) {
   let L;
@@ -114,22 +115,25 @@ try {
   let m5, m15;
   if (process.env.MOCK_DIR) { const rd = (tf) => JSON.parse(fs.readFileSync(path.join(process.env.MOCK_DIR, `XAU_${tf}.json`), 'utf8')).map(k => ({ t: k[0], ct: k[0] + MS[tf], o: k[1], h: k[2], l: k[3], c: k[4] })).filter(x => x.ct <= NOW()); m5 = rd('m5').slice(-NEED.m5); m15 = rd('m15').slice(-600); }
   else { m5 = closed(await okx(SYMS.XAU.okx, 'm5')); m15 = (XAU15 || []).slice(-600); }
-  const W = WAVE.run({ m5, m15 }, { spread: SYMS.XAU.spread }), seenW = new Set();
-  for (const s of W) {
-    const id = `XAU-${s.id}`, old = byId.get(id); seenW.add(id);
-    if (!old) { const rec = { ...s, id, sym: 'XAU', ver: WAVE.version, src: process.env.MOCK_DIR ? 'MOCK' : 'OKX ' + SYMS.XAU.okx, seen: NOW(), dp: 2, live: NOW() - s.ct < 3 * 3e5 + 10 * 60e3 };
-      J.trades.push(rec); byId.set(id, rec); added++; notify(rec); continue; }
-    if (WAVE.FINAL[old.state]) continue;
-    const before = old.state; for (const k of ['state', 'fillT', 'exitT', 'exitP', 'r', 'pts']) old[k] = s[k];
-    if (old.state !== before) { changed++; notify(old); }
+  // các mô hình chạy trên M5 vàng: tính lại toàn bộ cửa sổ mỗi lần, cập nhật lệnh chưa kết thúc
+  for (const [MOD, G] of [[WAVE, 'W'], [EMAPB, 'E']]) {
+    const W = MOD.run({ m5, m15 }, { spread: SYMS.XAU.spread }), seenW = new Set(), tg = MOD.telegram !== false;
+    for (const s of W) {
+      const id = `XAU-${s.id}`, old = byId.get(id); seenW.add(id);
+      if (!old) { const rec = { ...s, id, sym: 'XAU', ver: MOD.version, src: process.env.MOCK_DIR ? 'MOCK' : 'OKX ' + SYMS.XAU.okx, seen: NOW(), dp: 2, live: NOW() - s.ct < 3 * 3e5 + 10 * 60e3 };
+        J.trades.push(rec); byId.set(id, rec); added++; if (tg) notify(rec); continue; }
+      if (MOD.FINAL[old.state]) continue;
+      const before = old.state; for (const k of ['state', 'fillT', 'exitT', 'exitP', 'r', 'pts']) old[k] = s[k];
+      if (old.state !== before) { changed++; if (tg) notify(old); }
+    }
+    for (const t of J.trades) if (t.grade === G && !MOD.FINAL[t.state] && !seenW.has(t.id) && NOW() - t.ct > 2 * 864e5) { t.state = 'TIME'; t.why = 'Ra ngoài cửa sổ dữ liệu M5'; }
   }
-  for (const t of J.trades) if (t.grade === 'W' && !WAVE.FINAL[t.state] && !seenW.has(t.id) && NOW() - t.ct > 2 * 864e5) { t.state = 'TIME'; t.why = 'Ra ngoài cửa sổ dữ liệu M5'; }
-} catch (e) { errs.push('Sóng 15: ' + e.message); }
+} catch (e) { errs.push('Mô hình M5 (Sóng 15 / EMA hồi): ' + e.message); }
 // lệnh treo quá lâu ngoài cửa sổ dữ liệu
-for (const t of J.trades) if (t.grade !== 'W' && !V3.FINAL[t.state] && NOW() - t.ct > 30 * 864e5) { t.state = 'TIME'; t.why = 'Quá 30 ngày không cập nhật được'; }
+for (const t of J.trades) if (t.grade !== 'W' && t.grade !== 'E' && !V3.FINAL[t.state] && NOW() - t.ct > 30 * 864e5) { t.state = 'TIME'; t.why = 'Quá 30 ngày không cập nhật được'; }
 J.trades.sort((a, b) => a.ct - b.ct);
 J.updated = NOW(); J.errors = errs;
-J.stats = {}; for (const sym of Object.keys(SYMS)) J.stats[sym] = { chuan: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'A')), song15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'W')), bos15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'S')), tatca: V3.stats(J.trades.filter(t => t.sym === sym)) };
+J.stats = {}; for (const sym of Object.keys(SYMS)) J.stats[sym] = { chuan: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'A')), song15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'W')), bos15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'S')), emaHoi: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'E')), tatca: V3.stats(J.trades.filter(t => t.sym === sym)) };
 fs.mkdirSync(DATA, { recursive: true });
 J.telegram = { chats: CHATS.length, token: !!TOKEN };
 fs.writeFileSync(FILE, JSON.stringify(J));

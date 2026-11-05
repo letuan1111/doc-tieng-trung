@@ -166,3 +166,11 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
 - Luật "Hồi EMA21": EMA34>EMA89 M30 (hoặc ngược lại) · trong 3h qua giá hồi chạm vùng EMA34–89 M30 (không xuyên quá EMA89 1 ATR), đáy hồi ≤ 2h trước · nến M5 đóng cửa vượt lại EMA21 M5 → vào nến sau · SL dưới đáy hồi + 0.3 ATR M15 (≤ 15 giá) · TP 2R.
 - Vàng 12 tháng: 413 lệnh (1.6/ngày), thắng 36%, SL TB 9 giá, +1001$ (trước 833 · gần 168), DD 266, thua liên tiếp 8. TP 3R: +1221$, DD 487. Spread 0.5 vẫn +1038$, 0.7 còn +721$. BUY và SELL đều lời. 10/13 tháng lời.
 - Yếu: 6 tháng gần lời ít hơn (+168$ với TP 2R); SL tối đa 10 giá thì hết lời; EMA M15 thay M30 thì 6 tháng gần lỗ; BTC cùng luật lỗ nhẹ → luật riêng cho vàng.
+
+## EMA nào phản ứng nhanh nhất / test nhanh (emaspeed.mjs, emaquick.mjs, emaquick-check.mjs, 2026-11-05)
+- Đảo chiều thật (zigzag M15 ≥ 3 ATR, ~10.6 sóng/ngày, dài trung vị 28 giá): EMA5 M5 báo nhanh nhất (trễ ~20 phút, mất ~6.6 giá, bắt 70% sóng) nhưng chỉ 14% lần cắt là thật. EMA càng chậm / khung càng lớn thì càng trễ nhưng càng ít báo sai (EMA34 M30: 42% thật; EMA89 M15: 35%).
+- Test rồi bật lại ≥ 1 ATR: M5 chỉ 38–50% · M15 48–59% · M30 58–66% (EMA21 M30 64%, 3.9 lần/ngày; EMA34 M30 65%; EMA89 M30 66%).
+- Limit mù tại EMA: 10/10 lỗ nặng. Chờ nến M5 đóng cửa bật lại phía xu hướng (thân cùng chiều) sau khi chạm EMA, SL ngoài râu chạm + 0.3 ATR → có lời:
+  · A: M15 EMA34, TP 1.5R: 878 lệnh (3.4/ngày), 41%, +953$, DD 341 — nhạy spread (0.7 → +105$), BUY 6 tháng gần lỗ.
+  · B: M30 EMA21, TP 1R: 539 (2.1/ngày), 52%, +651$, DD 153 — spread 0.7 thì nửa gần lỗ.
+  · C (bền nhất): M30 EMA21 + EMA34>89 M30, TP 2R: 332 (1.3/ngày), 37%, +791$ (349 · 442), DD 149; spread 0.7 vẫn +590$; mọi biến thể thông số đều lời; BTC hoà (+20$).

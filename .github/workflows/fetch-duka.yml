@@ -1,0 +1,22 @@
+name: Tải dữ liệu Dukascopy (vàng + dầu, 2 năm)
+on:
+  workflow_dispatch:
+    inputs:
+      start: { description: "Ngày bắt đầu (YYYY-MM-DD)", default: "2024-11-01" }
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tải và gộp nến
+        env: { START: "${{ github.event.inputs.start }}" }
+        run: python3 research/duka.py
+      - name: Lưu vào nhánh duka-data
+        run: |
+          mkdir -p /tmp/out && cp research/data/XAU2Y_*.json research/data/OIL_*.json /tmp/out/
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan duka-data && git rm -rqf . && mkdir -p research/data && cp /tmp/out/*.json research/data/
+          git add research/data && git commit -qm "Dukascopy XAU + WTI 2 năm" && git push -f origin duka-data

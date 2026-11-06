@@ -13,6 +13,7 @@ on:
       - "tin-hieu/wave.js"
       - "tin-hieu/emapb.js"
       - "tin-hieu/ema21.js"
+      - "tin-hieu/zones.js"
       - ".github/workflows/bot-tin-hieu.yml"
 
 permissions:

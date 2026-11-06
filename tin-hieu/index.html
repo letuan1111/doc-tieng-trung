@@ -77,11 +77,11 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
         <div class="seg" id="viewSeg"><button data-v="chart" class="on">Biểu đồ tín hiệu</button><button data-v="tv">TradingView</button></div>
         <div class="seg" id="tfSeg"><button data-tf="m5">M5</button><button data-tf="m15" class="on">M15</button><button data-tf="h1">H1</button><button data-tf="h4">H4</button></div>
       </div>
-      <div class="toggles"><label><input type="checkbox" data-show="m15"> Vùng M15</label><label><input type="checkbox" data-show="h1"> Vùng H1</label><label><input type="checkbox" data-show="h4"> Vùng H4</label><label><input type="checkbox" data-show="liq"> Thanh khoản BSL/SSL</label><label><input type="checkbox" data-show="proj"> Đường dự kiến</label><label><input type="checkbox" data-show="bot"> Bot MT5</label></div>
+      <div class="toggles"><label><input type="checkbox" data-show="sr"> 🧱 Vùng S/R H4/H1 (AI)</label><label><input type="checkbox" data-show="m15"> Vùng M15</label><label><input type="checkbox" data-show="h1"> Vùng H1</label><label><input type="checkbox" data-show="h4"> Vùng H4</label><label><input type="checkbox" data-show="liq"> Thanh khoản BSL/SSL</label><label><input type="checkbox" data-show="proj"> Đường dự kiến</label><label><input type="checkbox" data-show="bot"> Bot MT5</label></div>
       <div id="chartWrap"><div id="chart"></div><canvas id="ov"></canvas></div>
       <div id="tv" class="hide"></div>
       <div class="legend" id="legend">
-        <span><i style="background:#06b6d4"></i>EMA 34</span><span><i style="background:#eab308"></i>EMA 89</span>
+        <span><i style="background:#38bdf866;height:8px"></i>Hỗ trợ H4/H1</span><span><i style="background:#fb923c66;height:8px"></i>Kháng cự H4/H1</span><span><i style="background:#06b6d4"></i>EMA 34</span><span><i style="background:#eab308"></i>EMA 89</span>
         <span><i style="background:#22c55e66;height:8px"></i>OB/FVG tăng</span><span><i style="background:#f43f5e66;height:8px"></i>OB/FVG giảm</span>
         <span><i style="background:#a855f7"></i>MSS / Entry</span><span><i style="background:#f472b6"></i>Setup bot MT5</span><span>▲▼ BOS · CHoCH</span><span><i style="background:#4ade80"></i>Dự kiến</span><span><i style="background:#94a3b8"></i>Kịch bản phụ</span>
       </div>
@@ -91,7 +91,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
       <div class="toggles" style="margin:0 0 8px">
         <label><select id="jSym"><option value="all">Tất cả cặp</option><option value="cur">Cặp đang xem</option></select></label>
         <label><input type="checkbox" id="jSkip"> Hiện lệnh bị bỏ qua (có entry đẹp hơn / đang có lệnh)</label>
-        <label><select id="jGrade"><option value="all">Mọi lệnh quét thanh khoản</option><option value="T">📲 Chỉ lệnh gửi Telegram</option><option value="A">Chỉ lệnh Chuẩn</option><option value="B">Chỉ lệnh Ghi nhận</option><option value="W">Chỉ Sóng 15 (vàng M5)</option><option value="S">Chỉ BOS 15 (vàng M15/M30, SL 10 · TP 15)</option><option value="E">Chỉ EMA hồi (vàng: EMA M30 + M5)</option><option value="R">Chỉ Test EMA21 M30 (vàng, thắng cao nhất)</option></select></label>
+        <label><select id="jGrade"><option value="all">Mọi lệnh quét thanh khoản</option><option value="T">📲 Chỉ lệnh gửi Telegram</option><option value="A">Chỉ lệnh Chuẩn</option><option value="B">Chỉ lệnh Ghi nhận</option><option value="W">Chỉ Sóng 15 (vàng M5)</option><option value="S">Chỉ BOS 15 (vàng M15/M30, SL 10 · TP 15)</option><option value="E">Chỉ EMA hồi (vàng: EMA M30 + M5)</option><option value="R">Chỉ Test EMA21 M30 (vàng)</option><option value="Z">Chỉ 🧱 Vùng S/R H4/H1 + quét M15 (AI)</option></select></label>
         <label><input type="checkbox" id="jOld"> Hiện lệnh của bản cũ</label>
         <button class="btn" id="jCsv">⬇ Tải CSV</button>
         <span class="note" id="jUpd"></span>
@@ -101,7 +101,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
       <p class="note">GitHub Actions chạy engine V4 mỗi 5 phút và lưu từng lệnh vào <code>tinhieu-journal.json</code> (nhánh bot-data): tạo → chờ khớp → đang chạy → TP/SL/hết giờ/hết hạn/huỷ. Giá theo MT5 Exness khi EA bridge đang chạy, nếu không thì OKX. Kết quả đã trừ spread. Đây là ghi nhận để kiểm chứng, không phải khuyến nghị đầu tư.</p>
     </div>
     <div class="card" id="demoCard">
-      <h3>💼 Tài khoản demo 500$ — chạy đúng luật EA (EMA hồi + Test EMA21 M30), 0.02 lot, mỗi lần 1 lệnh</h3>
+      <h3>💼 Tài khoản demo 500$ — chạy đúng luật EA (EMA hồi + Test EMA21 M30) và 🤖 AI Vùng S/R, 0.02 lot, mỗi lần 1 lệnh</h3>
       <div class="stat" id="dStats"></div>
       <div id="dOpen" class="note" style="margin-bottom:8px"></div>
       <div class="tw"><table><thead><tr><th>Vào lúc</th><th>Mô hình</th><th>Lệnh</th><th>Entry</th><th>SL</th><th>TP</th><th>Kết quả</th><th>USD</th><th>Số dư</th></tr></thead><tbody id="dBody"></tbody></table></div>
@@ -118,6 +118,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
   </section>
 
   <aside class="side">
+    <div class="card" id="zCard"><h3>🤖 AI vào lệnh — Vùng S/R H4/H1 + quét M15</h3><div id="znow"><p class="note">Đang tính vùng…</p></div></div>
     <div class="card"><h3>Bot MT5 đang phân tích</h3><div id="bot"></div></div>
     <div class="card"><h3>Tín hiệu V4 — M15 · M30 · H1: quét PDH/PDL → MSS → FVG</h3><div id="v3now"></div></div>
     <div class="card"><h3>🌊 Sóng 15 — vàng M5: bắt sóng ≥ 15 giá</h3><div id="wnow"></div></div>
@@ -160,6 +161,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 <script src="wave.js?v=2"></script>
 <script src="emapb.js?v=4"></script>
 <script src="ema21.js?v=1"></script>
-<script src="app.js?v=33"></script>
+<script src="zones.js?v=1"></script>
+<script src="app.js?v=34"></script>
 </body>
 </html>

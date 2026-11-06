@@ -98,7 +98,7 @@
 
   // ---------------- chart ----------------
   let chart, cs, e24, e34, e89, plines = [];
-  const SHOW = Object.assign({ m15: true, h1: true, h4: true, liq: true, proj: true, e34: true, e24: false, bot: true }, LS.get('smc.show', {}));
+  const SHOW = Object.assign({ sr: true, m15: true, h1: true, h4: true, liq: true, proj: true, e34: true, e24: false, bot: true }, LS.get('smc.show', {}));
   const TZ = -new Date().getTimezoneOffset() * 60;
   const tsec = (t) => Math.floor(t / 1000) + TZ;
   function initChart() {
@@ -144,6 +144,10 @@
       mk.push({ time: snap(s.t), position: s.side > 0 ? 'belowBar' : 'aboveBar', color: '#a855f7', shape: 'circle', text: `V4 ${s.side > 0 ? 'BUY' : 'SELL'} ${s.tf.toUpperCase()}` });
       if (s.r != null && s.exitT) mk.push({ time: snap(s.exitT - TFMS[s.tf]), position: 'inBar', color: s.r > 0 ? '#22c55e' : '#f43f5e', shape: 'square', text: s.state === 'WIN' ? 'TP' : s.state === 'LOSS' ? 'SL' : 'Đóng' });
     }
+    if (SHOW.sr && S.zr) for (const s of S.zr.signals) if (s.state !== 'SKIP' && s.ct - 9e5 >= t0) {
+      mk.push({ time: snap(s.ct - 9e5), position: s.side > 0 ? 'belowBar' : 'aboveBar', color: '#f59e0b', shape: s.side > 0 ? 'arrowUp' : 'arrowDown', text: `🤖 ${s.side > 0 ? 'BUY' : 'SELL'} ${s.ai}đ` });
+      if (s.exitT) mk.push({ time: snap(s.exitT - 3e5), position: 'inBar', color: s.r > 0 ? '#22c55e' : '#f43f5e', shape: 'square', text: s.state === 'WIN' ? 'TP 3R' : s.state === 'LOSS' ? 'SL' : 'Đóng' });
+    }
     mk.sort((a, b) => a.time - b.time); cs.setMarkers(mk);
     plines.forEach(p => cs.removePriceLine(p)); plines = [];
     const a = v3Active();
@@ -152,6 +156,9 @@
       add(a.entry, '#a855f7', `V4 ENTRY ${a.tf.toUpperCase()}`); add(a.sl, '#f43f5e', 'SL', 2); add(a.tp, '#22c55e', 'TP 2R', 2);
       add(a.sweep, '#f59e0b', a.sweepName + ' đã quét', 1);
     }
+    const za = zActive();
+    if (za) { const add = (p, col, t, st = 0) => plines.push(cs.createPriceLine({ price: p, color: col, lineWidth: 2, lineStyle: st, axisLabelVisible: true, title: t }));
+      add(za.entry, '#f59e0b', `🤖 AI ${za.side > 0 ? 'BUY' : 'SELL'}`); add(za.sl, '#f43f5e', 'SL AI', 2); add(za.tp, '#22c55e', 'TP 3R AI', 2); }
     let fut = 6;
     if (SHOW.proj && r.proj && r.proj.path.length) { const last = r.proj.path[r.proj.path.length - 1].t; fut = Math.min(220, Math.max(6, Math.ceil((last - c[c.length - 1].t) / TFMS[S.tf]) + 4)); }
     chart.timeScale().applyOptions({ rightOffset: Math.max(8, fut) });
@@ -175,6 +182,17 @@
       g.strokeStyle = stroke; g.lineWidth = 1; g.strokeRect(x0, y0, Math.max(2, (x1 ?? W - psW) - x0), Math.max(1, y1 - y0));
       if (label) { g.fillStyle = stroke; g.font = '600 10px Be Vietnam Pro'; g.fillText(label, x0 + 3, y0 + 11); }
     };
+    // 🧱 vùng S/R H4/H1 (AI) — dải ngang toàn chart, đậm theo điểm
+    if (SHOW.sr && S.zr && S.zr.zones.length) { const zr = S.zr, mx = Math.max(...zr.zones.map(z => z.score)), xR = W - psW; const usedY = [];
+      for (const z of zr.zones) { const y0 = cs.priceToCoordinate(z.hi), y1 = cs.priceToCoordinate(z.lo); if (y0 == null || y1 == null) continue;
+        const col = z.kind === 'S' ? '56,189,248' : z.kind === 'R' ? '251,146,60' : '203,213,225', a = 0.06 + 0.22 * z.score / mx;
+        g.fillStyle = `rgba(${col},${a.toFixed(2)})`; g.fillRect(0, y0, xR, Math.max(2, y1 - y0)); g.strokeStyle = `rgba(${col},${(a + 0.35).toFixed(2)})`; g.lineWidth = z.score >= 20 ? 1.6 : 1; g.strokeRect(0, y0, xR, Math.max(2, y1 - y0));
+        g.fillStyle = `rgb(${col})`; g.font = '700 10px Be Vietnam Pro'; const lb = `${z.kind === 'S' ? 'HỖ TRỢ' : z.kind === 'R' ? 'KHÁNG CỰ' : 'GIÁ TRONG VÙNG'} ${fx(z.lo)}–${fx(z.hi)} · ${z.score}đ${z.score >= 20 ? ' ★' : ''}${z.flip ? ' · đổi vai' : ''}`;
+        let ly = y0 - 3; if (usedY.some(u => Math.abs(u - ly) < 12)) ly = y1 + 11; if (!usedY.some(u => Math.abs(u - ly) < 12)) { usedY.push(ly); g.fillText(lb, Math.max(4, xR - g.measureText(lb).width - 6), ly); } }
+      for (const w of zr.watch) { const y = cs.priceToCoordinate(w.mss), x0 = xOf(w.sweepT); if (y == null || x0 == null) continue;
+        g.strokeStyle = '#f59e0b'; g.setLineDash([5, 3]); g.lineWidth = 1.4; g.beginPath(); g.moveTo(Math.max(0, x0), y); g.lineTo(xR, y); g.stroke(); g.setLineDash([]);
+        g.fillStyle = '#f59e0b'; g.font = '700 10px Be Vietnam Pro'; g.fillText(`🤖 chờ MSS: M15 đóng ${w.side > 0 ? 'trên' : 'dưới'} ${fx(w.mss)}`, Math.max(2, x0 + 4), y - 3); }
+    }
     // vùng cản OB/FVG M15/H1/H4 + thanh khoản
     const A = { m15: [.07, .45], h1: [.11, .65], h4: [.16, .9] };
     for (const k of ['h4', 'h1', 'm15']) {
@@ -228,6 +246,30 @@
     for (const s of (S.v3 || []).filter(x => x.state !== 'SKIP').slice(-6)) {
       const z = s.fvg; if (z) box(s.t, s.exitT || null, z.bot, z.top, `rgba(168,85,247,.16)`, `rgba(168,85,247,.8)`, `FVG ${s.tf.toUpperCase()}`);
     }
+  }
+
+  // ---------------- 🤖 AI vùng S/R ----------------
+  const zActive = () => { const L = S.zr && S.zr.signals.filter(s => s.state === 'OPEN'); return L && L.length ? L[L.length - 1] : null; };
+  function zCard() {
+    const zr = S.zr; if (!zr) return '<p class="note">Chưa đủ dữ liệu H1/M15 để vẽ vùng.</p>';
+    const tr = (v) => v > 0 ? '<span class="win">tăng</span>' : v < 0 ? '<span class="loss">giảm</span>' : 'đi ngang';
+    const act = zActive(), sig = zr.signals.filter(s => s.state !== 'SKIP'), last = zr.signals.slice(-4).reverse();
+    let head;
+    if (act) head = `<div class="note" style="border-left:3px solid #f59e0b;padding-left:8px"><b>🤖 AI ĐANG CÓ LỆNH ${act.side > 0 ? '<span class="win">BUY</span>' : '<span class="loss">SELL</span>'}</b> từ ${ft(act.ct)} · ${act.ai} điểm AI<br>Entry <b>${fx(act.entry)}</b> · SL <b class="loss">${fx(act.sl)}</b> · TP 3R <b class="win">${fx(act.tp)}</b> · rủi ro ${fx(act.risk)} giá<br><small>${esc(act.aiWhy.join(' · '))}</small></div>`;
+    else if (zr.watch.length) head = zr.watch.map(w => `<div class="note" style="border-left:3px solid #f59e0b;padding-left:8px"><b>🤖 Đã thấy quét ${w.side > 0 ? 'đáy hỗ trợ' : 'đỉnh kháng cự'} ${fx(w.zone.lo)}–${fx(w.zone.hi)}</b> (râu ${fx(w.sweep)} lúc ${ft(w.sweepT)})<br>Chờ nến M15 đóng ${w.side > 0 ? 'TRÊN' : 'DƯỚI'} <b>${fx(w.mss)}</b> (MSS) trước ${ft(w.until)} → AI chấm điểm và vào ${w.side > 0 ? 'BUY' : 'SELL'} nếu ≥ 2 điểm. Huỷ nếu M15 đóng ${w.side > 0 ? 'dưới' : 'trên'} ${fx(w.edge)}.</div>`).join('');
+    else head = `<p class="note"><b>🤖 AI đang chờ</b> giá quét qua mép một vùng mạnh. Chưa có lệnh.</p>`;
+    const plan = zr.plan.slice(0, 4).map(p => { const b = p.side > 0;
+      return `<div class="note" style="margin:6px 0"><span class="chip ${b ? 'buy' : 'sell'}">${b ? 'BUY' : 'SELL'}</span> <b>${b ? 'Hỗ trợ' : 'Kháng cự'} ${fx(p.zone.lo)}–${fx(p.zone.hi)}</b> · ${p.zone.score}đ${p.zone.flip ? ' · đổi vai' : ''} · cách giá ${fx(p.dist)}<br>
+        Kích hoạt: râu M15 ${b ? 'xuống dưới' : 'lên trên'} <b>${fx(p.edge)}</b> (không quá ${fx(p.maxSweep)}) rồi đóng lại trong vùng → M15 đóng ${b ? 'trên đỉnh' : 'dưới đáy'} swing gần nhất${p.mssNow ? ' (hiện ' + fx(p.mssNow) + ')' : ''} → vào ngay · SL ngoài râu + ${fx(0.2 * zr.a15)} · TP 3R<br>
+        AI hiện có <b>${p.aiBase}/2</b> điểm${p.aiWhy.length ? ' (' + esc(p.aiWhy.join(', ')) + ')' : ''}${p.need ? ` → cần thêm ${p.need}: giờ mạnh 8–9h/19–22h hoặc MSS ≤ 4 nến` : ' → <span class="win">đủ điểm, gặp tín hiệu là vào</span>'}</div>`; }).join('');
+    const w = sig.filter(s => s.state === 'WIN').length, l = sig.filter(s => s.state === 'LOSS').length, R = sig.reduce((a, s) => a + (s.r || 0), 0);
+    const hist = last.map(s => `<tr><td>${ft(s.ct)}</td><td><span class="chip ${s.side > 0 ? 'buy' : 'sell'}">${s.side > 0 ? 'BUY' : 'SELL'}</span></td><td title="${esc(s.aiWhy.join(' · '))}">${s.ai}đ</td><td>${s.state === 'SKIP' ? '<span class="muted">Bỏ: ' + esc(s.why) + '</span>' : (V3.STATE_VI[s.state] || s.state) + (s.r != null ? ` (${s.r > 0 ? '+' : ''}${s.r.toFixed(2)}R)` : '')}</td></tr>`).join('');
+    return `${head}
+      <p class="note" style="margin-top:8px">Giá ${fx(zr.px)} · xu hướng M15 ${tr(zr.trend15)} · H4 ${tr(zr.trend4)} · ATR H4 ${fx(zr.a4)} · ATR M15 ${fx(zr.a15)}</p>
+      <h4 style="margin:10px 0 2px;font-size:13px">Kịch bản AI gần giá nhất</h4>${plan || '<p class="note">Không có vùng mạnh gần giá.</p>'}
+      <h4 style="margin:10px 0 2px;font-size:13px">Tín hiệu gần đây (trên dữ liệu trang đang tải: ${sig.length} lệnh, ${w} TP · ${l} SL · ${R >= 0 ? '+' : ''}${R.toFixed(1)}R)</h4>
+      <div class="tw"><table><thead><tr><th>Lúc</th><th>Lệnh</th><th>AI</th><th>Kết quả</th></tr></thead><tbody>${hist || '<tr><td colspan="4" class="muted">Chưa có tín hiệu trong dữ liệu đang tải.</td></tr>'}</tbody></table></div>
+      <p class="note" style="margin-top:6px"><b>Luật AI:</b> vùng ≥ 4 điểm → quét M15 → MSS M15 ≤ 4 giờ → chấm điểm: +1 ngược xu hướng M15 · +1 thuận H4 · +1 giờ mạnh · +1 MSS ≤ 4 nến · −1 giờ chết (3–4h, 10–11h). <b>Vào khi ≥ 2 điểm</b>, SL ngoài râu + 0.2 ATR M15, TP 3R, giữ 24h. Kiểm ${esc(ZONES.BACKTEST)}. ${S.sym !== 'XAU' ? '<b class="loss">Chưa kiểm cho ' + SYMS[S.sym].name + ' — chỉ tham khảo.</b>' : ''} Dầu WTI lỗ ở mọi biến thể nên không dùng.</p>`;
   }
 
   // ---------------- bảng điều khiển ----------------
@@ -306,7 +348,7 @@
 
   // ---------------- V3: tín hiệu hiện tại + nhật ký máy chủ ----------------
   const JR = 'https://raw.githubusercontent.com/letuan1111/doc-tieng-trung/bot-data/tinhieu-journal.json';
-  const GR = (s) => s.grade === 'R' ? '<span class="chip" style="background:rgba(167,139,250,.15);color:#a78bfa" title="Test EMA21 M30: EMA34>EMA89 M30, ≥ 6 nến M30 đóng cùng phía EMA21 → giá chạm EMA21 M30 → nến M5 bật lại → vào ngay, SL ngoài râu + 0.3 ATR, TP 1R. Bỏ giờ 8h, 23h. Gửi Telegram">🧲 Test EMA21</span>' : s.grade === 'E' ? '<span class="chip" style="background:rgba(244,114,182,.15);color:#f472b6" title="EMA hồi: EMA34/89 M15 theo xu hướng → giá hồi về EMA34 → quét SSL/BSL → phá vỡ M5 có FVG → vào ngay, SL ngoài điểm quét, TP 2R. Telegram chỉ gửi lệnh trong giờ 0h, 8h, 11h, 12h, 14h, 17h, 20h, 21h">🔁 EMA hồi</span>' : s.grade === 'S' ? '<span class="chip" style="background:rgba(250,204,21,.15);color:#facc15" title="BOS 15: quét thanh khoản → BOS tiếp diễn + FVG trên M15/M30, SL 10 giá, TP 15 giá">🎯 BOS 15</span>' : s.grade === 'W' ? '<span class="chip" style="background:rgba(56,189,248,.15);color:#38bdf8" title="Kịch bản Sóng 15: quét thanh khoản → MSS M5 → limit mép FVG M5, TP ≥ 15 giá">🌊 Sóng 15</span>' : s.grade === 'B' ? '<span class="chip" title="Setup quét thanh khoản ICT/SMC — chỉ ghi nhận, chưa đạt bộ lọc chuẩn">Ghi nhận</span>' : '<span class="chip buy" title="Đạt quy tắc chuẩn đã kiểm chứng">Chuẩn</span>';
+  const GR = (s) => s.grade === 'Z' ? '<span class="chip" style="background:rgba(245,158,11,.15);color:#f59e0b" title="🤖 AI Vùng S/R H4/H1: quét mép vùng mạnh trên M15 → MSS M15 → AI ≥ 2 điểm → vào ngay, SL ngoài râu + 0.2 ATR M15, TP 3R. Gửi Telegram">🧱 Vùng S/R</span>' : s.grade === 'R' ? '<span class="chip" style="background:rgba(167,139,250,.15);color:#a78bfa" title="Test EMA21 M30: EMA34>EMA89 M30, ≥ 6 nến M30 đóng cùng phía EMA21 → giá chạm EMA21 M30 → nến M5 bật lại → vào ngay, SL ngoài râu + 0.3 ATR, TP 1R. Bỏ giờ 8h, 23h. Gửi Telegram">🧲 Test EMA21</span>' : s.grade === 'E' ? '<span class="chip" style="background:rgba(244,114,182,.15);color:#f472b6" title="EMA hồi: EMA34/89 M15 theo xu hướng → giá hồi về EMA34 → quét SSL/BSL → phá vỡ M5 có FVG → vào ngay, SL ngoài điểm quét, TP 2R. Telegram chỉ gửi lệnh trong giờ 0h, 8h, 11h, 12h, 14h, 17h, 20h, 21h">🔁 EMA hồi</span>' : s.grade === 'S' ? '<span class="chip" style="background:rgba(250,204,21,.15);color:#facc15" title="BOS 15: quét thanh khoản → BOS tiếp diễn + FVG trên M15/M30, SL 10 giá, TP 15 giá">🎯 BOS 15</span>' : s.grade === 'W' ? '<span class="chip" style="background:rgba(56,189,248,.15);color:#38bdf8" title="Kịch bản Sóng 15: quét thanh khoản → MSS M5 → limit mép FVG M5, TP ≥ 15 giá">🌊 Sóng 15</span>' : s.grade === 'B' ? '<span class="chip" title="Setup quét thanh khoản ICT/SMC — chỉ ghi nhận, chưa đạt bộ lọc chuẩn">Ghi nhận</span>' : '<span class="chip buy" title="Đạt quy tắc chuẩn đã kiểm chứng">Chuẩn</span>';
   const v3Active = () => { const L = (S.v3 || []).filter(s => s.state === 'PENDING' || s.state === 'OPEN'); return L.filter(s => s.grade !== 'B').slice(-1)[0] || L.slice(-1)[0] || null; };
   // lot theo % rủi ro: Exness XAUUSDm 1 lot = 100 oz, BTCUSDm 1 lot = 1 BTC; làm tròn xuống 0.01
   const CONTRACT = { XAU: 100, BTC: 1 };
@@ -356,7 +398,7 @@
   function jRows() {
     const J = S.journal; if (!J) return [];
     const all = $('jSym').value === 'all', sk = $('jSkip').checked, old = $('jOld').checked, g = $('jGrade').value;
-    return J.trades.filter(t => (all || t.sym === S.sym) && (sk || t.state !== 'SKIP') && (old || t.ver === V3.version || (window.WAVE && t.ver === WAVE.version) || (window.EMAPB && t.ver === EMAPB.version) || (window.EMA21 && t.ver === EMA21.version)) && (g === 'all' || (g === 'T' ? !!t.tgOK : (t.grade || 'A') === g))).slice().reverse();
+    return J.trades.filter(t => (all || t.sym === S.sym) && (sk || t.state !== 'SKIP') && (old || t.ver === V3.version || (window.WAVE && t.ver === WAVE.version) || (window.EMAPB && t.ver === EMAPB.version) || (window.EMA21 && t.ver === EMA21.version) || (window.ZONES && t.ver === ZONES.version)) && (g === 'all' || (g === 'T' ? !!t.tgOK : (t.grade || 'A') === g))).slice().reverse();
   }
   function renderDemo(J) {
     const D = J && J.demo, el = $('dStats'); if (!el) return;
@@ -364,8 +406,8 @@
     const C = D.taken.filter(x => x.usd != null), pl = D.balance - D.bal0, wr = C.length ? D.wins / C.length : 0, p2 = (v) => v == null ? '—' : (+v).toFixed(2);
     el.innerHTML = `<div><b>${D.balance.toFixed(2)}$</b><small>Số dư (vốn ${D.bal0}$)</small></div><div><b class="${pl >= 0 ? 'win' : 'loss'}">${pl >= 0 ? '+' : ''}${pl.toFixed(2)}$</b><small>Lời / lỗ</small></div>
       <div><b>${C.length}</b><small>Lệnh đã đóng</small></div><div><b class="win">${D.wins}</b><small>Chạm TP</small></div><div><b class="loss">${D.losses}</b><small>Dính SL</small></div><div><b>${(wr * 100).toFixed(0)}%</b><small>Tỷ lệ thắng</small></div><div><b>${D.maxDD.toFixed(2)}$</b><small>Sụt tối đa</small></div><div><b>${ft(D.start)}</b><small>Mở tài khoản</small></div>`;
-    $('dOpen').innerHTML = D.open ? `🟢 Đang mở: ${D.open.grade === 'R' ? '🧲 Test EMA21' : '🔁 EMA hồi'} <b>${D.open.side > 0 ? 'BUY' : 'SELL'}</b> từ ${ft(D.open.ct)} · Entry ${p2(D.open.entry)} · SL ${p2(D.open.sl)} · TP ${p2(D.open.tp)}` : `Chưa có lệnh mở · cập nhật ${new Date(D.updated).toLocaleString('vi-VN')}`;
-    $('dBody').innerHTML = D.taken.length ? D.taken.slice().reverse().map(x => `<tr><td>${ft(x.ct)}</td><td>${x.grade === 'R' ? '🧲 Test EMA21' : '🔁 EMA hồi'}</td><td><span class="chip ${x.side > 0 ? 'buy' : 'sell'}">${x.side > 0 ? 'BUY' : 'SELL'}</span></td><td>${p2(x.entry)}</td><td>${p2(x.sl)}</td><td>${p2(x.tp)}</td><td>${x.state === 'WIN' ? '<span class="win">✅ TP</span>' : x.state === 'LOSS' ? '<span class="loss">❌ SL</span>' : x.state === 'TIME' ? '⏱ Hết giờ' : '🟢 Đang chạy'}${x.exitT && x.usd != null ? ' · ' + ft(x.exitT) : ''}</td><td class="${(x.usd || 0) >= 0 ? 'win' : 'loss'}">${x.usd == null ? '—' : (x.usd >= 0 ? '+' : '') + x.usd.toFixed(2)}</td><td>${x.bal == null ? '—' : x.bal.toFixed(2)}</td></tr>`).join('') : '<tr><td colspan="9" class="muted">Chưa có lệnh — tài khoản chờ tín hiệu EA đầu tiên.</td></tr>';
+    $('dOpen').innerHTML = D.open ? `🟢 Đang mở: ${D.open.grade === 'Z' ? '🧱 AI Vùng S/R' : D.open.grade === 'R' ? '🧲 Test EMA21' : '🔁 EMA hồi'} <b>${D.open.side > 0 ? 'BUY' : 'SELL'}</b> từ ${ft(D.open.ct)} · Entry ${p2(D.open.entry)} · SL ${p2(D.open.sl)} · TP ${p2(D.open.tp)}` : `Chưa có lệnh mở · cập nhật ${new Date(D.updated).toLocaleString('vi-VN')}`;
+    $('dBody').innerHTML = D.taken.length ? D.taken.slice().reverse().map(x => `<tr><td>${ft(x.ct)}</td><td>${x.grade === 'Z' ? '🧱 AI Vùng S/R' : x.grade === 'R' ? '🧲 Test EMA21' : '🔁 EMA hồi'}</td><td><span class="chip ${x.side > 0 ? 'buy' : 'sell'}">${x.side > 0 ? 'BUY' : 'SELL'}</span></td><td>${p2(x.entry)}</td><td>${p2(x.sl)}</td><td>${p2(x.tp)}</td><td>${x.state === 'WIN' ? '<span class="win">✅ TP</span>' : x.state === 'LOSS' ? '<span class="loss">❌ SL</span>' : x.state === 'TIME' ? '⏱ Hết giờ' : '🟢 Đang chạy'}${x.exitT && x.usd != null ? ' · ' + ft(x.exitT) : ''}</td><td class="${(x.usd || 0) >= 0 ? 'win' : 'loss'}">${x.usd == null ? '—' : (x.usd >= 0 ? '+' : '') + x.usd.toFixed(2)}</td><td>${x.bal == null ? '—' : x.bal.toFixed(2)}</td></tr>`).join('') : '<tr><td colspan="9" class="muted">Chưa có lệnh — tài khoản chờ tín hiệu EA đầu tiên.</td></tr>';
   }
   function renderJournal() {
     const J = S.journal;
@@ -382,7 +424,7 @@
     $('jBody').innerHTML = rows.length ? shown.map(t => `<tr><td>${ft(t.ct)}</td><td>${t.sym} · ${t.tf.toUpperCase()} ${GR(t)}${t.tgOK ? ' <span class="chip" title="Lệnh trong khung giờ thắng cao — có gửi Telegram">📲</span>' : ''}</td><td><span class="chip ${t.side > 0 ? 'buy' : 'sell'}">${t.side > 0 ? 'BUY' : 'SELL'}</span></td>
       <td class="mono">${t.sweepName} ${p(t, t.sweep)}</td><td class="mono">${p(t, t.entry)}${t.fvg ? `<br><small class="note">FVG ${t.tf.toUpperCase()} ${p(t, t.fvg.bot)}–${p(t, t.fvg.top)}</small>` : ''}</td><td class="mono">${p(t, t.sl)}</td><td class="mono">${p(t, t.tp)}</td>
       <td class="${t.r > 0 ? 'win' : t.r < 0 ? 'loss' : 'muted'}">${V3.STATE_VI[t.state] || t.state}${t.r != null ? ` (${t.r > 0 ? '+' : ''}${t.r.toFixed(2)}R)` : ''}</td>
-      <td class="note">${t.ctx ? '<span title="Bối cảnh giá lúc tín hiệu">' + esc(V3.ctxText(t.ctx)) + '</span><br>' : ''}${t.grade === 'R' ? `EMA34 ${p(t, t.ema34)} / EMA89 ${p(t, t.ema89)} M30 · test EMA21 M30 ${p(t, t.ema21)} lúc ${ft(t.touchT)} (râu ${p(t, t.touchP)}) → nến M5 bật lại → vào ngay${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'E' ? `EMA ${esc(t.emaTF || 'M15')} · hồi về EMA34 lúc ${ft(t.pullT)} (${esc(t.sweepName)}) → ${esc(t.breakType || 'MSS')} M5 + FVG${t.ob ? ' + OB' : ''} → vào ngay · EMA34 ${p(t, t.ema34)} / EMA89 ${p(t, t.ema89)}${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'W' ? `Quét ${esc(t.sweepName)} lúc ${ft(t.sweepT)} → MSS M5 sau ${t.mssMin} phút · mục tiêu ${p(t, Math.abs(t.tp - t.entry))} giá${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.ver && t.ver !== V3.version ? '[' + esc(t.ver) + '] ' : (!t.ver ? '[v3 cũ] ' : '')}${esc(t.why || '')}${t.live === false ? ' · tính lại từ lịch sử' : ''}${t.fillT ? ' · khớp ' + ft(t.fillT) : ''}${t.exitT && t.state !== 'PENDING' && t.state !== 'OPEN' ? ' · đóng ' + ft(t.exitT) : ''} · ${esc(t.src || '')}</td></tr>`).join('') + (rows.length > lim ? `<tr><td colspan="9" style="text-align:center"><button class="btn" id="jMore">Hiện thêm (${rows.length - lim} lệnh cũ hơn)</button></td></tr>` : '')
+      <td class="note">${t.ctx ? '<span title="Bối cảnh giá lúc tín hiệu">' + esc(V3.ctxText(t.ctx)) + '</span><br>' : ''}${t.grade === 'Z' ? `Vùng ${p(t, t.zone && t.zone.lo)}–${p(t, t.zone && t.zone.hi)} (${t.zone ? t.zone.score : '?'}đ) · MSS M15 qua ${p(t, t.mss)} sau ${t.mssBars} nến · 🤖 ${t.ai} điểm: ${esc((t.aiWhy || []).join(', '))}${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'R' ? `EMA34 ${p(t, t.ema34)} / EMA89 ${p(t, t.ema89)} M30 · test EMA21 M30 ${p(t, t.ema21)} lúc ${ft(t.touchT)} (râu ${p(t, t.touchP)}) → nến M5 bật lại → vào ngay${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'E' ? `EMA ${esc(t.emaTF || 'M15')} · hồi về EMA34 lúc ${ft(t.pullT)} (${esc(t.sweepName)}) → ${esc(t.breakType || 'MSS')} M5 + FVG${t.ob ? ' + OB' : ''} → vào ngay · EMA34 ${p(t, t.ema34)} / EMA89 ${p(t, t.ema89)}${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'W' ? `Quét ${esc(t.sweepName)} lúc ${ft(t.sweepT)} → MSS M5 sau ${t.mssMin} phút · mục tiêu ${p(t, Math.abs(t.tp - t.entry))} giá${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.ver && t.ver !== V3.version ? '[' + esc(t.ver) + '] ' : (!t.ver ? '[v3 cũ] ' : '')}${esc(t.why || '')}${t.live === false ? ' · tính lại từ lịch sử' : ''}${t.fillT ? ' · khớp ' + ft(t.fillT) : ''}${t.exitT && t.state !== 'PENDING' && t.state !== 'OPEN' ? ' · đóng ' + ft(t.exitT) : ''} · ${esc(t.src || '')}</td></tr>`).join('') + (rows.length > lim ? `<tr><td colspan="9" style="text-align:center"><button class="btn" id="jMore">Hiện thêm (${rows.length - lim} lệnh cũ hơn)</button></td></tr>` : '')
       : '<tr><td colspan="9" class="muted">Chưa có lệnh nào trong nhật ký.</td></tr>';
   }
   function journalCSV() {
@@ -492,6 +534,7 @@
       $('src').textContent = S.srcName; $('src').className = 'chip ' + (S.isMT5 ? 'buy' : (MT5.db ? 'warn' : ''));
       if (MT5.db && !S.isMT5) $('src').textContent += ' (MT5 chưa kết nối)'; $('upd').textContent = 'Cập nhật ' + new Date().toLocaleTimeString('vi-VN');
       $('offNote').textContent = off ? `Đã căn theo giá Exness: chênh ${off >= 0 ? '+' : ''}${fx(off)} so với nguồn dữ liệu.` : '';
+      S.zr = window.ZONES ? ZONES.analyze({ h1: cd.h1, m15: cd.m15, m5: cd.m5 }, { spread: SYMS[sym].spread }) : null; if ($('znow')) $('znow').innerHTML = zCard();
       $('proj').innerHTML = projCard(); // engine cũ (entry M5) đã bỏ khỏi trang
       $('v3now').innerHTML = v3Card(); renderJournal();
       if ($('wnow')) { if (S.sym === 'XAU' && window.WAVE) { const W = WAVE.run({ m5: cd.m5, m15: cd.m15 }, { spread: 0.35 }), act = W.filter(s => s.state === 'PENDING' || s.state === 'OPEN'), last = W.slice(-3).reverse();

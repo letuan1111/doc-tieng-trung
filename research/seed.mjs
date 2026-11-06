@@ -8,6 +8,7 @@ const V3 = createRequire(import.meta.url)(path.join(DIR, '..', 'tin-hieu', 'v3.j
 const WAVE = createRequire(import.meta.url)(path.join(DIR, '..', 'tin-hieu', 'wave.js'));
 const EMAPB = createRequire(import.meta.url)(path.join(DIR, '..', 'tin-hieu', 'emapb.js'));
 const EMA21 = createRequire(import.meta.url)(path.join(DIR, '..', 'tin-hieu', 'ema21.js'));
+const ZONES = createRequire(import.meta.url)(path.join(DIR, '..', 'tin-hieu', 'zones.js'));
 const SYMS = { XAU: { okx: 'XAU-USDT-SWAP', spread: 0.35, dp: 2 }, BTC: { okx: 'BTC-USDT-SWAP', spread: 18, dp: 1 } };
 const out = [];
 for (const [sym, S] of Object.entries(SYMS)) {
@@ -18,8 +19,8 @@ for (const [sym, S] of Object.entries(SYMS)) {
     out.push({ ...s, id: `${sym}-${s.id}`, sym, ver: V3.version, src: 'OKX ' + S.okx + ' (tính lại 12 tháng)', seen: end, lastT: end, dp: S.dp, live: false });
   }
 }
-{ const m5 = load('XAU', 'm5'), m15 = load('XAU', 'm15'), end = m5[m5.length - 1].ct;
-  for (const MOD of [WAVE, EMAPB, EMA21]) for (const s of MOD.run({ m5, m15 }, { spread: 0.35 })) { if (!MOD.FINAL[s.state] || (s.exitT || s.ct) > end - 2 * 864e5) continue; out.push({ ...s, id: 'XAU-' + s.id, sym: 'XAU', ver: MOD.version, src: 'OKX XAU-USDT-SWAP (tính lại 12 tháng)', seen: end, dp: 2, live: false }); } }
+{ const m5 = load('XAU', 'm5'), m15 = load('XAU', 'm15'), h1 = load('XAU', 'h1'), end = m5[m5.length - 1].ct;
+  for (const MOD of [WAVE, EMAPB, EMA21, ZONES]) for (const s of MOD.run({ m5, m15, h1 }, { spread: 0.35 })) { if (!MOD.FINAL[s.state] || (s.exitT || s.ct) > end - 2 * 864e5) continue; out.push({ ...s, id: 'XAU-' + s.id, sym: 'XAU', ver: MOD.version, src: 'OKX XAU-USDT-SWAP (tính lại 12 tháng)', seen: end, dp: 2, live: false }); } }
 fs.writeFileSync(path.join(DIR, '..', 'scanner', 'journal-seed.json'), JSON.stringify({ version: V3.version, made: Date.now(), trades: out }));
 const c = {}; for (const t of out) { const k = t.sym + ' ' + t.grade + ' ' + t.state; c[k] = (c[k] || 0) + 1; }
 console.log(out.length, 'lệnh', c, 'từ', new Date(Math.min(...out.map(t => t.ct))).toISOString().slice(0, 10));

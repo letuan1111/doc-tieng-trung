@@ -199,3 +199,9 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
 - Vàng 2 năm: 174 lệnh, thắng 21%, +1821$, DD 491, 4/4 quý ✓✓ · bản an toàn (ngược xu hướng M15, MSS ≤ 8, TP 1.5R): 86L, 42%, +963$, DD 196, 4/4.
 - Không chờ MSS: −187$ → MSS bắt buộc · limit 50% kém hơn vào ngay · TP vùng đối diện kém hơn TP 3R.
 - Dầu: lỗ mọi biến thể (tốt nhất −293$).
+
+## v7 · 🤖 AI Vùng S/R lên web + bot (tin-hieu/zones.js, grade Z, bản zn-2026-11-06)
+- Yếu tố đo trên 2 năm vàng (research/zones-ai.mjs): ngược M15 +1302$/DD 187 · thuận H4 +1236$ · giờ mạnh +1229$ · MSS ≤ 4 nến +1150$ (cả 4 quý); điểm vùng cao và vùng đổi vai KHÔNG giúp thêm.
+- Luật AI: +1 ngược M15 · +1 thuận H4 · +1 giờ mạnh 8–9h/19–22h · +1 MSS ≤ 4 nến · −1 giờ chết 3–4h/10–11h → vào khi ≥ 2 điểm, TP 3R: 133–134 lệnh, 23%, +1681$, DD 298, thua l.t. 5, 4/4 quý (Dukascopy).
+- Kiểm chéo nguồn OKX 12 tháng (seed): 70 lệnh, 17%, +233$ (+4.5R) → yếu hơn nhiều trên OKX (giá swap 24/7), cần theo dõi demo.
+- Web: dải vùng S/R trên chart (xanh = hỗ trợ, cam = kháng cự, đậm = mạnh), thẻ "🤖 AI vào lệnh" (đang chờ / đã quét chờ MSS / đang có lệnh, kịch bản BUY/SELL gần giá + điểm AI). Bot: Telegram + tài khoản demo nhận lệnh Z có AI ≥ 2.

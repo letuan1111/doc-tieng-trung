@@ -180,3 +180,15 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
 - Lọc giờ: chọn giờ xấu theo 6 tháng đầu KHÔNG giúp 6 tháng sau (51% vs 52%). Chỉ bỏ giờ xấu ở CẢ 2 nửa: 8h (17%/23% thắng) và 23h VN.
 - Kết quả cuối (module tin-hieu/ema21.js = logic EA, research/ema21-ea-replay.mjs): 322 lệnh (1.2/ngày), thắng 56%, SL TB 6.3 giá, +666$ (428 · 238), DD 132$, thua liên tiếp 5; spread 0.6 → 53%, +513$.
 - EA mt5/EMA21_Test_M30.mq5 (magic 21530) compile 0 lỗi; web grade R, Telegram gửi mọi lệnh R (đã bỏ 8h/23h).
+
+## v5 · Hành vi giá 2 năm vàng & dầu (Dukascopy M1, 11/2024 → 11/2026, giờ VN)
+- Giờ mạnh: vàng 20–21h (1,6 ATR, 25–32% nến H1 bùng nổ), 08h, 22h, 19h · dầu 21h, 20h, 22h, 15–16h. Giờ chết: 03–04h, 10–11h.
+- Biên độ ngày: vàng trung vị 66 / TB 84 giá (năm 2 ≈ gấp 2 năm 1) · dầu 2,11 / 3,07.
+- Sóng ≥ 3 ATR M15: ~5/ngày, 82–83% bắt đầu bằng quét đỉnh/đáy; sóng sau đảo > 100% ở 48–50%; hồi nông < 50% chỉ 12–15%.
+- Ngẫu nhiên (39–55%): hướng phá biên Á đầu tiên, quét biên Á phiên Âu (giả 50%), PDH/PDL, BOS 40%, CHoCH 39%, phiên Mỹ ngược phiên Âu 51%.
+- Phản ứng thật: EMA89 M30 bật 59–62%, EMA34/89 M15 ~60%, mép FVG M15 bật 56–58% (FVG chạm 88%, lấp hết 75%). Quét swing M5 chỉ đảo 28–29% (giờ mạnh 37–38%).
+- Test sau spread (research/structures.mjs, models2y.mjs, 4 quý 6 tháng):
+  - Vàng · EMA hồi thuận M30 (luật EA): +1016$, 35%, DD 561, 3/4 quý ✓
+  - Vàng · FVG M15 giờ mạnh (8,19–22h) thuận M15, limit mép gần, SL mép xa + 0.3 ATR, TP 1.5R: +940$, 41%, DD 528, 3/4 ✓
+  - Vàng · Test EMA21 M30 (EA mới): −110$, 48% trên Dukascopy (OKX 1 năm +724) → lợi thế mỏng, phụ thuộc nguồn giá; chỉ nên chạy chỉ báo/demo.
+  - Dầu: không cấu trúc M5 nào lời bền; spread 0,03 ≈ 15% SL 0,2.

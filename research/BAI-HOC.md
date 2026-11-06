@@ -192,3 +192,10 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
   - Vàng · FVG M15 giờ mạnh (8,19–22h) thuận M15, limit mép gần, SL mép xa + 0.3 ATR, TP 1.5R: +940$, 41%, DD 528, 3/4 ✓
   - Vàng · Test EMA21 M30 (EA mới): −110$, 48% trên Dukascopy (OKX 1 năm +724) → lợi thế mỏng, phụ thuộc nguồn giá; chỉ nên chạy chỉ báo/demo.
   - Dầu: không cấu trúc M5 nào lời bền; spread 0,03 ≈ 15% SL 0,2.
+
+## v6 · Chiến lược vùng H4/H1 + quét M15 + MSS (research/zones.mjs, zones-pick.mjs)
+- Vùng: pivot H4 (L3, 20 ngày) + H1 (L4, 10 ngày), gộp ≤ 0.35 ATR H4; điểm = H4 2 · H1 1 · ×(1+bật/3) · +1 có cả H4&H1 · +1 đổi vai; giao dịch vùng ≥ 4 điểm.
+- Quét: nến M15 trước trong vùng, râu xuyên mép (≤ 0.6 ATR H4), đóng lại trong vùng → chờ M15 đóng qua swing M15 gần nhất (MSS) ≤ 16 nến → vào khi đóng; SL ngoài râu + 0.2 ATR M15; TP 3R; 1 lệnh, 24h.
+- Vàng 2 năm: 174 lệnh, thắng 21%, +1821$, DD 491, 4/4 quý ✓✓ · bản an toàn (ngược xu hướng M15, MSS ≤ 8, TP 1.5R): 86L, 42%, +963$, DD 196, 4/4.
+- Không chờ MSS: −187$ → MSS bắt buộc · limit 50% kém hơn vào ngay · TP vùng đối diện kém hơn TP 3R.
+- Dầu: lỗ mọi biến thể (tốt nhất −293$).

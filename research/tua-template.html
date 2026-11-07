@@ -34,6 +34,10 @@ button.pri{background:var(--ac);color:#111;border-color:var(--ac);font-weight:60
  <div class="legend"><span><i style="background:#93c5fd"></i>Sóng ≥ 15 giá</span><span>▲▼ vào lệnh · ● đóng lệnh</span><span>H/L = swing M15 · BOS/CHoCH = phá cấu trúc M15</span><span>💧 = quét thanh khoản (BSL/SSL, PDH/PDL)</span><span><i style="background:#fbbf24;height:1px"></i>PDH/PDL</span></div>
 </div>
 <div class="card">
+ <div class="stats" style="grid-template-columns:repeat(4,1fr)">
+  <div><b id="aBal">500$</b><small>Số dư</small></div><div><b id="aEq">500$</b><small>Equity (gồm lệnh mở)</small></div><div><b id="aPnl">0$</b><small>Lãi/lỗ</small></div><div><b id="aDD">0$</b><small>Sụt tối đa</small></div>
+ </div>
+ <div class="mut" style="margin:-2px 0 8px">Vốn ban đầu <input id="cap" type="number" value="500" min="50" step="50" style="width:80px;padding:3px 6px"> $ · lot 0.02 mỗi lệnh (1 giá = 2$)</div>
  <div class="stats">
   <div><b id="sW">0</b><small>Sóng ≥ 15 giá</small></div><div><b id="sWc">0</b><small>Sóng EA bắt được</small></div><div><b id="sWa">–</b><small>Sóng TB (giá)</small></div>
   <div><b id="sE">0</b><small>🔁 EMA hồi (lệnh)</small></div><div><b id="sEw">–</b><small>EMA hồi thắng</small></div><div><b id="sEu">0$</b><small>EMA hồi lãi/lỗ</small></div>
@@ -71,12 +75,12 @@ D.trades.forEach((t, i) => { EV.push({ s: t.t / 1000, k: 'open', t, i }); EV.pus
 D.waves.forEach((w, i) => EV.push({ s: w.conf / 1000, k: 'wave', w, i }));
 D.swings.forEach(w => EV.push({ s: w[3], k: 'swing', w })); D.smc.forEach(e => EV.push({ s: e[0], k: 'smc', e })); D.sweeps.forEach(e => EV.push({ s: e[0], k: 'liq', e }));
 EV.sort((a, b) => a.s - b.s || (a.k === 'close' ? -1 : 1));
-let TFS = 300, cur = null; try { TFS = +(localStorage.getItem('tua_tf') || 300); } catch (_) {}
+let CAP = 500, bal = 500, peak = 500, mdd = 0, TFS = 300, cur = null; try { TFS = +(localStorage.getItem('tua_tf') || 300); } catch (_) {}
 let pdj = 0, idx = 0, ev = 0, timer = null, lines = [], marks = [], zpts = [], st = { W: 0, Wc: 0, Ws: 0, E: [], R: [] };
 const start = B.findIndex(b => b.time - VN >= D.from / 1000);
 function reset(to) {
   cs.setData([]); for (const k in ES) { ES[k].s.setData([]); ES[k].j = 0; } zz.setData([]); pdS.setData([]); pdS2.setData([]); pdS._last = 0; pdj = 0; cur = null; smcLines.splice(0).forEach(l => ch.removeSeries(l)); lines.forEach(p => cs.removePriceLine(p)); lines = [];
-  idx = 0; ev = 0; marks = []; zpts = []; st = { W: 0, Wc: 0, Ws: 0, E: [], R: [] }; $('log').innerHTML = ''; openT = {};
+  idx = 0; ev = 0; CAP = +$('cap').value || 500; bal = CAP; peak = CAP; mdd = 0; marks = []; zpts = []; st = { W: 0, Wc: 0, Ws: 0, E: [], R: [] }; $('log').innerHTML = ''; openT = {};
   const n = to != null ? to : start; for (let k = 0; k < n; k++) push(k, true); idx = n; applyShow(); render(); ch.timeScale().scrollToRealTime();
 }
 let openT = {};
@@ -107,8 +111,9 @@ function handle(e, quiet) {
   } else { const t = e.t, nm = t.ea === 'EMA_Hoi_ICT' ? '🔁 EMA hồi' : '🧲 EMA21'; (t.ea === 'EMA_Hoi_ICT' ? st.E : st.R).push(t);
     (openT[e.i] || []).forEach(p => cs.removePriceLine(p)); delete openT[e.i];
     marks.push({ L: 'trade', time: snapT(t.exitT / 1000 - 1), position: 'inBar', color: t.usd >= 0 ? '#22c55e' : '#f43f5e', shape: 'circle', size: 0.6 });
+    bal += t.usd; peak = Math.max(peak, bal); mdd = Math.max(mdd, peak - bal);
     const r = t.state === 'WIN' ? '<span class="win">✅ Chạm TP</span>' : t.state === 'LOSS' ? '<span class="loss">❌ Dính SL</span>' : '⏱ Hết giờ';
-    log(`<span class="tag">${nm}</span>${r} ${fmt(t.exitT / 1000)} · đóng ${t.exitP} · <b class="${t.usd >= 0 ? 'win' : 'loss'}">${t.usd >= 0 ? '+' : ''}${t.usd.toFixed(2)}$</b>`, '', quiet);
+    log(`<span class="tag">${nm}</span>${r} ${fmt(t.exitT / 1000)} · đóng ${t.exitP} · <b class="${t.usd >= 0 ? 'win' : 'loss'}">${t.usd >= 0 ? '+' : ''}${t.usd.toFixed(2)}$</b> · số dư <b>${bal.toFixed(2)}$</b>`, '', quiet);
   }
 }
 function dedupe(a) { const o = []; for (const p of a) { if (o.length && o[o.length - 1].time >= p.time) { if (o[o.length - 1].time === p.time) o[o.length - 1] = p; continue; } o.push(p); } return o; }
@@ -118,7 +123,11 @@ function render() {
   const pc = (G) => G.length ? Math.round(100 * G.filter(t => t.state === 'WIN').length / G.length) + '%' : '–', usd = (G) => { const v = G.reduce((a, t) => a + t.usd, 0); return (v >= 0 ? '+' : '') + v.toFixed(0) + '$'; };
   $('sW').textContent = st.W; $('sWc').textContent = st.Wc; $('sWa').textContent = st.W ? (st.Ws / st.W).toFixed(1) : '–';
   $('sE').textContent = st.E.length; $('sEw').textContent = pc(st.E); $('sEu').textContent = usd(st.E); $('sR').textContent = st.R.length; $('sRw').textContent = pc(st.R); $('sRu').textContent = usd(st.R);
-  const o = Object.keys(openT).map(i => D.trades[i]); $('open').innerHTML = o.length ? o.map(t => `🟢 Đang mở: <b>${t.ea}</b> ${t.side > 0 ? 'BUY' : 'SELL'} ${t.entry} · SL ${t.sl} · TP ${t.tp}`).join('<br>') : '<span class="mut">Không có lệnh đang mở</span>';
+  const px = cur ? cur.close : 0, o = Object.keys(openT).map(i => D.trades[i]);
+  const fl = o.reduce((a, t) => a + t.side * (px + (t.side < 0 ? 0.35 : 0) - t.entry) * 2, 0), eq = bal + fl, pnl = bal - CAP;
+  $('aBal').textContent = bal.toFixed(2) + '$'; $('aEq').textContent = eq.toFixed(2) + '$'; $('aEq').className = fl >= 0 ? '' : 'loss';
+  $('aPnl').textContent = (pnl >= 0 ? '+' : '') + pnl.toFixed(2) + '$ (' + (pnl >= 0 ? '+' : '') + (100 * pnl / CAP).toFixed(1) + '%)'; $('aPnl').className = pnl >= 0 ? 'win' : 'loss';
+  $('aDD').textContent = mdd.toFixed(2) + '$ (' + (100 * mdd / CAP).toFixed(1) + '%)'; $('open').innerHTML = o.length ? o.map(t => `🟢 Đang mở: <b>${t.ea}</b> ${t.side > 0 ? 'BUY' : 'SELL'} ${t.entry} · SL ${t.sl} · TP ${t.tp} · lãi/lỗ tạm <b class="${t.side * (px + (t.side < 0 ? 0.35 : 0) - t.entry) >= 0 ? 'win' : 'loss'}">${(t.side * (px + (t.side < 0 ? 0.35 : 0) - t.entry) * 2).toFixed(2)}$</b>`).join('<br>') : '<span class="mut">Không có lệnh đang mở</span>';
 }
 function tick(n) { for (let k = 0; k < n && idx < B.length; k++) push(idx++, false); setMk(); render(); if (idx >= B.length) stop(); }
 function stop() { clearInterval(timer); timer = null; $('play').textContent = '▶ Chạy'; }
@@ -127,6 +136,7 @@ $('speed').onchange = () => { if (timer) { stop(); $('play').click(); } };
 $('step').onclick = () => tick(TFS / 300); $('step12').onclick = () => tick(12);
 $('tf').value = String(TFS); $('tf').onchange = () => { const run = !!timer; stop(); TFS = +$('tf').value; try { localStorage.setItem('tua_tf', TFS); } catch (_) {} reset(idx); if (run) $('play').click(); };
 $('reset').onclick = () => { stop(); reset(); };
+$('cap').onchange = () => { const run = !!timer; stop(); reset(idx); if (run) $('play').click(); };
 $('jump').min = new Date(D.from + 7 * 36e5).toISOString().slice(0, 10); $('jump').max = new Date(D.to + 7 * 36e5).toISOString().slice(0, 10);
 $('jump').onchange = () => { stop(); const s = Date.parse($('jump').value + 'T00:00:00Z') / 1000; const k = B.findIndex(b => b.time >= s); reset(k < 0 ? B.length : Math.max(start, k)); };
 $('onlyW').onchange = () => { const f = $('onlyW').value; for (const d of $('log').children) d.style.display = f && d.dataset.k !== f ? 'none' : ''; };

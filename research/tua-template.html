@@ -30,6 +30,7 @@ button.pri{background:var(--ac);color:#111;border-color:var(--ac);font-weight:60
  </div>
  <div id="chart"></div>
  <div id="open"></div>
+ <details style="margin-top:8px" open><summary style="cursor:pointer;font-weight:600">📊 Phân tích 30 ngày: vì sao dính SL, vì sao bỏ lỡ sóng 15 giá</summary><div id="sum" style="font-size:13px"></div></details>
  <div class="legend" id="tog"></div>
  <div class="legend"><span><i style="background:#93c5fd"></i>Sóng ≥ 15 giá</span><span>▲▼ vào lệnh · ● đóng lệnh</span><span>H/L = swing M15 · BOS/CHoCH = phá cấu trúc M15</span><span>💧 = quét thanh khoản (BSL/SSL, PDH/PDL)</span><span><i style="background:#fbbf24;height:1px"></i>PDH/PDL</span></div>
 </div>
@@ -103,7 +104,7 @@ function handle(e, quiet) {
   if (e.k === 'wave') { const w = e.w; st.W++; st.Ws += w.size; if (w.caught.length) st.Wc++;
     if (!zpts.length || zpts[zpts.length - 1].time !== snapT(w.t0 / 1000)) zpts.push({ time: snapT(w.t0 / 1000), value: w.p0 }); zpts.push({ time: snapT(w.t1 / 1000), value: w.p1 }); zz.setData(dedupe(zpts));
     marks.push({ L: 'wave', time: snapT(w.t1 / 1000), position: w.d > 0 ? 'aboveBar' : 'belowBar', color: '#93c5fd', shape: 'square', size: 0.5, text: (w.d > 0 ? '+' : '−') + w.size });
-    log(`<span class="w">${w.d > 0 ? '📈 Sóng TĂNG' : '📉 Sóng GIẢM'} <b>${w.size} giá</b></span> · ${fmt(w.t0 / 1000)} → ${fmt(w.t1 / 1000)} (${w.min} phút) · ${w.p0.toFixed(1)} → ${w.p1.toFixed(1)}<br><span class="mut">${w.caught.length ? '✅ EA có lệnh cùng chiều: ' + w.caught.join(', ') : '— EA không có lệnh trong sóng này'}</span>`, 'w', quiet);
+    log(`<span class="w">${w.d > 0 ? '📈 Sóng TĂNG' : '📉 Sóng GIẢM'} <b>${w.size} giá</b></span> · ${fmt(w.t0 / 1000)} → ${fmt(w.t1 / 1000)} (${w.min} phút) · ${w.p0.toFixed(1)} → ${w.p1.toFixed(1)}<br><span class="mut">${w.ctx ? `Khởi đầu: <b>${w.ctx.start}</b> · trước đó ${w.ctx.prior} · ${w.ctx.trend} · ${w.ctx.sess}${w.ctx.news ? ' · giờ tin Mỹ' : ''} · tốc độ ${w.ctx.speed} giá/giờ` : ''}</span><br>${w.caught.length ? '<span class="win">✅ EA có lệnh cùng chiều: ' + w.caught.join(', ') + '</span>' : '<span class="loss">✖ Bot không vào: ' + (w.why || '') + '</span>'}`, 'w', quiet);
   } else if (e.k === 'open') { const t = e.t, nm = t.ea === 'EMA_Hoi_ICT' ? '🔁 EMA hồi' : '🧲 EMA21';
     marks.push({ time: snapT(t.t / 1000), position: t.side > 0 ? 'belowBar' : 'aboveBar', color: t.ea === 'EMA_Hoi_ICT' ? '#f472b6' : '#a78bfa', shape: t.side > 0 ? 'arrowUp' : 'arrowDown', text: nm.slice(3) + ' ' + (t.side > 0 ? 'BUY' : 'SELL') });
     marks[marks.length - 1].L = 'trade'; openT[e.i] = [cs.createPriceLine({ price: t.entry, color: '#e5e7eb', lineWidth: 1, lineStyle: 2, title: 'Entry' }), cs.createPriceLine({ price: t.sl, color: '#f43f5e', lineWidth: 1, lineStyle: 2, title: 'SL' }), cs.createPriceLine({ price: t.tp, color: '#22c55e', lineWidth: 1, lineStyle: 2, title: 'TP' })];
@@ -113,7 +114,7 @@ function handle(e, quiet) {
     marks.push({ L: 'trade', time: snapT(t.exitT / 1000 - 1), position: 'inBar', color: t.usd >= 0 ? '#22c55e' : '#f43f5e', shape: 'circle', size: 0.6 });
     bal += t.usd; peak = Math.max(peak, bal); mdd = Math.max(mdd, peak - bal);
     const r = t.state === 'WIN' ? '<span class="win">✅ Chạm TP</span>' : t.state === 'LOSS' ? '<span class="loss">❌ Dính SL</span>' : '⏱ Hết giờ';
-    log(`<span class="tag">${nm}</span>${r} ${fmt(t.exitT / 1000)} · đóng ${t.exitP} · <b class="${t.usd >= 0 ? 'win' : 'loss'}">${t.usd >= 0 ? '+' : ''}${t.usd.toFixed(2)}$</b> · số dư <b>${bal.toFixed(2)}$</b>`, '', quiet);
+    log(`<span class="tag">${nm}</span>${r} ${fmt(t.exitT / 1000)} · đóng ${t.exitP} · <b class="${t.usd >= 0 ? 'win' : 'loss'}">${t.usd >= 0 ? '+' : ''}${t.usd.toFixed(2)}$</b> · số dư <b>${bal.toFixed(2)}$</b>${t.why2 ? '<br><span class="mut">🔍 Vì sao SL: ' + t.why2 + '</span>' : ''}`, '', quiet);
   }
 }
 function dedupe(a) { const o = []; for (const p of a) { if (o.length && o[o.length - 1].time >= p.time) { if (o[o.length - 1].time === p.time) o[o.length - 1] = p; continue; } o.push(p); } return o; }
@@ -140,5 +141,6 @@ $('cap').onchange = () => { const run = !!timer; stop(); reset(idx); if (run) $(
 $('jump').min = new Date(D.from + 7 * 36e5).toISOString().slice(0, 10); $('jump').max = new Date(D.to + 7 * 36e5).toISOString().slice(0, 10);
 $('jump').onchange = () => { stop(); const s = Date.parse($('jump').value + 'T00:00:00Z') / 1000; const k = B.findIndex(b => b.time >= s); reset(k < 0 ? B.length : Math.max(start, k)); };
 $('onlyW').onchange = () => { const f = $('onlyW').value; for (const d of $('log').children) d.style.display = f && d.dataset.k !== f ? 'none' : ''; };
+$('sum').innerHTML = D.summary || '';
 reset();
 </script></body></html>

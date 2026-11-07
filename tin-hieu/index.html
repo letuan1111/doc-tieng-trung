@@ -95,7 +95,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
       <div class="toggles" style="margin:0 0 8px">
         <label><select id="jSym"><option value="all">Tất cả cặp</option><option value="cur">Cặp đang xem</option></select></label>
         <label><input type="checkbox" id="jSkip"> Hiện lệnh bị bỏ qua (có entry đẹp hơn / đang có lệnh)</label>
-        <label><select id="jGrade"><option value="all">Mọi lệnh quét thanh khoản</option><option value="T">📲 Chỉ lệnh gửi Telegram</option><option value="A">Chỉ lệnh Chuẩn</option><option value="B">Chỉ lệnh Ghi nhận</option><option value="W">Chỉ Sóng 15 (vàng M5)</option><option value="S">Chỉ BOS 15 (vàng M15/M30, SL 10 · TP 15)</option><option value="E">Chỉ EMA hồi (vàng: EMA M30 + M5)</option><option value="R">Chỉ Test EMA21 M30 (vàng)</option><option value="Z">Chỉ 🧱 Vùng S/R H4/H1 + quét M15 (AI)</option><option value="K">Chỉ 🔂 BOS M5 + retest (TP 1.2R · gửi Telegram)</option><option value="C">Chỉ 📐 Công thức (vàng + BTC · M5/M15/M30)</option></select></label>
+        <label><select id="jGrade"><option value="all">Mọi lệnh quét thanh khoản</option><option value="T">📲 Chỉ lệnh gửi Telegram</option><option value="A">Chỉ lệnh Chuẩn</option><option value="B">Chỉ lệnh Ghi nhận</option><option value="W">Chỉ Sóng 15 (vàng M5)</option><option value="S">Chỉ BOS 15 (vàng M15/M30, SL 10 · TP 15)</option><option value="E">Chỉ EMA hồi (vàng: EMA M30 + M5)</option><option value="R">Chỉ Test EMA21 M30 (vàng)</option><option value="Q">Chỉ 💧 Quét biên tích lũy (vàng M5, thử nghiệm)</option><option value="Z">Chỉ 🧱 Vùng S/R H4/H1 + quét M15 (AI)</option><option value="K">Chỉ 🔂 BOS M5 + retest (TP 1.2R · gửi Telegram)</option><option value="C">Chỉ 📐 Công thức (vàng + BTC · M5/M15/M30)</option></select></label>
         <label><input type="checkbox" id="jOld"> Hiện lệnh của bản cũ</label>
         <button class="btn" id="jCsv">⬇ Tải CSV</button>
         <span class="note" id="jUpd"></span>
@@ -166,8 +166,9 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 <script src="emapb.js?v=4"></script>
 <script src="ema21.js?v=1"></script>
 <script src="zones.js?v=1"></script>
+<script src="quetbien.js?v=1"></script>
 <script src="congthuc.js?v=1"></script>
 <script src="bosrt.js?v=1"></script>
-<script src="app.js?v=36"></script>
+<script src="app.js?v=37"></script>
 </body>
 </html>

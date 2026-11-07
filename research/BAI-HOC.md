@@ -205,3 +205,12 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
 - Luật AI: +1 ngược M15 · +1 thuận H4 · +1 giờ mạnh 8–9h/19–22h · +1 MSS ≤ 4 nến · −1 giờ chết 3–4h/10–11h → vào khi ≥ 2 điểm, TP 3R: 133–134 lệnh, 23%, +1681$, DD 298, thua l.t. 5, 4/4 quý (Dukascopy).
 - Kiểm chéo nguồn OKX 12 tháng (seed): 70 lệnh, 17%, +233$ (+4.5R) → yếu hơn nhiều trên OKX (giá swap 24/7), cần theo dõi demo.
 - Web: dải vùng S/R trên chart (xanh = hỗ trợ, cam = kháng cự, đậm = mạnh), thẻ "🤖 AI vào lệnh" (đang chờ / đã quét chờ MSS / đang có lệnh, kịch bản BUY/SELL gần giá + điểm AI). Bot: Telegram + tài khoản demo nhận lệnh Z có AI ≥ 2.
+
+## v8 · BOS M5 theo EMA34/89 M30 → retest mức phá → SL swing · TP swing / 1.2R (research/bosretest.mjs, bosretest-hours.mjs)
+- Luật: EMA34 > EMA89 M30 và M30 đóng trên EMA34 (BUY; ngược lại SELL) → M5 đóng phá đỉnh swing 3 nến gần nhất → limit tại mức phá, chờ ≤ 6h → SL đáy swing của chân phá · TP đỉnh swing gần nhất có RR ≥ 1.2 (hoặc TP cố định 1.2R) · giữ 24h · 1 lệnh/lúc.
+- Vàng Dukascopy 1 năm: TP swing 981L, 3.5/ngày, 41% (hoà vốn 40%), +569$, DD 956 · TP 1.2R 1152L, 4.1/ngày, 46% (hoà vốn 45%), +2024$, DD 763, 4/4 quý — lợi thế mỏng (+0.02R/lệnh).
+- BTC OKX 1 năm (spread 20): TP swing 1375L, 40% (hoà vốn 41%), +293$ · TP 1.2R 1532L, 5.7/ngày, 44% (hoà vốn 45%), +309$.
+- Vàng nguồn OKX (24/7): TP 1.2R 40% < hoà vốn 45% → lỗ theo R; giờ đêm 1–9h rất xấu.
+- Giờ vàng thắng: 23h 63%, 14h 56%, 7h, 9h, 22h, 21h, 10h (51–53%) · giờ SL: 6h, 4h, 17h (33–34%), 1–2h 39%, 8h, 15h 43%. BTC thắng 14h 58%, 18h 55%, 23h 54% · SL 3h 27%, 5h 33%, 6h, 13h 36%.
+- Chọn giờ ở nửa đầu năm rồi kiểm nửa sau: vàng TP 1.2R xấu hơn (−229$ so với +597$ mọi giờ) → không lọc giờ tốt, chỉ bỏ giờ xấu cả 2 nửa (vàng 1, 2, 11, 15, 17h).
+- Chờ nến M5 xác nhận khi test không tốt hơn limit; chờ test ≤ 1h tệ hơn ≤ 6h; TP ở đỉnh swing cũ xa (thanh khoản) hiếm và lỗ.

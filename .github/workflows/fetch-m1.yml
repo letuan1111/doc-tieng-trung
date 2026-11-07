@@ -1,0 +1,47 @@
+name: Tải nến M1 vàng Dukascopy 1 năm (nhánh tạm)
+on:
+  push:
+    branches: [m1-fetch]
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tải M1
+        run: |
+          cat > /tmp/m1.py <<'PY'
+          import lzma, struct, json, time, urllib.request, datetime as dt
+          from concurrent.futures import ThreadPoolExecutor
+          START = dt.date(2025, 10, 25); END = dt.date.today()
+          def get(u):
+              for k in range(6):
+                  try:
+                      with urllib.request.urlopen(urllib.request.Request(u, headers={'User-Agent': 'Mozilla/5.0'}), timeout=60) as r: return r.read()
+                  except urllib.error.HTTPError as e:
+                      if e.code == 404: return b''
+                  except Exception: pass
+                  time.sleep(2 * (k + 1))
+              return None
+          def day(d):
+              if d.weekday() == 5: return []
+              raw = get(f'https://datafeed.dukascopy.com/datafeed/XAUUSD/{d.year}/{d.month - 1:02d}/{d.day:02d}/BID_candles_min_1.bi5')
+              if not raw: return []
+              data = lzma.decompress(raw, format=lzma.FORMAT_ALONE); base = int(dt.datetime(d.year, d.month, d.day, tzinfo=dt.timezone.utc).timestamp() * 1000); out = []
+              for i in range(0, len(data) - 23, 24):
+                  s, o, c, l, h, v = struct.unpack('>iiiiif', data[i:i + 24])
+                  if v > 0: out.append([base + s * 1000, o / 1000, h / 1000, l / 1000, c / 1000])
+              return out
+          days = [START + dt.timedelta(n) for n in range((END - START).days + 1)]
+          with ThreadPoolExecutor(8) as ex: res = list(ex.map(day, days))
+          m1 = sorted([x for r in res for x in r]); print('M1', len(m1), m1[0][0], m1[-1][0])
+          json.dump(m1, open('/tmp/XAU1Y_m1.json', 'w'), separators=(',', ':'))
+          PY
+          python3 /tmp/m1.py
+      - name: Lưu vào nhánh m1-data
+        run: |
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan m1-data && git rm -rqf . && cp /tmp/XAU1Y_m1.json . && gzip -9 XAU1Y_m1.json
+          git add XAU1Y_m1.json.gz && git commit -qm "Dukascopy XAUUSD M1 1 năm" && git push -f origin m1-data

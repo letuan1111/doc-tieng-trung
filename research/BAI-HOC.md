@@ -214,3 +214,11 @@ So với bản trước, XAU+BTC tăng từ +19.3R lên +29.3R, và 6 tháng tr�
 - Giờ vàng thắng: 23h 63%, 14h 56%, 7h, 9h, 22h, 21h, 10h (51–53%) · giờ SL: 6h, 4h, 17h (33–34%), 1–2h 39%, 8h, 15h 43%. BTC thắng 14h 58%, 18h 55%, 23h 54% · SL 3h 27%, 5h 33%, 6h, 13h 36%.
 - Chọn giờ ở nửa đầu năm rồi kiểm nửa sau: vàng TP 1.2R xấu hơn (−229$ so với +597$ mọi giờ) → không lọc giờ tốt, chỉ bỏ giờ xấu cả 2 nửa (vàng 1, 2, 11, 15, 17h).
 - Chờ nến M5 xác nhận khi test không tốt hơn limit; chờ test ≤ 1h tệ hơn ≤ 6h; TP ở đỉnh swing cũ xa (thanh khoản) hiếm và lỗ.
+
+## v9 · 🔂 BOS M5 + retest lên web + bot (tin-hieu/bosrt.js, grade K, bản bos5-2026-11-07b) — Telegram CHỈ gửi cách này
+- Giờ cấm (giờ khớp, VN): vàng 1, 2, 4, 6, 8, 11, 15, 17h · BTC 2, 3, 5, 6, 7, 12, 13, 17, 19h; giá test trong giờ cấm → bỏ lệnh và đứng ngoài tới khi lệnh ảo đóng (tốt hơn vào tiếp tín hiệu sau trên cả 3 bộ dữ liệu).
+- Lọc theo giờ khớp tốt hơn lọc theo giờ BOS/đặt limit.
+- Vàng: bỏ nến cuối tuần (OKX 24/7 tạo BOS giả): OKX 12 tháng −57R → −9R, thắng 45%.
+- Kiểm thật năm trước (11/2024–10/2025, Dukascopy, giờ cấm chọn trên năm sau): 748 lệnh, thắng 44%, −20R (không cấm giờ −52R) → cấm giờ có ích nhưng chiến lược vẫn lỗ năm đó; năm gần +62R, 49%. Lợi thế phụ thuộc giai đoạn.
+- BTC OKX 12 tháng: 984 lệnh, 3.7/ngày, thắng 48%, +58R.
+- Telegram: chỉ lệnh K (LIMIT → khớp → TP/SL/huỷ) + tổng kết 22h; bot cũ scan.mjs tắt tự gửi (SCAN_ALERTS=1 để bật lại); demo không còn gửi tin.

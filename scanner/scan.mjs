@@ -286,7 +286,8 @@ async function main() {
   }
   await handleCommands(state, log, status);
   tgInfo.connected = chats(state).length > 0;
-  if (alerts.length) {
+  // Letuan 07/11/2026: Telegram CHỈ gửi cách 🔂 BOS M5 + retest (scanner/journal.mjs) → bot cũ chỉ ghi signals.json, vẫn trả lời lệnh /stats, /open…
+  if (process.env.SCAN_ALERTS === '1' && alerts.length) {
     if (!chats(state).length) console.log('Chưa có người nhận Telegram (gửi /start cho bot). Bỏ qua', alerts.length, 'tin.');
     for (const m of alerts.slice(0, 15)) await broadcast(state, m);
     if (alerts.length > 15) await broadcast(state, `… và ${alerts.length - 15} thông báo khác. Xem đầy đủ: ${WEB}`);

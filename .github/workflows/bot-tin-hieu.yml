@@ -14,6 +14,7 @@ on:
       - "tin-hieu/emapb.js"
       - "tin-hieu/ema21.js"
       - "tin-hieu/zones.js"
+      - "tin-hieu/bosrt.js"
       - ".github/workflows/bot-tin-hieu.yml"
 
 permissions:

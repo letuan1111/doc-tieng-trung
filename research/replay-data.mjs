@@ -52,6 +52,6 @@ const SW = swings.filter(w => w.conf >= keep).map(w => [w.k, w.t / 1000, +w.p.to
 const SMC = smc.filter(e => e.t >= keep).map(e => [e.t / 1000, e.d, e.type, +e.p.toFixed(2), e.from / 1000]);
 const SWP = sweeps.filter(e => e.t >= keep).map(e => [e.t / 1000, e.d, e.name, +e.p.toFixed(2), +e.ext.toFixed(2)]);
 const out = { made: new Date().toISOString(), src: 'Dukascopy XAUUSD (giá bid), spread mô phỏng 0.35, lot 0.02', from: ST, to: END, bars, ema: emaLines, swings: SW, smc: SMC, sweeps: SWP, pd: PD, trades, waves: W };
-fs.writeFileSync('/home/claude/replay/data.json', JSON.stringify(out));
+fs.writeFileSync(process.argv[3] || '/home/claude/replay/data.json', JSON.stringify(out));
 const s = (ea) => { const G = trades.filter(t => t.ea === ea); return `${ea}: ${G.length} lệnh, ${G.filter(t => t.state === 'WIN').length} TP, ${G.reduce((a, t) => a + t.usd, 0).toFixed(0)}$`; };
 console.log(new Date(ST).toISOString(), '→', new Date(END).toISOString(), bars.length, 'nến M5 ·', s('EMA_Hoi_ICT'), '·', s('EMA21_Test_M30'), '·', W.length, 'sóng ≥15 giá, EA bắt được', W.filter(w => w.caught.length).length, '·', SMC.length, 'BOS/CHoCH ·', SWP.length, 'cú quét');

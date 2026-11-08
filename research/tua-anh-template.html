@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tua chart vàng — chiến lược trong ảnh (ICT + SMC + EMA34/89 M5)</title>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--line:#262b36;--tx:#e6e8ee;--mut:#8b93a7;--up:#22c55e;--dn:#f43f5e;--ac:#f59e0b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:12px 16px;border-bottom:1px solid var(--line)}h1{font-size:17px;margin:0 0 2px}.mut{color:var(--mut);font-size:12.5px}
+.wrap{display:grid;grid-template-columns:1fr 360px;gap:12px;padding:12px 16px}@media(max-width:980px){.wrap{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px}
+#chart{height:520px}.ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+button,select,input{background:#20242e;color:var(--tx);border:1px solid var(--line);border-radius:7px;padding:6px 10px;font:inherit;cursor:pointer}
+button.pri{background:var(--ac);color:#111;border-color:var(--ac);font-weight:600}
+#now{font-weight:600;margin-left:auto}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}
+.stats div{background:#20242e;border-radius:8px;padding:6px 8px}.stats b{display:block;font-size:16px}.stats small{color:var(--mut);font-size:11.5px}
+#log{height:560px;overflow:auto;font-size:13px}#log div{padding:5px 2px;border-bottom:1px solid var(--line)}
+.w{color:#93c5fd}.win{color:var(--up)}.loss{color:var(--dn)}.tag{display:inline-block;font-size:11px;padding:0 6px;border-radius:9px;background:#2a3040;margin-right:4px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin-top:6px}.legend label{cursor:pointer}.legend input{padding:0;margin:0 3px 0 0;vertical-align:middle}.legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:4px}
+#open{font-size:13px;margin-top:6px;min-height:20px}
+</style></head><body>
+<header><h1>Tua chart vàng 5 tháng — chiến lược trong ảnh: ICT + SMC + EMA34/89 (M5) — 2 EA của bạn và mọi đoạn giá chạy ≥ 15 giá</h1>
+<div class="mut" id="sub"></div></header>
+<div class="wrap">
+<div class="card">
+ <div class="ctl">
+  <label class="mut">Khung nến <select id="tf"><option value="300">M5</option><option value="900">M15</option></select></label><button class="pri" id="play">▶ Chạy</button><button id="step">+1 nến</button><button id="step12">+1 giờ</button>
+  <label class="mut">Tốc độ <select id="speed"><option value="400">chậm</option><option value="120" selected>vừa</option><option value="30">nhanh</option><option value="5">rất nhanh</option></select></label>
+  <label class="mut">Tới ngày <input type="date" id="jump"></label><button id="reset">↺ Từ đầu</button>
+  <span id="now"></span>
+ </div>
+ <div id="chart"></div>
+ <div id="open"></div>
+ <details style="margin-top:8px" open><summary style="cursor:pointer;font-weight:600">📊 Vì sao ít lệnh, vì sao dính SL (5 tháng)</summary><div id="sum" style="font-size:13px"></div></details>
+ <div class="legend" id="tog"></div>
+ <div class="legend"><span><i style="background:#93c5fd"></i>Sóng ≥ 15 giá</span><span>▲▼ vào lệnh · ● đóng lệnh</span><span>H/L = swing M15 · BOS/CHoCH = phá cấu trúc M15</span><span>💧 = quét thanh khoản (BSL/SSL, PDH/PDL)</span><span><i style="background:#fbbf24;height:1px"></i>PDH/PDL</span></div>
+</div>
+<div class="card">
+ <div class="stats" style="grid-template-columns:repeat(4,1fr)">
+  <div><b id="aBal">500$</b><small>Số dư</small></div><div><b id="aEq">500$</b><small>Equity (gồm lệnh mở)</small></div><div><b id="aPnl">0$</b><small>Lãi/lỗ</small></div><div><b id="aDD">0$</b><small>Sụt tối đa</small></div>
+ </div>
+ <div class="mut" style="margin:-2px 0 8px">Vốn ban đầu <input id="cap" type="number" value="500" min="50" step="50" style="width:80px;padding:3px 6px"> $ · lot 0.02 mỗi lệnh (1 giá = 2$)</div>
+ <div class="stats">
+  <div><b id="sW">0</b><small>Sóng ≥ 15 giá</small></div><div><b id="sWc">0</b><small>Sóng EA bắt được</small></div><div><b id="sWa">–</b><small>Sóng TB (giá)</small></div>
+  <div><b id="sE">0</b><small>🖼 Số lệnh</small></div><div><b id="sEw">–</b><small>Chạm TP</small></div><div><b id="sEu">0$</b><small>Lãi/lỗ</small></div>
+  <div style="display:none"><b id="sR">0</b></div><div style="display:none"><b id="sRw"></b></div><div style="display:none"><b id="sRu"></b></div>
+ </div>
+ <label class="mut">Nhật ký: <select id="onlyW"><option value="">tất cả</option><option value="w">chỉ sóng 15 giá</option><option value="t">chỉ lệnh EA</option><option value="smc">chỉ BOS/CHoCH</option><option value="liq">chỉ quét thanh khoản</option></select></label>
+ <div id="log"></div>
+</div></div>
+<script>
+const D = __DATA__;
+const VN = 7 * 3600, $ = (id) => document.getElementById(id);
+const fmt = (s) => { const d = new Date((s + VN) * 1000); return d.toISOString().slice(5, 16).replace('T', ' ').replace(/^(\d\d)-(\d\d)/, '$2/$1'); };
+$('sub').textContent = `${fmt(D.from / 1000)} → ${fmt(D.to / 1000)} (giờ VN) · ${D.src} · Luật trong ảnh: bias EMA34/89 M15 → quét SSL/BSL → CHoCH/MSS ≤ 12 nến (nến phá thân lớn) → FVG → LIMIT 50% FVG (chờ 12 nến) → SL ngoài râu quét → TP tại đỉnh/đáy thanh khoản gần nhất có RR ≥ 2 (không có thì bỏ kèo). Khi có lệnh: 2 đường xanh ngọc = FVG. Nhảy ngày để đến lệnh: 16/06, 11/07, 05/08, 28/08, 02/09, 10/09, 15/09, 01/10, 06/10, 29/10…`;
+const ch = LightweightCharts.createChart($('chart'), { layout: { background: { color: '#171a21' }, textColor: '#c9cede' }, grid: { vertLines: { color: '#20242e' }, horzLines: { color: '#20242e' } }, timeScale: { timeVisible: true, secondsVisible: false, rightOffset: 8 }, crosshair: { mode: 0 } });
+new ResizeObserver(() => ch.applyOptions({ width: $('chart').clientWidth, height: 520 })).observe($('chart'));
+const cs = ch.addCandlestickSeries({ upColor: '#22c55e', downColor: '#f43f5e', wickUpColor: '#22c55e', wickDownColor: '#f43f5e', borderVisible: false });
+const EMAS = [['m5_34', 'EMA34 M5', '#7dd3fc', 1, 2], ['m5_89', 'EMA89 M5', '#fdba74', 1, 2], ['m15_34', 'EMA34 M15', '#38bdf8', 1, 0], ['m15_89', 'EMA89 M15', '#fb923c', 1, 0], ['m30_34', 'EMA34 M30', '#0ea5e9', 2, 0], ['m30_89', 'EMA89 M30', '#f97316', 2, 0], ['m30_21', 'EMA21 M30', '#a78bfa', 1, 0]];
+const ES = {}; const SHOW = { m5: true, m15: true, m30: true, smc: true, liq: true, wave: true, pd: true };
+try { Object.assign(SHOW, JSON.parse(localStorage.getItem('tua_show') || '{}')); } catch (_) {}
+for (const [k, nm, col, w, sty] of EMAS) ES[k] = { s: ch.addLineSeries({ color: col, lineWidth: w, lineStyle: sty, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, title: '' }), d: D.ema[k].map(r => ({ t: r[0], v: r[1] })), j: 0, nm };
+const pdS = ch.addLineSeries({ color: '#fbbf24', lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, lineType: 1 });
+const pdS2 = ch.addLineSeries({ color: '#fbbf24', lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, lineType: 1 });
+const TOG = [['m5', 'EMA34/89 M5'], ['m15', 'EMA34/89 M15'], ['m30', 'EMA34/89 + EMA21 M30'], ['smc', 'Cấu trúc SMC'], ['liq', 'Quét thanh khoản ICT'], ['pd', 'PDH/PDL'], ['wave', 'Sóng 15 giá']];
+$('tog').innerHTML = TOG.map(([k, nm]) => `<label><input type="checkbox" data-k="${k}" ${SHOW[k] ? 'checked' : ''}>${nm}</label>`).join('');
+$('tog').onchange = (e) => { SHOW[e.target.dataset.k] = e.target.checked; try { localStorage.setItem('tua_show', JSON.stringify(SHOW)); } catch (_) {} applyShow(); };
+const smcLines = [];
+function applyShow() { for (const k in ES) ES[k].s.applyOptions({ visible: SHOW[k.split('_')[0]] }); pdS.applyOptions({ visible: SHOW.pd }); pdS2.applyOptions({ visible: SHOW.pd }); zz.applyOptions({ visible: SHOW.wave }); smcLines.forEach(l => l.applyOptions({ visible: SHOW.smc })); setMk(); }
+function setMk() { cs.setMarkers(marks.filter(m => SHOW[m.L] !== false).sort((a, b) => a.time - b.time)); }
+const zz = ch.addLineSeries({ color: '#93c5fd', lineWidth: 2, lineStyle: 0, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+const B = D.bars.map(b => ({ time: b[0] + VN, open: b[1], high: b[2], low: b[3], close: b[4] }));
+
+// sự kiện theo thời gian (giây UTC): mở lệnh, đóng lệnh, sóng xác nhận
+const EV = [];
+D.trades.forEach((t, i) => { EV.push({ s: t.t / 1000, k: 'open', t, i }); EV.push({ s: t.exitT / 1000, k: 'close', t, i }); });
+D.waves.forEach((w, i) => EV.push({ s: w.conf / 1000, k: 'wave', w, i }));
+D.swings.forEach(w => EV.push({ s: w[3], k: 'swing', w })); D.smc.forEach(e => EV.push({ s: e[0], k: 'smc', e })); D.sweeps.forEach(e => EV.push({ s: e[0], k: 'liq', e }));
+EV.sort((a, b) => a.s - b.s || (a.k === 'close' ? -1 : 1));
+let CAP = 500, bal = 500, peak = 500, mdd = 0, TFS = 300, cur = null; try { TFS = +(localStorage.getItem('tua_tf') || 300); } catch (_) {}
+let pdj = 0, idx = 0, ev = 0, timer = null, lines = [], marks = [], zpts = [], st = { W: 0, Wc: 0, Ws: 0, E: [], R: [] };
+const start = B.findIndex(b => b.time - VN >= D.from / 1000);
+function reset(to) {
+  cs.setData([]); for (const k in ES) { ES[k].s.setData([]); ES[k].j = 0; } zz.setData([]); pdS.setData([]); pdS2.setData([]); pdS._last = 0; pdj = 0; cur = null; smcLines.splice(0).forEach(l => ch.removeSeries(l)); lines.forEach(p => cs.removePriceLine(p)); lines = [];
+  idx = 0; ev = 0; CAP = +$('cap').value || 500; bal = CAP; peak = CAP; mdd = 0; marks = []; zpts = []; st = { W: 0, Wc: 0, Ws: 0, E: [], R: [] }; $('log').innerHTML = ''; openT = {};
+  const n = to != null ? to : start; for (let k = 0; k < n; k++) push(k, true); idx = n; applyShow(); render(); ch.timeScale().scrollToRealTime();
+}
+let openT = {};
+function push(k, quiet) {
+  const b = B[k], bt = snapT(b.time - VN); if (!cur || cur.time !== bt) cur = { time: bt, open: b.open, high: b.high, low: b.low, close: b.close }; else { cur.high = Math.max(cur.high, b.high); cur.low = Math.min(cur.low, b.low); cur.close = b.close; } cs.update({ ...cur }); const s = b.time - VN + 300; // thời điểm nến M5 đóng
+  for (const k in ES) { const E = ES[k]; while (E.j < E.d.length && E.d[E.j].t <= s) { const e = E.d[E.j++], tt = snapT(e.t - 1); if (tt <= bt) E.s.update({ time: tt, value: e.v }); } }
+  while (pdj < D.pd.length && D.pd[pdj][0] <= s - 300) { const [d0, H, Lw] = D.pd[pdj++]; pdS.update({ time: snapT(d0), value: H }); pdS2.update({ time: snapT(d0), value: Lw }); }
+  if (pdj) { const [, H, Lw] = D.pd[pdj - 1]; if (bt >= (pdS._last || 0)) { pdS.update({ time: bt, value: H }); pdS2.update({ time: bt, value: Lw }); pdS._last = bt; } }
+  while (ev < EV.length && EV[ev].s <= s) handle(EV[ev++], quiet);
+}
+function snapT(s) { return Math.floor(s / TFS) * TFS + VN; }
+function handle(e, quiet) {
+  if (e.k === 'swing') { const [k, t, p] = e.w; marks.push({ L: 'smc', time: snapT(t), position: k === 'H' ? 'aboveBar' : 'belowBar', color: '#9ca3af', shape: 'circle', size: 0.3, text: k === 'H' ? 'H' : 'L' }); return; }
+  if (e.k === 'smc') { const [t, d, type, p, from] = e.e; const l = ch.addLineSeries({ color: type === 'CHoCH' ? '#e879f9' : (d > 0 ? '#4ade80' : '#fb7185'), lineWidth: 1, lineStyle: type === 'CHoCH' ? 0 : 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: SHOW.smc });
+    const ta = snapT(from), tb = snapT(t - 1); l.setData(ta < tb ? [{ time: ta, value: p }, { time: tb, value: p }] : [{ time: tb, value: p }]); smcLines.push(l);
+    marks.push({ L: 'smc', time: snapT(t - 1), position: d > 0 ? 'aboveBar' : 'belowBar', color: type === 'CHoCH' ? '#e879f9' : (d > 0 ? '#4ade80' : '#fb7185'), shape: 'square', size: 0.1, text: type + (d > 0 ? ' ↑' : ' ↓') });
+    log(`<span style="color:${type === 'CHoCH' ? '#e879f9' : d > 0 ? '#4ade80' : '#fb7185'}"><b>${type}</b> ${d > 0 ? 'TĂNG' : 'GIẢM'} M15</span> · ${fmt(t)} · đóng cửa qua ${d > 0 ? 'đỉnh' : 'đáy'} swing ${p}`, 'smc', quiet); return; }
+  if (e.k === 'liq') { const [t, d, name, p, ext] = e.e; marks.push({ L: 'liq', time: snapT(t - 1), position: d > 0 ? 'belowBar' : 'aboveBar', color: '#22d3ee', shape: d > 0 ? 'arrowUp' : 'arrowDown', size: 0.5, text: '💧' + name.replace('Quét ', '').replace(' (đỉnh swing M15)', '').replace(' (đáy swing M15)', '') });
+    log(`<span style="color:#22d3ee">💧 ${name}</span> · ${fmt(t)} · mức ${p}, râu tới ${ext}, đóng lại ${d > 0 ? 'trên' : 'dưới'} → chờ ${d > 0 ? 'BUY' : 'SELL'}`, 'liq', quiet); return; }
+  if (e.k === 'wave') { const w = e.w; st.W++; st.Ws += w.size; if (w.caught.length) st.Wc++;
+    if (!zpts.length || zpts[zpts.length - 1].time !== snapT(w.t0 / 1000)) zpts.push({ time: snapT(w.t0 / 1000), value: w.p0 }); zpts.push({ time: snapT(w.t1 / 1000), value: w.p1 }); zz.setData(dedupe(zpts));
+    marks.push({ L: 'wave', time: snapT(w.t1 / 1000), position: w.d > 0 ? 'aboveBar' : 'belowBar', color: '#93c5fd', shape: 'square', size: 0.5, text: (w.d > 0 ? '+' : '−') + w.size });
+    log(`<span class="w">${w.d > 0 ? '📈 Sóng TĂNG' : '📉 Sóng GIẢM'} <b>${w.size} giá</b></span> · ${fmt(w.t0 / 1000)} → ${fmt(w.t1 / 1000)} (${w.min} phút) · ${w.p0.toFixed(1)} → ${w.p1.toFixed(1)}<br><span class="mut">${w.ctx ? `Khởi đầu: <b>${w.ctx.start}</b> · trước đó ${w.ctx.prior} · ${w.ctx.trend} · ${w.ctx.sess}${w.ctx.news ? ' · giờ tin Mỹ' : ''} · tốc độ ${w.ctx.speed} giá/giờ` : ''}</span>${w.anat ? '<br><span style="color:#cbd5e1;font-size:12.5px">🔬 ' + w.anat.replace(/\n/g, '<br>🔬 ') + '</span>' : ''}<br>${w.caught.length ? '<span class="win">✅ EA có lệnh cùng chiều: ' + w.caught.join(', ') + '</span>' : '<span class="mut">— chiến lược không có lệnh trong sóng này</span>'}`, 'w', quiet);
+  } else if (e.k === 'open') { const t = e.t, nm = '🖼 Chiến lược ảnh';
+    marks.push({ time: snapT(t.t / 1000), position: t.side > 0 ? 'belowBar' : 'aboveBar', color: '#22d3ee', shape: t.side > 0 ? 'arrowUp' : 'arrowDown', text: '🖼 ' + (t.side > 0 ? 'BUY' : 'SELL') });
+    marks[marks.length - 1].L = 'trade'; openT[e.i] = [cs.createPriceLine({ price: t.entry, color: '#e5e7eb', lineWidth: 1, lineStyle: 2, title: 'Entry' }), cs.createPriceLine({ price: t.sl, color: '#f43f5e', lineWidth: 1, lineStyle: 2, title: 'SL' }), cs.createPriceLine({ price: t.tp, color: '#22c55e', lineWidth: 1, lineStyle: 2, title: 'TP' })].concat(t.box ? [cs.createPriceLine({ price: t.box.hi, color: '#22d3ee', lineWidth: 1, lineStyle: 0, title: 'FVG' }), cs.createPriceLine({ price: t.box.lo, color: '#22d3ee', lineWidth: 1, lineStyle: 0, title: 'FVG' })] : []);
+    log(`<span class="tag">${nm}</span><b>${t.side > 0 ? 'BUY' : 'SELL'}</b> ${fmt(t.t / 1000)} · Entry ${t.entry} · SL ${t.sl} · TP ${t.tp}<br><span class="mut">${t.why}</span>`, '', quiet);
+  } else { const t = e.t, nm = '🖼 Chiến lược ảnh'; st.E.push(t);
+    (openT[e.i] || []).forEach(p => cs.removePriceLine(p)); delete openT[e.i];
+    marks.push({ L: 'trade', time: snapT(t.exitT / 1000 - 1), position: 'inBar', color: t.usd >= 0 ? '#22c55e' : '#f43f5e', shape: 'circle', size: 0.6 });
+    bal += t.usd; peak = Math.max(peak, bal); mdd = Math.max(mdd, peak - bal);
+    const r = t.state === 'WIN' ? '<span class="win">✅ Chạm TP</span>' : t.state === 'LOSS' ? '<span class="loss">❌ Dính SL</span>' : '⏱ Hết giờ';
+    log(`<span class="tag">${nm}</span>${r} ${fmt(t.exitT / 1000)} · đóng ${t.exitP} · <b class="${t.usd >= 0 ? 'win' : 'loss'}">${t.usd >= 0 ? '+' : ''}${t.usd.toFixed(2)}$</b> · số dư <b>${bal.toFixed(2)}$</b>${t.why2 ? '<br><span class="mut">' + t.why2 + '</span>' : ''}`, '', quiet);
+  }
+}
+function dedupe(a) { const o = []; for (const p of a) { if (o.length && o[o.length - 1].time >= p.time) { if (o[o.length - 1].time === p.time) o[o.length - 1] = p; continue; } o.push(p); } return o; }
+function log(h, cls, quiet) { const d = document.createElement('div'); d.innerHTML = h; d.dataset.k = cls; d.dataset.k = cls || 't'; const f = $('onlyW').value; if (f && d.dataset.k !== f) d.style.display = 'none'; $('log').prepend(d); }
+function render() {
+  $('now').textContent = B[idx - 1] ? '🕒 ' + fmt(B[idx - 1].time - VN) + ' (VN)' : '';
+  const pc = (G) => G.length ? Math.round(100 * G.filter(t => t.state === 'WIN').length / G.length) + '%' : '–', usd = (G) => { const v = G.reduce((a, t) => a + t.usd, 0); return (v >= 0 ? '+' : '') + v.toFixed(0) + '$'; };
+  $('sW').textContent = st.W; $('sWc').textContent = st.Wc; $('sWa').textContent = st.W ? (st.Ws / st.W).toFixed(1) : '–';
+  $('sE').textContent = st.E.length; $('sEw').textContent = pc(st.E); $('sEu').textContent = usd(st.E); $('sR').textContent = st.R.length; $('sRw').textContent = pc(st.R); $('sRu').textContent = usd(st.R);
+  const px = cur ? cur.close : 0, o = Object.keys(openT).map(i => D.trades[i]);
+  const fl = o.reduce((a, t) => a + t.side * (px + (t.side < 0 ? 0.35 : 0) - t.entry) * 2, 0), eq = bal + fl, pnl = bal - CAP;
+  $('aBal').textContent = bal.toFixed(2) + '$'; $('aEq').textContent = eq.toFixed(2) + '$'; $('aEq').className = fl >= 0 ? '' : 'loss';
+  $('aPnl').textContent = (pnl >= 0 ? '+' : '') + pnl.toFixed(2) + '$ (' + (pnl >= 0 ? '+' : '') + (100 * pnl / CAP).toFixed(1) + '%)'; $('aPnl').className = pnl >= 0 ? 'win' : 'loss';
+  $('aDD').textContent = mdd.toFixed(2) + '$ (' + (100 * mdd / CAP).toFixed(1) + '%)'; $('open').innerHTML = o.length ? o.map(t => `🟢 Đang mở: <b>${t.ea}</b> ${t.side > 0 ? 'BUY' : 'SELL'} ${t.entry} · SL ${t.sl} · TP ${t.tp} · lãi/lỗ tạm <b class="${t.side * (px + (t.side < 0 ? 0.35 : 0) - t.entry) >= 0 ? 'win' : 'loss'}">${(t.side * (px + (t.side < 0 ? 0.35 : 0) - t.entry) * 2).toFixed(2)}$</b>`).join('<br>') : '<span class="mut">Không có lệnh đang mở</span>';
+}
+function tick(n) { for (let k = 0; k < n && idx < B.length; k++) push(idx++, false); setMk(); render(); if (idx >= B.length) stop(); }
+function stop() { clearInterval(timer); timer = null; $('play').textContent = '▶ Chạy'; }
+$('play').onclick = () => { if (timer) return stop(); $('play').textContent = '⏸ Dừng'; timer = setInterval(() => tick(TFS / 300), +$('speed').value); };
+$('speed').onchange = () => { if (timer) { stop(); $('play').click(); } };
+$('step').onclick = () => tick(TFS / 300); $('step12').onclick = () => tick(12);
+$('tf').value = String(TFS); $('tf').onchange = () => { const run = !!timer; stop(); TFS = +$('tf').value; try { localStorage.setItem('tua_tf', TFS); } catch (_) {} reset(idx); if (run) $('play').click(); };
+$('reset').onclick = () => { stop(); reset(); };
+$('cap').onchange = () => { const run = !!timer; stop(); reset(idx); if (run) $('play').click(); };
+$('jump').min = new Date(D.from + 7 * 36e5).toISOString().slice(0, 10); $('jump').max = new Date(D.to + 7 * 36e5).toISOString().slice(0, 10);
+$('jump').onchange = () => { stop(); const s = Date.parse($('jump').value + 'T00:00:00Z') / 1000; const k = B.findIndex(b => b.time >= s); reset(k < 0 ? B.length : Math.max(start, k)); };
+$('onlyW').onchange = () => { const f = $('onlyW').value; for (const d of $('log').children) d.style.display = f && d.dataset.k !== f ? 'none' : ''; };
+$('sum').innerHTML = (D.summary || '') + (D.anatomy ? '<p><b>🔬 Mổ xẻ 12 tháng các sóng ≥ 15 giá bot bỏ lỡ</b></p><pre style="white-space:pre-wrap;font:12.5px/1.5 ui-monospace,monospace;background:#20242e;padding:8px;border-radius:8px">' + D.anatomy.replace(/</g, '&lt;') + '</pre>' : '');
+reset();
+</script></body></html>

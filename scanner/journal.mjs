@@ -13,6 +13,7 @@ const EMA21 = req(path.join(__dir, '..', 'tin-hieu', 'ema21.js'));
 const ZONES = req(path.join(__dir, '..', 'tin-hieu', 'zones.js'));
 const CT = req(path.join(__dir, '..', 'tin-hieu', 'congthuc.js'));
 const QB = req(path.join(__dir, '..', 'tin-hieu', 'quetbien.js'));
+const PB = req(path.join(__dir, '..', 'tin-hieu', 'asianbo.js'));
 const BOSRT = req(path.join(__dir, '..', 'tin-hieu', 'bosrt.js'));
 const DATA = process.env.DATA_DIR || 'botdata', FILE = path.join(DATA, 'tinhieu-journal.json');
 const FB = (process.env.MT5_DB || 'https://letuan-mt5-default-rtdb.asia-southeast1.firebasedatabase.app').replace(/\/+$/, '');
@@ -62,7 +63,7 @@ async function tgSend(text) {
   for (const id of CHATS) { try { await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: id, text, parse_mode: 'HTML', disable_web_page_preview: true }), signal: AbortSignal.timeout(15000) }); } catch (_) {} await sleep(350); }
 }
 function tgText(t) {
-  const f = (v) => v == null ? '—' : (+v).toFixed(t.dp ?? 2), side = t.side > 0 ? 'BUY' : 'SELL', tag = t.grade === 'Q' ? '💧 Quét biên tích lũy' : t.grade === 'K' ? '🔂 BOS M5 + retest' : t.grade === 'C' ? '📐 Công thức' : t.grade === 'Z' ? '🧱 AI Vùng S/R H4/H1' : t.grade === 'R' ? '🧲 Test EMA21 M30' : t.grade === 'E' ? '🔁 EMA hồi' : t.grade === 'S' ? '🎯 BOS 15' : t.grade === 'W' ? '🌊 Sóng 15' : t.grade === 'B' ? '🔎 Ghi nhận' : '⭐ Chuẩn';
+  const f = (v) => v == null ? '—' : (+v).toFixed(t.dp ?? 2), side = t.side > 0 ? 'BUY' : 'SELL', tag = t.grade === 'P' ? '🌅 Phá biên phiên Á' : t.grade === 'Q' ? '💧 Quét biên tích lũy' : t.grade === 'K' ? '🔂 BOS M5 + retest' : t.grade === 'C' ? '📐 Công thức' : t.grade === 'Z' ? '🧱 AI Vùng S/R H4/H1' : t.grade === 'R' ? '🧲 Test EMA21 M30' : t.grade === 'E' ? '🔁 EMA hồi' : t.grade === 'S' ? '🎯 BOS 15' : t.grade === 'W' ? '🌊 Sóng 15' : t.grade === 'B' ? '🔎 Ghi nhận' : '⭐ Chuẩn';
   const head = `<b>${t.sym} · ${t.tf.toUpperCase()} · ${side} ${t.grade === 'E' || t.grade === 'R' || t.grade === 'Z' ? 'VÀO NGAY' : 'LIMIT'}</b> — ${tag}`;
   const zone = `Vùng FVG ${t.tf.toUpperCase()}: ${f(t.fvg && t.fvg.bot)} – ${f(t.fvg && t.fvg.top)}`;
   const lv = `Entry <b>${f(t.entry)}</b> · SL <b>${f(t.sl)}</b> · TP <b>${f(t.tp)}</b> (${(t.rr || 2).toFixed(1)}R)`;
@@ -95,18 +96,19 @@ const RULES = 'Ghi nhận mọi setup ICT/SMC quét thanh khoản (PDH/PDL, tu�
 let J = { version: V3.version, rules: RULES, trades: [] };
 try { J = { ...J, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) }; } catch (_) {}
 // đổi bản quy tắc: bỏ các lệnh "tính lại" của bản cũ (sẽ tính lại theo bản mới), giữ nguyên lệnh đã ghi trực tiếp
-if (J.version !== V3.version) J.trades = J.trades.filter(t => t.live || (t.grade === 'W' && t.ver === WAVE.version) || (t.grade === 'E' && t.ver === EMAPB.version) || (t.grade === 'R' && t.ver === EMA21.version) || (t.grade === 'Z' && t.ver === ZONES.version) || (t.grade === 'Q' && t.ver === QB.version) || (t.grade === 'C' && t.ver === CT.version) || (t.grade === 'K' && t.ver === BOSRT.version));
+if (J.version !== V3.version) J.trades = J.trades.filter(t => t.live || (t.grade === 'W' && t.ver === WAVE.version) || (t.grade === 'E' && t.ver === EMAPB.version) || (t.grade === 'R' && t.ver === EMA21.version) || (t.grade === 'Z' && t.ver === ZONES.version) || (t.grade === 'Q' && t.ver === QB.version) || (t.grade === 'P' && t.ver === PB.version) || (t.grade === 'C' && t.ver === CT.version) || (t.grade === 'K' && t.ver === BOSRT.version));
 J.version = V3.version; J.rules = RULES;
 J.trades = J.trades.filter(t => t.grade !== 'E' || t.ver === EMAPB.version || t.live); // đổi bản EMA hồi: tính lại
 J.trades = J.trades.filter(t => t.grade !== 'R' || t.ver === EMA21.version || t.live); // đổi bản Test EMA21: tính lại
 J.trades = J.trades.filter(t => t.grade !== 'Z' || t.ver === ZONES.version || t.live); // đổi bản Vùng S/R: tính lại
 J.trades = J.trades.filter(t => t.grade !== 'Q' || t.ver === QB.version || t.live); // đổi bản Quét biên: tính lại
+J.trades = J.trades.filter(t => t.grade !== 'P' || t.ver === PB.version || t.live); // đổi bản Phá biên phiên Á: tính lại
 J.trades = J.trades.filter(t => t.grade !== 'C' || t.ver === CT.version || t.live); // đổi bản Công thức: tính lại
 J.trades = J.trades.filter(t => t.grade !== 'K' || t.ver === BOSRT.version || t.live); // đổi bản BOS M5: tính lại
 const byId = new Map(J.trades.map(x => [x.id, x]));
 // nạp sẵn lịch sử 12 tháng (tính lại từ OKX) — chỉ thêm lệnh chưa có, cùng bản quy tắc
 try { const SEED = JSON.parse(fs.readFileSync(path.join(__dir, 'journal-seed.json'), 'utf8'));
-  if (SEED.version === V3.version) { let n = 0; for (const t of SEED.trades) if (!byId.has(t.id) && (t.grade !== 'W' || t.ver === WAVE.version) && (t.grade !== 'E' || t.ver === EMAPB.version) && (t.grade !== 'R' || t.ver === EMA21.version) && (t.grade !== 'Z' || t.ver === ZONES.version) && (t.grade !== 'Q' || t.ver === QB.version) && (t.grade !== 'C' || t.ver === CT.version) && (t.grade !== 'K' || t.ver === BOSRT.version)) { J.trades.push(t); byId.set(t.id, t); n++; } if (n) console.log(`Nạp ${n} lệnh lịch sử 12 tháng`); } } catch (_) {}
+  if (SEED.version === V3.version) { let n = 0; for (const t of SEED.trades) if (!byId.has(t.id) && (t.grade !== 'W' || t.ver === WAVE.version) && (t.grade !== 'E' || t.ver === EMAPB.version) && (t.grade !== 'R' || t.ver === EMA21.version) && (t.grade !== 'Z' || t.ver === ZONES.version) && (t.grade !== 'Q' || t.ver === QB.version) && (t.grade !== 'P' || t.ver === PB.version) && (t.grade !== 'C' || t.ver === CT.version) && (t.grade !== 'K' || t.ver === BOSRT.version)) { J.trades.push(t); byId.set(t.id, t); n++; } if (n) console.log(`Nạp ${n} lệnh lịch sử 12 tháng`); } } catch (_) {}
 let added = 0, changed = 0, XAU15 = null, XAUH1 = null; const errs = [], DS = {};
 for (const sym of Object.keys(SYMS)) {
   let L;
@@ -138,7 +140,7 @@ try {
   if (process.env.MOCK_DIR) { const rd = (tf) => JSON.parse(fs.readFileSync(path.join(process.env.MOCK_DIR, `XAU_${tf}.json`), 'utf8')).map(k => ({ t: k[0], ct: k[0] + MS[tf], o: k[1], h: k[2], l: k[3], c: k[4] })).filter(x => x.ct <= NOW()); m5 = rd('m5').slice(-NEED.m5); m15 = rd('m15').slice(-3000); XAUH1 = rd('h1').slice(-2200); }
   else { m5 = closed(await okx(SYMS.XAU.okx, 'm5')); m15 = XAU15 || []; }
   // các mô hình chạy trên M5 vàng: tính lại toàn bộ cửa sổ mỗi lần, cập nhật lệnh chưa kết thúc
-  for (const [MOD, G] of [[WAVE, 'W'], [EMAPB, 'E'], [EMA21, 'R'], [ZONES, 'Z'], [QB, 'Q']]) {
+  for (const [MOD, G] of [[WAVE, 'W'], [EMAPB, 'E'], [EMA21, 'R'], [ZONES, 'Z'], [QB, 'Q'], [PB, 'P']]) {
     const W = MOD.run({ m5, m15, h1: XAUH1 || [] }, { spread: SYMS.XAU.spread }), seenW = new Set(), tg = MOD.telegram !== false;
     for (const s of W) {
       const id = `XAU-${s.id}`, old = byId.get(id); seenW.add(id);
@@ -187,7 +189,7 @@ for (const sym of Object.keys(SYMS)) {
   } catch (e) { errs.push('🔂 BOS M5 ' + sym + ': ' + e.message); }
 }
 // lệnh treo quá lâu ngoài cửa sổ dữ liệu
-for (const t of J.trades) if (t.grade !== 'W' && t.grade !== 'E' && t.grade !== 'R' && t.grade !== 'Z' && t.grade !== 'C' && t.grade !== 'K' && t.grade !== 'Q' && !V3.FINAL[t.state] && NOW() - t.ct > 30 * 864e5) { t.state = 'TIME'; t.why = 'Quá 30 ngày không cập nhật được'; }
+for (const t of J.trades) if (t.grade !== 'W' && t.grade !== 'E' && t.grade !== 'R' && t.grade !== 'Z' && t.grade !== 'C' && t.grade !== 'K' && t.grade !== 'Q' && t.grade !== 'P' && !V3.FINAL[t.state] && NOW() - t.ct > 30 * 864e5) { t.state = 'TIME'; t.why = 'Quá 30 ngày không cập nhật được'; }
 // ---- 💼 Tài khoản DEMO (giấy) 500 USD — chạy trên máy chủ, đúng luật 2 EA trên MT5:
 //  EMA_Hoi_ICT (lệnh 🔁 EMA hồi trong giờ cho phép, SL ≤ 30 giá) + EMA21_Test_M30 (lệnh 🧲 Test EMA21) · 0.02 lot · mỗi lần chỉ 1 lệnh trên vàng (giống InpOnlyOneOnSym)
 { const D = J.demo = J.demo || { start: NOW(), bal0: 500, lot: 0.02, taken: [] };
@@ -220,7 +222,7 @@ for (const t of J.trades) if (t.grade !== 'W' && t.grade !== 'E' && t.grade !== 
 }
 J.trades.sort((a, b) => a.ct - b.ct);
 J.updated = NOW(); J.errors = errs;
-J.stats = {}; for (const sym of Object.keys(SYMS)) J.stats[sym] = { quetBien: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'Q')), chuan: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'A')), song15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'W')), bos15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'S')), emaHoi: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'E')), vungSR: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'Z' && t.state !== 'SKIP')), test21: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'R')), bos5: BOSRT.stats(J.trades.filter(t => t.sym === sym && t.grade === 'K' && t.ver === BOSRT.version)), congThuc: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'C')), tatca: V3.stats(J.trades.filter(t => t.sym === sym)) };
+J.stats = {}; for (const sym of Object.keys(SYMS)) J.stats[sym] = { phaBienA: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'P')), quetBien: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'Q')), chuan: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'A')), song15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'W')), bos15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'S')), emaHoi: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'E')), vungSR: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'Z' && t.state !== 'SKIP')), test21: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'R')), bos5: BOSRT.stats(J.trades.filter(t => t.sym === sym && t.grade === 'K' && t.ver === BOSRT.version)), congThuc: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'C')), tatca: V3.stats(J.trades.filter(t => t.sym === sym)) };
 fs.mkdirSync(DATA, { recursive: true });
 J.telegram = { chats: CHATS.length, token: !!TOKEN };
 fs.writeFileSync(FILE, JSON.stringify(J));

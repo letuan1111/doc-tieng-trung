@@ -15,6 +15,8 @@ const CT = req(path.join(__dir, '..', 'tin-hieu', 'congthuc.js'));
 const QB = req(path.join(__dir, '..', 'tin-hieu', 'quetbien.js'));
 const PB = req(path.join(__dir, '..', 'tin-hieu', 'asianbo.js'));
 const BOSRT = req(path.join(__dir, '..', 'tin-hieu', 'bosrt.js'));
+const AIB = req(path.join(__dir, '..', 'tin-hieu', 'ai.js')), AIM = req(path.join(__dir, '..', 'tin-hieu', 'ai-model.json')); AIB.setModel(AIM);
+const AI_DEPLOY = Date.parse(process.env.AI_DEPLOY || '2026-11-09T17:00:00Z'); // lệnh 🤖 trước mốc này lấy từ lịch sử walk-forward (ngoài mẫu), không tính lại bằng mô hình cuối
 const DATA = process.env.DATA_DIR || 'botdata', FILE = path.join(DATA, 'tinhieu-journal.json');
 const FB = (process.env.MT5_DB || 'https://letuan-mt5-default-rtdb.asia-southeast1.firebasedatabase.app').replace(/\/+$/, '');
 const MS = { ...V3.MS, m5: 3e5 }, NEED = { m15: 3000, h1: 2200 }; // H1 dài để EMA34/89 H4 ổn định; M30 dựng từ M15
@@ -63,13 +65,15 @@ async function tgSend(text) {
   for (const id of CHATS) { try { await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: id, text, parse_mode: 'HTML', disable_web_page_preview: true }), signal: AbortSignal.timeout(15000) }); } catch (_) {} await sleep(350); }
 }
 function tgText(t) {
-  const f = (v) => v == null ? '—' : (+v).toFixed(t.dp ?? 2), side = t.side > 0 ? 'BUY' : 'SELL', tag = t.grade === 'P' ? '🌅 Phá biên phiên Á' : t.grade === 'Q' ? '💧 Quét biên tích lũy' : t.grade === 'K' ? '🔂 BOS M5 + retest' : t.grade === 'C' ? '📐 Công thức' : t.grade === 'Z' ? '🧱 AI Vùng S/R H4/H1' : t.grade === 'R' ? '🧲 Test EMA21 M30' : t.grade === 'E' ? '🔁 EMA hồi' : t.grade === 'S' ? '🎯 BOS 15' : t.grade === 'W' ? '🌊 Sóng 15' : t.grade === 'B' ? '🔎 Ghi nhận' : '⭐ Chuẩn';
-  const head = `<b>${t.sym} · ${t.tf.toUpperCase()} · ${side} ${t.grade === 'E' || t.grade === 'R' || t.grade === 'Z' ? 'VÀO NGAY' : 'LIMIT'}</b> — ${tag}`;
+  const f = (v) => v == null ? '—' : (+v).toFixed(t.dp ?? 2), side = t.side > 0 ? 'BUY' : 'SELL', tag = t.grade === 'I' ? '🤖 AI trợ lý' : t.grade === 'P' ? '🌅 Phá biên phiên Á' : t.grade === 'Q' ? '💧 Quét biên tích lũy' : t.grade === 'K' ? '🔂 BOS M5 + retest' : t.grade === 'C' ? '📐 Công thức' : t.grade === 'Z' ? '🧱 AI Vùng S/R H4/H1' : t.grade === 'R' ? '🧲 Test EMA21 M30' : t.grade === 'E' ? '🔁 EMA hồi' : t.grade === 'S' ? '🎯 BOS 15' : t.grade === 'W' ? '🌊 Sóng 15' : t.grade === 'B' ? '🔎 Ghi nhận' : '⭐ Chuẩn';
+  const head = `<b>${t.sym} · ${t.tf.toUpperCase()} · ${side} ${t.grade === 'E' || t.grade === 'R' || t.grade === 'Z' || t.grade === 'I' ? 'VÀO NGAY' : 'LIMIT'}</b> — ${tag}`;
   const zone = `Vùng FVG ${t.tf.toUpperCase()}: ${f(t.fvg && t.fvg.bot)} – ${f(t.fvg && t.fvg.top)}`;
   const lv = `Entry <b>${f(t.entry)}</b> · SL <b>${f(t.sl)}</b> · TP <b>${f(t.tp)}</b> (${(t.rr || 2).toFixed(1)}R)`;
   const sw = `Đã quét ${esc(t.sweepName)} ${f(t.sweep)} → MSS + FVG`;
   switch (t.state) {
-    case 'PENDING': if (t.grade === 'K') { const usd = t.sym === 'BTC' ? 0.02 : 2;
+    case 'PENDING': if (t.grade === 'I') { const R0 = (AIM.report.rows || []).find(r => r.thr === AIM.thr) || {};
+        return `🆕 ${head}\n🤖 AI chấm <b>${Math.round(100 * t.prob)}%</b> khả năng chạm TP trước SL (ngưỡng ${Math.round(100 * AIM.thr)}%)\n${(t.info || []).map(x => '• ' + esc(x)).join('\n')}\n${lv} · 0.02 lot ≈ ${(t.risk * 2).toFixed(0)}$ rủi ro\n⏳ Giữ tối đa 12h (48 nến M15)\n<i>Kiểm ngoài mẫu ${esc(AIM.report.from)}→${esc(AIM.report.to)}: ${R0.n} lệnh · thắng ${R0.win}% · ${R0.R >= 0 ? '+' : ''}${R0.R}R</i>\n<a href="${PAGE}">Mở trang</a>`; }
+      if (t.grade === 'K') { const usd = t.sym === 'BTC' ? 0.02 : 2;
         return `🆕 ${head}\n📈 EMA34 M30 ${f(t.ema34)} ${t.side > 0 ? '>' : '<'} EMA89 M30 ${f(t.ema89)} · giá M30 ${t.side > 0 ? 'trên' : 'dưới'} EMA34\n💥 M5 phá ${t.side > 0 ? 'đỉnh' : 'đáy'} swing ${f(t.lvl)} lúc ${vnT(t.ct)} → đặt LIMIT chờ giá quay lại test\n${lv}\nSL = ${t.side > 0 ? 'đáy swing low' : 'đỉnh swing high'} của chân phá · 0.02 lot ≈ ${(t.risk * usd).toFixed(0)}$ rủi ro\n⏳ Huỷ nếu chưa test trước ${vnT(t.expT)} hoặc giá thủng SL trước\n⛔ Không vào nếu giá test trong giờ: ${t.badHours.join(', ')}h\n<a href="${PAGE}">Mở trang</a>`; }
       if (t.grade === 'Z') return `🆕 ${head}\n🧱 Vùng ${t.side > 0 ? 'hỗ trợ' : 'kháng cự'} H4/H1 ${f(t.zone.lo)} – ${f(t.zone.hi)} · ${t.zone.score} điểm (${t.zone.h4} lần chạm H4, ${t.zone.h1} H1${t.zone.flip ? ', đổi vai' : ''})\nQuét ${t.side > 0 ? 'đáy' : 'đỉnh'} vùng: râu M15 ${f(t.sweep)} lúc ${vnT(t.t)} → MSS M15 đóng qua ${f(t.mss)} sau ${t.mssBars} nến\n🤖 AI ${t.ai} điểm: ${esc(t.aiWhy.join(', '))}\n${lv} · 0.02 lot ≈ ${(t.risk * 2).toFixed(0)}$ rủi ro\nGiữ tối đa 24h\n<a href="${PAGE}">Mở trang</a>`;
       if (t.grade === 'R') return `🆕 ${head}\n⏰ ${t.hour}h VN (đã bỏ giờ hay dính SL: 8h, 23h)\nEMA34 M30 ${f(t.ema34)} ${t.side > 0 ? '>' : '<'} EMA89 M30 ${f(t.ema89)} · ≥ 6 nến M30 đóng ${t.side > 0 ? 'trên' : 'dưới'} EMA21\nGiá test EMA21 M30 ${f(t.ema21)} lúc ${vnT(t.touchT)} (râu ${f(t.touchP)}) → nến M5 bật lại xác nhận\n${lv} · 0.02 lot · giữ tối đa 12h\n<a href="${PAGE}">Mở trang</a>`;
@@ -85,9 +89,9 @@ function tgText(t) {
 }
 const toSend = [];
 // CHỈ gửi Telegram lệnh 🔁 EMA hồi và 🧲 Test EMA21 M30 trong giờ cho phép (tgOK); mọi mô hình khác chỉ ghi nhật ký
-const NOWIN = (g) => g === 'E' || g === 'R' || g === 'Z';
+const NOWIN = (g) => g === 'E' || g === 'R' || g === 'Z' || g === 'I';
 // Letuan 07/11/2026: Telegram CHỈ gửi cách 🔂 BOS M5 + retest (grade K) — mọi mô hình khác chỉ ghi nhật ký & web
-const TGONLY = (g) => g === 'K';
+const TGONLY = (g) => g === 'K' || g === 'I'; // 10/11/2026: thêm 🤖 AI trợ lý theo yêu cầu Letuan
 const notify = (t) => { if (!t.live || !TGONLY(t.grade) || !(t.tgOK || (t.tg && t.tg.length))) return; t.tg = t.tg || []; if (t.state === 'OPEN' && !t.tg.includes('PENDING')) { t.tg.push('PENDING'); if (NOWIN(t.grade)) t.tg.push('OPEN'); toSend.push(tgText({ ...t, state: 'PENDING' })); } if (NOWIN(t.grade) && !t.tg.includes('PENDING')) { t.tg.push('PENDING', 'OPEN'); toSend.push(tgText({ ...t, state: 'PENDING' })); }
   if (V3.FINAL[t.state] && t.fillT && !t.tg.includes('OPEN') && t.state !== 'SKIP') { t.tg.push('OPEN'); toSend.push(tgText({ ...t, state: 'OPEN' })); } if (t.tg.includes(t.state)) return; t.tg.push(t.state); toSend.push(tgText(t)); };
 const closed = (c) => c.filter(x => x.ct <= NOW());
@@ -96,7 +100,7 @@ const RULES = 'Ghi nhận mọi setup ICT/SMC quét thanh khoản (PDH/PDL, tu�
 let J = { version: V3.version, rules: RULES, trades: [] };
 try { J = { ...J, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) }; } catch (_) {}
 // đổi bản quy tắc: bỏ các lệnh "tính lại" của bản cũ (sẽ tính lại theo bản mới), giữ nguyên lệnh đã ghi trực tiếp
-if (J.version !== V3.version) J.trades = J.trades.filter(t => t.live || (t.grade === 'W' && t.ver === WAVE.version) || (t.grade === 'E' && t.ver === EMAPB.version) || (t.grade === 'R' && t.ver === EMA21.version) || (t.grade === 'Z' && t.ver === ZONES.version) || (t.grade === 'Q' && t.ver === QB.version) || (t.grade === 'P' && t.ver === PB.version) || (t.grade === 'C' && t.ver === CT.version) || (t.grade === 'K' && t.ver === BOSRT.version));
+if (J.version !== V3.version) J.trades = J.trades.filter(t => t.live || (t.grade === 'W' && t.ver === WAVE.version) || (t.grade === 'E' && t.ver === EMAPB.version) || (t.grade === 'R' && t.ver === EMA21.version) || (t.grade === 'Z' && t.ver === ZONES.version) || (t.grade === 'Q' && t.ver === QB.version) || (t.grade === 'P' && t.ver === PB.version) || (t.grade === 'C' && t.ver === CT.version) || (t.grade === 'K' && t.ver === BOSRT.version) || (t.grade === 'I' && t.ver === AIB.version));
 J.version = V3.version; J.rules = RULES;
 J.trades = J.trades.filter(t => t.grade !== 'E' || t.ver === EMAPB.version || t.live); // đổi bản EMA hồi: tính lại
 J.trades = J.trades.filter(t => t.grade !== 'R' || t.ver === EMA21.version || t.live); // đổi bản Test EMA21: tính lại
@@ -105,17 +109,18 @@ J.trades = J.trades.filter(t => t.grade !== 'Q' || t.ver === QB.version || t.liv
 J.trades = J.trades.filter(t => t.grade !== 'P' || t.ver === PB.version || t.live); // đổi bản Phá biên phiên Á: tính lại
 J.trades = J.trades.filter(t => t.grade !== 'C' || t.ver === CT.version || t.live); // đổi bản Công thức: tính lại
 J.trades = J.trades.filter(t => t.grade !== 'K' || t.ver === BOSRT.version || t.live); // đổi bản BOS M5: tính lại
+J.trades = J.trades.filter(t => t.grade !== 'I' || t.ver === AIB.version || t.live); // đổi bản AI: nạp lại lịch sử
 const byId = new Map(J.trades.map(x => [x.id, x]));
 // nạp sẵn lịch sử 12 tháng (tính lại từ OKX) — chỉ thêm lệnh chưa có, cùng bản quy tắc
 try { const SEED = JSON.parse(fs.readFileSync(path.join(__dir, 'journal-seed.json'), 'utf8'));
-  if (SEED.version === V3.version) { let n = 0; for (const t of SEED.trades) if (!byId.has(t.id) && (t.grade !== 'W' || t.ver === WAVE.version) && (t.grade !== 'E' || t.ver === EMAPB.version) && (t.grade !== 'R' || t.ver === EMA21.version) && (t.grade !== 'Z' || t.ver === ZONES.version) && (t.grade !== 'Q' || t.ver === QB.version) && (t.grade !== 'P' || t.ver === PB.version) && (t.grade !== 'C' || t.ver === CT.version) && (t.grade !== 'K' || t.ver === BOSRT.version)) { J.trades.push(t); byId.set(t.id, t); n++; } if (n) console.log(`Nạp ${n} lệnh lịch sử 12 tháng`); } } catch (_) {}
-let added = 0, changed = 0, XAU15 = null, XAUH1 = null; const errs = [], DS = {};
+  if (SEED.version === V3.version) { let n = 0; for (const t of SEED.trades) if (!byId.has(t.id) && (t.grade !== 'W' || t.ver === WAVE.version) && (t.grade !== 'E' || t.ver === EMAPB.version) && (t.grade !== 'R' || t.ver === EMA21.version) && (t.grade !== 'Z' || t.ver === ZONES.version) && (t.grade !== 'Q' || t.ver === QB.version) && (t.grade !== 'P' || t.ver === PB.version) && (t.grade !== 'C' || t.ver === CT.version) && (t.grade !== 'K' || t.ver === BOSRT.version) && (t.grade !== 'I' || t.ver === AIB.version)) { J.trades.push(t); byId.set(t.id, t); n++; } if (n) console.log(`Nạp ${n} lệnh lịch sử 12 tháng`); } } catch (_) {}
+let added = 0, changed = 0, XAU15 = null, XAUH1 = null; const errs = [], DS = {}, SRC = {}, L_SRC = (sym) => SRC[sym] || 'OKX ' + SYMS[sym].okx;
 for (const sym of Object.keys(SYMS)) {
   let L;
   try { L = await load(sym); } catch (e) { errs.push(sym + ': ' + e.message); continue; }
   const D = { m15: closed(L.D.m15), h1: closed(L.D.h1) }; D.m30 = V3.resample(D.m15, MS.m30);
   if (sym === 'XAU') { XAU15 = D.m15; XAUH1 = D.h1; }
-  DS[sym] = { m15: D.m15, h1: D.h1 };
+  DS[sym] = { m15: D.m15, h1: D.h1 }; SRC[sym] = L.src;
   const res = V3.runAll(D, { spread: SYMS[sym].spread, now: NOW() });
   if (sym === 'XAU') res.push(...V3.runBos(D, { spread: SYMS[sym].spread, now: NOW() }));
   for (const s of res) {
@@ -188,8 +193,36 @@ for (const sym of Object.keys(SYMS)) {
     for (const t of J.trades) if (t.grade === 'K' && t.sym === sym && !BOSRT.FINAL[t.state] && !seen.has(t.id) && NOW() - t.ct > 2 * 864e5) { t.state = t.fillT ? 'TIME' : 'EXPIRED'; t.why = 'Ra ngoài cửa sổ dữ liệu M5'; }
   } catch (e) { errs.push('🔂 BOS M5 ' + sym + ': ' + e.message); }
 }
+// ---- 🤖 AI trợ lý (vàng M15): 8 loại ứng viên ICT/SMC/EMA/breakout → AI (LightGBM) chấm xác suất → vào khi ≥ ngưỡng · GỬI TELEGRAM
+//      + "bây giờ cần làm gì" cho cả vàng và BTC (BTC chỉ phân tích, không vào lệnh) · báo kế hoạch Telegram lúc 13h và 19h VN
+{ const R = AIM.report; J.ai = { version: AIB.version, thr: AIM.thr, rr: AIM.rr, trained: AIM.trained, report: { from: R.from, to: R.to, auc: R.auc, base: R.base, rows: R.rows, monthly: R.monthly }, typeStats: AIM.typeStats, top: AIM.top, plans: (J.ai && J.ai.plans) || {}, updated: NOW() };
+  for (const sym of Object.keys(SYMS)) {
+    try {
+      const Dk = DS[sym]; if (!Dk || !Dk.m15 || !Dk.h1) { errs.push('🤖 AI ' + sym + ': chưa có dữ liệu'); continue; }
+      const D = { m5: Dk.m15, m15: Dk.m15, h1: Dk.h1 };
+      J.ai[sym] = AIB.status(D, { spread: SYMS[sym].spread, dp: SYMS[sym].dp, analysisOnly: sym !== 'XAU' });
+      if (sym !== 'XAU') { if (J.ai[sym]) J.ai[sym].note = 'BTC: AI chỉ phân tích — kiểm walk-forward trên BTC không có lợi thế (spread lớn so với biến động M15) nên không vào lệnh'; continue; }
+      const W = AIB.run(D, { spread: SYMS[sym].spread, from: D.m5.length - 300 }), seen = new Set();
+      for (const s of W) {
+        if (s.ct < AI_DEPLOY) continue;
+        const id = `${sym}-${s.id}`, old = byId.get(id); seen.add(id);
+        if (!old) { const rec = { ...s, id, sym, ver: AIB.version, src: process.env.MOCK_DIR ? 'MOCK' : L_SRC(sym), seen: NOW(), dp: SYMS[sym].dp, live: NOW() - s.ct < 2 * 9e5 + 10 * 60e3 };
+          J.trades.push(rec); byId.set(id, rec); added++; notify(rec); continue; }
+        if (AIB.FINAL[old.state]) continue;
+        const before = old.state; for (const k of ['state', 'exitT', 'exitP', 'r', 'pts']) old[k] = s[k];
+        if (old.state !== before) { changed++; notify(old); }
+      }
+      for (const t of J.trades) if (t.grade === 'I' && t.sym === sym && !AIB.FINAL[t.state] && !seen.has(t.id) && NOW() - t.ct > 2 * 864e5) { t.state = 'TIME'; t.why = 'Ra ngoài cửa sổ dữ liệu'; }
+    } catch (e) { errs.push('🤖 AI ' + sym + ': ' + e.message); }
+  }
+  // kế hoạch phiên: lần chạy đầu sau 13:00 VN (London) và 19:00 VN (New York), ngày thường
+  const vd = new Date(NOW() + 7 * 36e5), vh = vd.getUTCHours(), key = vd.toISOString().slice(0, 10) + (vh >= 19 ? '-19' : vh >= 13 ? '-13' : '');
+  if (/-1[39]$/.test(key) && ![0, 6].includes(vd.getUTCDay()) && !J.ai.plans[key] && J.ai.XAU) { J.ai.plans = { [key]: NOW() };
+    const lines = Object.keys(SYMS).map(sym => { const a = J.ai[sym]; if (!a) return ''; return `<b>${sym}</b> ${(+a.price).toFixed(SYMS[sym].dp)} · <b>${esc(a.biasTxt)}</b>\n${esc(a.trend)}\n${esc(a.now)}\n${a.plan.slice(0, 5).map(x => esc(x)).join('\n')}${a.note ? '\n<i>' + esc(a.note) + '</i>' : ''}`; }).filter(Boolean);
+    toSend.push(`🤖 <b>AI trợ lý · kế hoạch ${vh >= 19 ? 'phiên New York (19h)' : 'phiên London (13h)'}</b>\n${esc(J.ai.XAU.session)}\n\n${lines.join('\n\n')}\n\nAI chỉ vào lệnh vàng khi chấm ≥ ${Math.round(100 * AIM.thr)}% — sẽ báo ngay khi có\n<a href="${PAGE}">Mở trang</a>`); }
+}
 // lệnh treo quá lâu ngoài cửa sổ dữ liệu
-for (const t of J.trades) if (t.grade !== 'W' && t.grade !== 'E' && t.grade !== 'R' && t.grade !== 'Z' && t.grade !== 'C' && t.grade !== 'K' && t.grade !== 'Q' && t.grade !== 'P' && !V3.FINAL[t.state] && NOW() - t.ct > 30 * 864e5) { t.state = 'TIME'; t.why = 'Quá 30 ngày không cập nhật được'; }
+for (const t of J.trades) if (t.grade !== 'I' && t.grade !== 'W' && t.grade !== 'E' && t.grade !== 'R' && t.grade !== 'Z' && t.grade !== 'C' && t.grade !== 'K' && t.grade !== 'Q' && t.grade !== 'P' && !V3.FINAL[t.state] && NOW() - t.ct > 30 * 864e5) { t.state = 'TIME'; t.why = 'Quá 30 ngày không cập nhật được'; }
 // ---- 💼 Tài khoản DEMO (giấy) 500 USD — chạy trên máy chủ, đúng luật 2 EA trên MT5:
 //  EMA_Hoi_ICT (lệnh 🔁 EMA hồi trong giờ cho phép, SL ≤ 30 giá) + EMA21_Test_M30 (lệnh 🧲 Test EMA21) · 0.02 lot · mỗi lần chỉ 1 lệnh trên vàng (giống InpOnlyOneOnSym)
 { const D = J.demo = J.demo || { start: NOW(), bal0: 500, lot: 0.02, taken: [] };
@@ -222,7 +255,7 @@ for (const t of J.trades) if (t.grade !== 'W' && t.grade !== 'E' && t.grade !== 
 }
 J.trades.sort((a, b) => a.ct - b.ct);
 J.updated = NOW(); J.errors = errs;
-J.stats = {}; for (const sym of Object.keys(SYMS)) J.stats[sym] = { phaBienA: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'P')), quetBien: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'Q')), chuan: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'A')), song15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'W')), bos15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'S')), emaHoi: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'E')), vungSR: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'Z' && t.state !== 'SKIP')), test21: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'R')), bos5: BOSRT.stats(J.trades.filter(t => t.sym === sym && t.grade === 'K' && t.ver === BOSRT.version)), congThuc: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'C')), tatca: V3.stats(J.trades.filter(t => t.sym === sym)) };
+J.stats = {}; for (const sym of Object.keys(SYMS)) J.stats[sym] = { aiTroLy: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'I')), phaBienA: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'P')), quetBien: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'Q')), chuan: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'A')), song15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'W')), bos15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'S')), emaHoi: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'E')), vungSR: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'Z' && t.state !== 'SKIP')), test21: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'R')), bos5: BOSRT.stats(J.trades.filter(t => t.sym === sym && t.grade === 'K' && t.ver === BOSRT.version)), congThuc: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'C')), tatca: V3.stats(J.trades.filter(t => t.sym === sym)) };
 fs.mkdirSync(DATA, { recursive: true });
 J.telegram = { chats: CHATS.length, token: !!TOKEN };
 fs.writeFileSync(FILE, JSON.stringify(J));

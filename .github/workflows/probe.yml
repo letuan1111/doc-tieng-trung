@@ -1,0 +1,19 @@
+name: probe-news
+on: push
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          UA="probe-bot/1.0"
+          echo "== FF"; curl -s https://nfs.faireconomy.media/ff_calendar_thisweek.json | head -c 1200; echo
+          echo "== FF high"; curl -s https://nfs.faireconomy.media/ff_calendar_thisweek.json | python3 -c "import json,sys;d=json.load(sys.stdin);print(len(d));[print(x) for x in d if x['impact']=='High']"
+          echo "== BINANCE LS"; curl -s "https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=XAUUSDT&period=1h&limit=3"; echo
+          echo "== BINANCE TOP"; curl -s "https://fapi.binance.com/futures/data/topLongShortPositionRatio?symbol=XAUUSDT&period=1h&limit=3"; echo
+          echo "== BINANCE FUND"; curl -s "https://fapi.binance.com/fapi/v1/premiumIndex?symbol=XAUUSDT"; echo
+          echo "== OKX LS"; curl -s "https://www.okx.com/api/v5/rubik/stat/contracts/long-short-account-ratio-contract?instId=XAU-USDT-SWAP&period=1H&limit=3"; echo
+          echo "== MYFX"; curl -s -A "$UA" "https://www.myfxbook.com/community/outlook/XAUUSD" | grep -o -i "short[^<]\{0,80\}%" | head -5; echo
+          echo "== GNEWS"; curl -s -A "$UA" "https://news.google.com/rss/search?q=gold+price&hl=en-US&gl=US&ceid=US:en" | grep -o "<title>[^<]*</title>" | head -12
+          echo "== YAHOO DXY"; curl -s -A "$UA" "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB?interval=1h&range=5d" | head -c 400; echo
+          echo "== YAHOO TNX"; curl -s -A "$UA" "https://query1.finance.yahoo.com/v8/finance/chart/%5ETNX?interval=1h&range=5d" | head -c 300; echo
+          echo "== CNN FG"; curl -s -A "$UA" "https://production.dataviz.cnn.io/index/fearandgreed/graphdata" | head -c 300; echo

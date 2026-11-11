@@ -70,7 +70,10 @@
       else if (h < 22) plans.push({ k: 'X', txt: `🧭 Chờ nến M15 ĐÓNG ${T > 0 ? 'trên' : 'dưới'} ${f(edge)} (cách ${Math.abs(edge - px).toFixed(1)} giá) → LIMIT ${side} ${f(edge)} · SL ${f(sl)} (${risk.toFixed(1)} giá) · TP ${f(tp)} (2R). Chờ giá test lại tối đa 4h.` });
       else plans.push({ k: 'X', txt: '🧭 Quá 22h — không đặt lệnh mới cho setup này.' }); }
     // 🧱
-    const zr = opt.zr; if (zr && zr.plan && zr.plan.length) for (const p of zr.plan.slice(0, 2)) { const side = p.side > 0 ? 'BUY' : 'SELL';
+    const zr = opt.zr, zp = zr && zr.plan ? zr.plan.slice(0, 2) : [];
+    if (zp.length === 2 && zp[0].zone.lo === zp[1].zone.lo && zp[0].zone.hi === zp[1].zone.hi) { const z = zp[0].zone, b = zp.find(p => p.side > 0), s2 = zp.find(p => p.side < 0);
+      plans.push({ k: 'Z', txt: `🧱 Giá đang nằm TRONG vùng H4/H1 ${f(z.lo)} – ${f(z.hi)} (${z.score} điểm) → chưa vào. Hai hướng chờ: (1) râu M15 quét xuống dưới ${f(b.edge)} (không sâu quá ${f(b.maxSweep)}) rồi đóng lại trong vùng → M15 đóng trên ${f(b.mssNow)} → BUY; (2) râu M15 quét lên trên ${f(s2.edge)} (không quá ${f(s2.maxSweep)}) rồi đóng lại → M15 đóng dưới ${f(s2.mssNow)} → SELL. SL ngoài râu, TP 3R.` }); zp.length = 0; }
+    for (const p of zp) { const side = p.side > 0 ? 'BUY' : 'SELL';
       plans.push({ k: 'Z', txt: `🧱 Vùng ${p.side > 0 ? 'hỗ trợ' : 'kháng cự'} H4/H1 ${f(p.zone.lo)} – ${f(p.zone.hi)} (${p.zone.score} điểm, cách ${p.dist.toFixed(1)} giá): chờ râu M15 ${p.side > 0 ? 'xuyên xuống dưới' : 'xuyên lên trên'} ${f(p.edge)} (không sâu quá ${f(p.maxSweep)}) rồi ĐÓNG lại trong vùng → M15 đóng ${p.side > 0 ? 'trên' : 'dưới'} swing ${f(p.mssNow)} (MSS) → ${side} ngay, SL ngoài râu, TP 3R.${p.need ? ` Cần thêm ${p.need} điểm AI (giờ mạnh 8–9h/19–22h, MSS ≤ 4 nến).` : ''}` }); }
     if (zr && zr.watch && zr.watch.length) for (const w of zr.watch) plans.push({ k: 'Z', txt: `🧱 ĐANG CHỜ MSS: đã quét ${w.side > 0 ? 'đáy' : 'đỉnh'} vùng ${f(w.zone.lo)}–${f(w.zone.hi)} (râu ${f(w.sweep)}) → chờ M15 đóng ${w.side > 0 ? 'trên' : 'dưới'} ${f(w.mss)} trước ${hm(w.until)}. M15 đóng thủng ${f(w.edge)} là huỷ.` });
     // 🎯
@@ -120,7 +123,7 @@
     L.push(`→ <b>${esc(R.trendTxt)}</b>`);
     L.push(`\n<b>2. Thanh khoản đã quét (24h)</b>`);
     if (!R.swept.length) L.push('• Chưa mức nào bị lấy.');
-    for (const s of R.swept.slice(0, 6)) L.push(`• ${hm(s.t)} ${s.back ? 'QUÉT' : 'PHÁ QUA'} ${esc(s.name)} ${f(s.p)} (râu tới ${f(s.ext)}, sâu ${s.deep} giá)${s.back ? ` rồi đóng lại → ${s.side > 0 ? 'BSL' : 'SSL'} đã bị lấy` : ' — nến đóng hẳn bên ngoài'}`);
+    for (const s of R.swept.slice(0, 6)) L.push(`• ${dhm(s.t)} ${s.back ? 'QUÉT' : 'PHÁ QUA'} ${esc(s.name)} ${f(s.p)} (râu tới ${f(s.ext)}, sâu ${s.deep} giá)${s.back ? ` rồi đóng lại → ${s.side > 0 ? 'BSL' : 'SSL'} đã bị lấy` : ' — nến đóng hẳn bên ngoài'}`);
     L.push(`Còn nguyên phía trên: ${R.above.map(z => `${esc(z.name)} ${f(z.p)} (+${z.dist})`).join(' · ') || '—'}`);
     L.push(`Còn nguyên phía dưới: ${R.below.map(z => `${esc(z.name)} ${f(z.p)} (−${z.dist})`).join(' · ') || '—'}`);
     L.push(`\n<b>3. Biên phiên Á</b>\n${esc(R.asiaTxt)}`);

@@ -83,18 +83,38 @@
     const lossToday = (opt.trades || []).filter(z => z.state === 'LOSS').length; if (lossToday >= 2) warn.push(`🛑 Hôm nay đã thua ${lossToday} lệnh → NGHỈ đến mai.`);
     // vị trí giá: giữa biên / sát EMA34
     if (asia && asiaDone && px > asia.l + 0.25 * rng && px < asia.h - 0.25 * rng && Math.abs(E[2].d34) < 0.5 * a) warn.push('⏸ Giá đang lơ lửng giữa biên Á và sát EMA34 M15 — không vào, chờ giá tới mép.');
+    // ---- tin 3 sao hôm nay / ngày mai (giờ VN)
+    const vday = (t) => Math.floor((t + VN) / 864e5), td = vday(now);
+    const newsDay = (opt.newsAll || []).filter(z => vday(z.t) === td || vday(z.t) === td + 1).sort((u, v) => u.t - v.t)
+      .map(z => ({ ...z, day: vday(z.t) === td ? 'hôm nay' : 'ngày mai', done: z.t < now }));
+    // ---- tâm lý thị trường (tổng hợp, chỉ để tham khảo): giá · USD (DXY) · lợi suất Mỹ 10 năm · vị thế đám đông OKX · tin tức
+    const M = opt.mkt || {}, why = []; let sc = 0;
+    const k24 = (() => { let k = n - 1; while (k > 0 && m15[k].ct > now - 864e5) k--; return k; })(), ch = (px - m15[k24].c) / m15[k24].c * 100;
+    if (T) { sc += T; why.push(`EMA34/89 H4+H1 cùng ${T > 0 ? 'tăng (+1 MUA)' : 'giảm (+1 BÁN)'}`); } else why.push('EMA34/89 H4/H1 lệch nhau (0)');
+    if (Math.abs(ch) >= 0.4) { sc += Math.sign(ch); why.push(`vàng 24h ${ch >= 0 ? '+' : ''}${ch.toFixed(2)}% (${ch > 0 ? '+1 MUA' : '+1 BÁN'})`); } else why.push(`vàng 24h ${ch >= 0 ? '+' : ''}${ch.toFixed(2)}% (0)`);
+    if (M.dxy) { const d = M.dxy.chPct; if (Math.abs(d) >= 0.15) { sc -= Math.sign(d); why.push(`USD (DXY ${M.dxy.last.toFixed(2)}) ${d >= 0 ? '+' : ''}${d.toFixed(2)}% 24h → ${d > 0 ? 'USD mạnh, ép vàng (+1 BÁN)' : 'USD yếu, đỡ vàng (+1 MUA)'}`); } else why.push(`DXY ${M.dxy.last.toFixed(2)} gần như đứng yên (${d >= 0 ? '+' : ''}${d.toFixed(2)}%)`); }
+    if (M.us10y) { const d = M.us10y.chBp; if (Math.abs(d) >= 3) { sc -= Math.sign(d); why.push(`lợi suất Mỹ 10 năm ${M.us10y.last.toFixed(2)}% (${d >= 0 ? '+' : ''}${d.toFixed(0)} điểm cơ bản 24h → ${d > 0 ? '+1 BÁN' : '+1 MUA'})`); } else why.push(`lợi suất Mỹ 10 năm ${M.us10y.last.toFixed(2)}% gần như đứng yên`); }
+    if (M.ls) { const r = M.ls.last; if (r >= 2) { sc -= 1; why.push(`đám đông OKX: ${r.toFixed(2)} tài khoản MUA / 1 BÁN → mua quá đông, dễ bị quét ngược (+1 BÁN)`); } else if (r <= 0.8) { sc += 1; why.push(`đám đông OKX: ${r.toFixed(2)} MUA / 1 BÁN → bán quá đông (+1 MUA)`); } else why.push(`đám đông OKX cân bằng (${r.toFixed(2)} MUA / 1 BÁN)`); }
+    if (M.head) { const h = M.head.score; if (Math.abs(h) >= 2) { sc += Math.sign(h); why.push(`tin tức 24h nghiêng ${h > 0 ? 'TĂNG' : 'GIẢM'} (${M.head.bull} tin tăng / ${M.head.bear} tin giảm → +1 ${h > 0 ? 'MUA' : 'BÁN'})`); } else why.push(`tin tức 24h trung tính (${M.head.bull} tăng / ${M.head.bear} giảm)`); }
+    const senti = { score: sc, side: sc >= 2 ? 1 : sc <= -2 ? -1 : 0, txt: sc >= 2 ? 'nghiêng phe MUA' : sc <= -2 ? 'nghiêng phe BÁN' : 'giằng co, chưa rõ phe', why, heads: (M.head && M.head.items || []).slice(0, 5) };
     const S = sessionOf(now);
     return { version, t: now, session: S, price: px, atr: +a.toFixed(dp), ema: E.map(z => ({ nm: z.nm, e34: +z.e34.toFixed(dp), e89: +z.e89.toFixed(dp), dir: z.dir, gap: +z.gap.toFixed(1), d34: +z.d34.toFixed(1), d89: +z.d89.toFixed(1), slope: +z.slope.toFixed(1), pos: z.pos })),
       T, trendTxt, asia: asia ? { h: asia.h, l: asia.l, done: asiaDone, brk } : null, asiaTxt,
       swept: swept.slice(0, 8).map(z => ({ name: z.name, p: z.p, t: z.t, ext: z.ext, back: z.back, deep: +z.deep.toFixed(1), side: z.side })),
       above: above.slice(0, 3).map(z => ({ name: z.name, p: z.p, dist: +(z.p - px).toFixed(1) })), below: below.slice(0, 3).map(z => ({ name: z.name, p: z.p, dist: +(px - z.p).toFixed(1) })),
-      plans, warn, ai: opt.ai ? { biasTxt: opt.ai.biasTxt, now: opt.ai.now } : null, lossToday };
+      plans, warn, news: newsDay, senti, ai: opt.ai ? { biasTxt: opt.ai.biasTxt, now: opt.ai.now } : null, lossToday };
   }
   // văn bản Telegram (HTML)
   function text(R, sym, opt) {
     opt = opt || {}; if (!R) return ''; const dp = opt.dp != null ? opt.dp : 2, f = (v) => (+v).toFixed(dp), esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const L = [];
     L.push(`📋 <b>${sym} · ${esc(R.session.name)}</b> · ${hm(R.t)} · giá <b>${f(R.price)}</b> · ATR M15 ${R.atr}`);
+    L.push(`\n<b>📰 Tin 3 sao</b>`);
+    const nd = R.news || []; if (!nd.length) L.push('• Hôm nay và ngày mai không có tin tác động mạnh.');
+    for (const z of nd) L.push(`• ${z.day} ${hm(z.t)} · ${esc(z.country)} ${esc(z.title)}${z.forecast ? ' · dự báo ' + esc(z.forecast) : ''}${z.previous ? ' · kỳ trước ' + esc(z.previous) : ''}${z.done ? ' · ĐÃ RA' : z.country === 'USD' ? ' · ⚠️ không vào lệnh ±30 phút' : ''}`);
+    if (R.senti) { L.push(`\n<b>🧭 Tâm lý thị trường: ${R.senti.txt.toUpperCase()}</b> (điểm ${R.senti.score >= 0 ? '+' : ''}${R.senti.score})`); for (const w of R.senti.why) L.push('• ' + esc(w));
+      if (R.senti.heads.length) { L.push('Tin nổi bật 24h:'); for (const h of R.senti.heads) L.push(`– ${h.s > 0 ? '🟢' : h.s < 0 ? '🔴' : '⚪'} ${esc(h.title)}`); }
+      L.push('<i>Tâm lý chỉ để tham khảo — chưa kiểm được lợi thế, vào lệnh vẫn theo setup bên dưới.</i>'); }
     L.push(`\n<b>1. Xu hướng EMA34/89</b>`);
     for (const e of R.ema) L.push(`• ${e.nm}: EMA34 ${f(e.e34)} ${e.dir > 0 ? '&gt;' : '&lt;'} EMA89 ${f(e.e89)} (${e.dir > 0 ? 'TĂNG ▲' : 'GIẢM ▼'}, cách nhau ${e.gap}) · giá ${e.pos} (${e.d34 >= 0 ? '+' : ''}${e.d34} so với EMA34, ${e.d89 >= 0 ? '+' : ''}${e.d89} so với EMA89) · EMA34 ${e.slope > 0.5 ? 'dốc lên' : e.slope < -0.5 ? 'dốc xuống' : 'đi ngang'}`);
     L.push(`→ <b>${esc(R.trendTxt)}</b>`);

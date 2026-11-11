@@ -257,17 +257,33 @@ for (const sym of Object.keys(SYMS)) {
 // ---- 📋 BÁO CÁO PHIÊN (kế hoạch giao dịch): EMA34/89 H4/H1/M15 · thanh khoản đã quét · biên Á · chờ test/hồi về đâu cho 🧭 🧱 🎯 · không vào khi
 //      tính mỗi lượt cho web; gửi Telegram lần chạy đầu sau 7h · 13h · 19h VN (ngày thường)
 try {
-  if (!process.env.MOCK_DIR && (!J.newsAt || NOW() - J.newsAt > 6 * 36e5)) { try { const ff = await j('https://nfs.faireconomy.media/ff_calendar_thisweek.json');
-      J.news = ff.filter(z => z.country === 'USD' && z.impact === 'High').map(z => ({ t: Date.parse(z.date), title: 'USD ' + z.title })).filter(z => isFinite(z.t)); J.newsAt = NOW(); } catch (e) { errs.push('Lịch tin: ' + e.message); } }
+  if (!process.env.MOCK_DIR && (!J.newsAt || NOW() - J.newsAt > 3 * 36e5)) { try { const ff = await j('https://nfs.faireconomy.media/ff_calendar_thisweek.json');
+      J.newsAll = ff.filter(z => z.impact === 'High' && ['USD', 'EUR', 'GBP', 'JPY', 'CNY', 'CHF', 'AUD', 'CAD'].includes(z.country)).map(z => ({ t: Date.parse(z.date), country: z.country, title: z.title, forecast: z.forecast || '', previous: z.previous || '' })).filter(z => isFinite(z.t));
+      J.news = J.newsAll.filter(z => z.country === 'USD').map(z => ({ t: z.t, title: 'USD ' + z.title })); J.newsAt = NOW(); } catch (e) { errs.push('Lịch tin: ' + e.message); } }
+  // tâm lý thị trường: DXY + lợi suất 10 năm (Yahoo), tỉ lệ tài khoản Long/Short XAU (OKX), tiêu đề tin vàng (Google News) — làm mới mỗi 30 phút
+  if (!process.env.MOCK_DIR && (!J.mktAt || NOW() - J.mktAt > 18e5)) {
+    const M = J.mkt || {}, UA = { 'user-agent': 'tin-hieu-bot/1.0' };
+    const yh = async (sym) => { const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1h&range=5d`, { headers: UA, signal: AbortSignal.timeout(15000) }); const o = (await r.json()).chart.result[0];
+      const ts = o.timestamp, cl = o.indicators.quote[0].close; const pts = ts.map((t, i) => [t * 1000, cl[i]]).filter(z => z[1] != null); const last = pts[pts.length - 1]; let prev = pts[0]; for (const z of pts) if (z[0] <= last[0] - 864e5) prev = z; return { last: last[1], prev: prev[1], t: last[0] }; };
+    try { const d = await yh('DX-Y.NYB'); M.dxy = { last: d.last, chPct: (d.last - d.prev) / d.prev * 100, t: d.t }; } catch (e) { errs.push('DXY: ' + e.message); }
+    try { const d = await yh('^TNX'); M.us10y = { last: d.last, chBp: (d.last - d.prev) * 100, t: d.t }; } catch (e) { errs.push('Lợi suất 10 năm: ' + e.message); }
+    try { const o = await j('https://www.okx.com/api/v5/rubik/stat/contracts/long-short-account-ratio-contract?instId=XAU-USDT-SWAP&period=1H&limit=25'); const a = o.data || [];
+      if (a.length) M.ls = { last: +a[0][1], prev: +a[a.length - 1][1], t: +a[0][0] }; } catch (e) { errs.push('Long/Short OKX: ' + e.message); }
+    try { const r = await fetch('https://news.google.com/rss/search?q=gold+price+OR+XAUUSD&hl=en-US&gl=US&ceid=US:en', { headers: UA, signal: AbortSignal.timeout(15000) }); const x = await r.text();
+      const BULL = /\b(rise|rises|rising|rose|gain|gains|gained|rally|rallies|rallied|jump|jumps|surge|surges|higher|rebound|rebounds|climb|climbs|record|bullish|soar|soars|advance|advances|upside)\b/i, BEAR = /\b(fall|falls|falling|fell|drop|drops|dropped|slip|slips|decline|declines|lower|slump|tumble|tumbles|bearish|retreat|retreats|plunge|plunges|sink|sinks|pressure|weighs|slide|slides|downside)\b/i;
+      const items = [...x.matchAll(/<item>([\s\S]*?)<\/item>/g)].map(m => { const g = (k) => ((m[1].match(new RegExp(`<${k}[^>]*>([\\s\\S]*?)<\\/${k}>`)) || [])[1] || '').replace(/<!\[CDATA\[|\]\]>/g, '').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
+        const title = g('title'), t = Date.parse(g('pubDate')); const s = (BULL.test(title) ? 1 : 0) - (BEAR.test(title) ? 1 : 0); return { title, t, s }; }).filter(z => isFinite(z.t) && z.t > NOW() - 864e5).sort((a, b) => b.t - a.t);
+      M.head = { score: items.reduce((u, z) => u + z.s, 0), bull: items.filter(z => z.s > 0).length, bear: items.filter(z => z.s < 0).length, n: items.length, items: items.slice(0, 8) }; } catch (e) { errs.push('Tin tức: ' + e.message); }
+    J.mkt = M; J.mktAt = NOW(); }
   J.kh = J.kh || {}; const sent = J.kh.sent || {};
   const Dk = DS.XAU; if (Dk && Dk.m15 && Dk.h1) {
     const zr = ZONES.analyze({ h1: Dk.h1, m15: Dk.m15 }, { spread: SYMS.XAU.spread });
     const xh = J.trades.filter(t => t.grade === 'X' && t.sym === 'XAU').sort((a, b) => a.t - b.t).slice(-1)[0];
     const d0 = Math.floor((NOW() + 7 * 36e5) / 864e5), today = J.trades.filter(t => PLAN.has(t.grade) && t.tgOK && t.exitT && Math.floor((t.exitT + 7 * 36e5) / 864e5) === d0);
-    const R = KH.report({ m15: Dk.m15, h1: Dk.h1 }, { spread: SYMS.XAU.spread, dp: 2, now: NOW(), zr, xh, news: J.news || [], trades: today, ai: J.ai && J.ai.XAU });
+    const R = KH.report({ m15: Dk.m15, h1: Dk.h1 }, { spread: SYMS.XAU.spread, dp: 2, now: NOW(), zr, xh, news: J.news || [], newsAll: J.newsAll || [], mkt: J.mkt || {}, trades: today, ai: J.ai && J.ai.XAU });
     if (R) { R.text = KH.text(R, 'XAU', { dp: 2 }); J.kh.XAU = R;
       const vd = new Date(NOW() + 7 * 36e5), vh = vd.getUTCHours(), key = vd.toISOString().slice(0, 10) + '-' + (vh >= 19 ? 'N' : vh >= 13 ? 'L' : vh >= 7 ? 'A' : '');
-      if (/-[ALN]$/.test(key) && ![0, 6].includes(vd.getUTCDay()) && !sent[key] && vh < 23) { toSend.push(R.text + `\n<a href="${PAGE}">Mở trang</a>`); J.kh.sent = { [key]: NOW() }; }
+      if (/-[ALN]$/.test(key) && ![0, 6].includes(vd.getUTCDay()) && !sent[key] && vh < 23) { { const full = R.text + `\n<a href="${PAGE}">Mở trang</a>`; if (full.length <= 4000) toSend.push(full); else { const cut = full.indexOf('\n<b>1. Xu hướng'); toSend.push(full.slice(0, cut)); toSend.push('📋 <b>XAU (tiếp)</b>' + full.slice(cut)); } } J.kh.sent = { [key]: NOW() }; }
       else J.kh.sent = sent; }
   }
 } catch (e) { errs.push('📋 Báo cáo phiên: ' + e.message); }

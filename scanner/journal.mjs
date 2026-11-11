@@ -340,17 +340,40 @@ for (const t of J.trades) if (t.grade !== 'I' && t.grade !== 'W' && t.grade !== 
   const pl = D.balance - D.bal0, wr = C.length ? Math.round(100 * D.wins / C.length) : 0;
   const openTxt = D.open ? `\n🟢 Đang mở: ${D.open.grade === 'Z' ? '🧱 AI Vùng S/R' : D.open.grade === 'R' ? '🧲 Test EMA21' : '🔁 EMA hồi'} ${D.open.side > 0 ? 'BUY' : 'SELL'} · Entry ${(+D.open.entry).toFixed(2)} · SL ${(+D.open.sl).toFixed(2)} · TP ${(+D.open.tp).toFixed(2)}` : '\nKhông có lệnh đang mở';
   if (!D.openMsg) { D.openMsg = NOW(); if (false) toSend.push(`💼 <b>Đã mở tài khoản demo ${D.bal0}$</b> (giấy, trên máy chủ)\nVào lệnh đúng luật 2 EA: 🔁 EMA hồi (giờ tốt, SL ≤ 30) + 🧲 Test EMA21 M30 · 0.02 lot · mỗi lần 1 lệnh\nBáo kết quả mỗi lệnh và số dư lúc 22h mỗi ngày\n<a href="${PAGE}">Mở trang</a>`); }
-  // Telegram chỉ gửi cách 🔂 BOS M5: báo cáo cuối ngày (lần chạy đầu sau 22h VN) là thống kê BOS M5, kèm số dư demo 1 dòng
-  if (D.dailyDay !== today && vh >= 22) { D.dailyDay = today;
-    const lines = Object.keys(SYMS).map(sym => { const K = J.trades.filter(t => t.grade === 'K' && t.sym === sym && t.ver === BOSRT.version), st = BOSRT.stats(K), td = K.filter(t => t.fillT && t.fillT >= dayStart && /WIN|LOSS|TIME/.test(t.state)), tR = td.reduce((a, t) => a + (t.r || 0), 0);
-      return `<b>${sym}</b> hôm nay: ${td.length} lệnh · ${td.filter(t => t.state === 'WIN').length} TP · ${td.filter(t => t.state === 'LOSS').length} SL · ${tR >= 0 ? '+' : ''}${tR.toFixed(2)}R\n   Tổng: ${st.n} lệnh · thắng ${(100 * st.win).toFixed(0)}% (hoà vốn 45%) · ${st.R >= 0 ? '+' : ''}${st.R.toFixed(1)}R · ${st.perDay.toFixed(1)} lệnh/ngày${st.pending ? ` · ${st.pending} limit đang chờ` : ''}${st.open ? ` · ${st.open} lệnh đang chạy` : ''}`; });
-    toSend.push(`📊 <b>🔂 BOS M5 + retest · tổng kết ${vnD(NOW()).toISOString().slice(8, 10)}/${vnD(NOW()).toISOString().slice(5, 7)}</b>\n${lines.join('\n')}\n<i>Tổng gồm cả 12 tháng tính lại trên OKX + lệnh thật từ 07/11</i>\n<a href="${PAGE}">Mở trang</a>`); }
+  // (22h: báo cáo tài khoản DEMO-500 giống MT5 — xem khối J.acct bên dưới)
 }
 J.trades.sort((a, b) => a.ct - b.ct);
 J.updated = NOW(); J.errors = errs;
 J.stats = {}; for (const sym of Object.keys(SYMS)) J.stats[sym] = { hoiSau: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'H')), keHoach: V3.stats(J.trades.filter(t => t.sym === sym && PLAN.has(t.grade))), xuHuong: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'X')), giuLai: V3.stats(J.trades.filter(t => t.sym === sym && KEEP.has(t.grade) && t.state !== 'SKIP')), aiTroLy: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'I')), phaBienA: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'P')), quetBien: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'Q')), chuan: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'A')), song15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'W')), bos15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'S')), emaHoi: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'E')), vungSR: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'Z' && t.state !== 'SKIP')), test21: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'R')), bos5: BOSRT.stats(J.trades.filter(t => t.sym === sym && t.grade === 'K' && t.ver === BOSRT.version)), congThuc: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'C')), tatca: V3.stats(J.trades.filter(t => t.sym === sym)) };
 fs.mkdirSync(DATA, { recursive: true });
 J.telegram = { chats: CHATS.length, token: !!TOKEN };
+// ---- 💼 TÀI KHOẢN DEMO-500 giống MT5 (mở 11/11/2026 theo yêu cầu Letuan): máy TỰ vào đúng các lệnh bot gửi Telegram
+//  (kế hoạch 🧭 X · 🧱 Z · 🎯 H, đã qua luật "không vào khi") · 0.02 lot · lệnh limit nằm ở "Lệnh chờ" tới khi khớp · khớp/đóng theo nến M5 giá TradingView, có spread
+//  Ký quỹ đòn bẩy 1:500 · chưa tính swap qua đêm và hoa hồng
+{ const A = J.acct = J.acct || { login: 'DEMO-500', server: 'Máy chủ bot (tài khoản giấy)', start: NOW(), bal0: 500, lot: 0.02, lev: 500, next: 100000001, orders: [] };
+  const CS = { XAU: 100, BTC: 1 }, FINX = (st) => /^(WIN|LOSS|TIME)$/.test(st), CANC = (st) => /^(EXPIRED|INVALID|SKIP|MISSED|CANCEL)/.test(st);
+  const have = new Set(A.orders.map(o => o.id));
+  for (const t of J.trades.filter(t => t.live && TGONLY(t.grade) && t.tgOK && t.ct >= A.start && !have.has(t.id)).sort((a, b) => a.ct - b.ct)) {
+    A.orders.push({ ticket: A.next++, id: t.id, sym: t.sym, grade: t.grade, model: t.model, side: t.side, lot: A.lot, placed: t.ct, kind: t.state === 'PENDING' || (t.fillT && t.fillT > t.ct + 6e4) || (!t.fillT && !FINX(t.state)) ? 'limit' : 'market', entry: t.entry, sl: t.sl, tp: t.tp, state: t.state, pxSrc: t.pxSrc || null });
+    have.add(t.id); }
+  for (const o of A.orders) { if (o.closed) continue; const t = byId.get(o.id); if (!t) continue;
+    Object.assign(o, { state: t.state, entry: t.entry, sl: t.sl, tp: t.tp, exitT: t.exitT || null, exitP: t.exitP != null ? t.exitP : null });
+    if (!o.fillT && (t.state === 'OPEN' || FINX(t.state))) o.fillT = t.fillT || t.ct;
+    if (FINX(t.state) && o.exitP != null) { o.closed = true; o.profit = +(o.side * (o.exitP - o.entry) * CS[o.sym] * o.lot).toFixed(2); o.reason = t.state === 'WIN' ? 'TP' : t.state === 'LOSS' ? 'SL' : 'Hết giờ giữ lệnh'; }
+    else if (CANC(t.state)) { o.closed = true; o.cancelled = true; o.profit = 0; o.reason = 'Huỷ lệnh chờ' + (t.why ? ': ' + t.why : ''); o.exitT = o.exitT || NOW(); } }
+  let bal = A.bal0, peak = A.bal0, dd = 0;
+  for (const o of A.orders.filter(o => o.closed && !o.cancelled).sort((a, b) => (a.exitT || 0) - (b.exitT || 0))) { bal += o.profit; o.bal = +bal.toFixed(2); peak = Math.max(peak, bal); dd = Math.max(dd, peak - bal); }
+  let fl = 0, mg = 0;
+  for (const o of A.orders.filter(o => !o.closed && o.fillT)) { const c = DS[o.sym] && DS[o.sym].m5 ? DS[o.sym].m5 : DS[o.sym] && DS[o.sym].m15; const px = c && c.length ? c[c.length - 1].c : null;
+    if (px == null) continue; const cl = o.side > 0 ? px : px + SYMS[o.sym].spread; o.cur = cl; o.float = +(o.side * (cl - o.entry) * CS[o.sym] * o.lot).toFixed(2); fl += o.float; mg += o.lot * CS[o.sym] * o.entry / A.lev; }
+  const W = A.orders.filter(o => o.closed && !o.cancelled);
+  Object.assign(A, { balance: +bal.toFixed(2), floating: +fl.toFixed(2), equity: +(bal + fl).toFixed(2), margin: +mg.toFixed(2), free: +(bal + fl - mg).toFixed(2), level: mg ? +((bal + fl) / mg * 100).toFixed(0) : null,
+    maxDD: +dd.toFixed(2), wins: W.filter(o => o.profit > 0).length, losses: W.filter(o => o.profit < 0).length, closedN: W.length, updated: NOW() });
+  // Telegram: báo cáo tài khoản lần chạy đầu sau 22h VN
+  const vD = (t) => new Date(t + 7 * 36e5), td = vD(NOW()).toISOString().slice(0, 10), hh = vD(NOW()).getUTCHours(), d0 = Date.parse(td + 'T00:00:00Z') - 7 * 36e5;
+  if (A.dayRep !== td && hh >= 22) { A.dayRep = td; const T = W.filter(o => (o.exitT || 0) >= d0), tP = T.reduce((a, o) => a + o.profit, 0), op = A.orders.filter(o => !o.closed);
+    toSend.push(`💼 <b>Tài khoản ${A.login}</b> · ${td.slice(8, 10)}/${td.slice(5, 7)}\nSố dư <b>${A.balance.toFixed(2)}$</b> · Vốn (equity) ${A.equity.toFixed(2)}$ · thả nổi ${A.floating >= 0 ? '+' : ''}${A.floating.toFixed(2)}$\nHôm nay: ${T.length} lệnh đóng · ${T.filter(o => o.profit > 0).length} lời · ${T.filter(o => o.profit < 0).length} lỗ · ${tP >= 0 ? '+' : ''}${tP.toFixed(2)}$\nTừ lúc mở (${vD(A.start).toISOString().slice(8, 10)}/${vD(A.start).toISOString().slice(5, 7)}): ${A.closedN} lệnh · ${A.balance - A.bal0 >= 0 ? '+' : ''}${(A.balance - A.bal0).toFixed(2)}$ · sụt tối đa ${A.maxDD.toFixed(2)}$${op.length ? '\n' + op.map(o => `${o.fillT ? '🟢 Đang chạy' : '⏳ Lệnh chờ'} #${o.ticket} ${o.side > 0 ? 'BUY' : 'SELL'}${o.fillT ? '' : ' LIMIT'} ${o.sym} 0.02 @ ${o.entry.toFixed(SYMS[o.sym].dp)}${o.float != null ? ` · ${o.float >= 0 ? '+' : ''}${o.float.toFixed(2)}$` : ''}`).join('\n') : '\nKhông có lệnh mở'}\n<a href="${PAGE}">Mở trang</a>`); }
+}
 for (const t of J.trades) if (t.seen && t.seen >= RUN0 && !t.pxSrc) pxTag(t); // lệnh mới lượt này: ghi rõ đang là giá gì
 J.tvInfo = Object.fromEntries(Object.keys(SYMS).map(k => [k, { code: J.tv[k].code, ok: !!J.tv[k].ok, on: TVON(k), off: J.tv[k].off, n: J.tv[k].n || 0, at: J.tv[k].at || null, px: J.tv[k].px || null, okx: J.tv[k].okx || null, okxInst: SYMS[k].okx, src: SRC[k] || null, err: J.tv[k].lastErr || null }]));
 try { fs.writeFileSync(path.join(DATA, 'tv.json'), JSON.stringify({ updated: NOW(), ...J.tvInfo })); } catch (_) {}

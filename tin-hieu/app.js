@@ -468,6 +468,36 @@
       <div class="tw" style="margin-top:10px"><table><thead><tr><th>Khớp lúc</th><th>Lệnh</th><th>Entry</th><th>SL</th><th>TP 1.2R</th><th>Kết quả</th></tr></thead><tbody>${rows || `<tr><td colspan="6" class="muted">${J ? 'Chưa có lệnh BOS M5 trong nhật ký máy chủ — máy chủ bắt đầu ghi ở lần chạy tới.' : 'Đang tải nhật ký máy chủ…'}</td></tr>`}</tbody></table></div>
       <p class="note" style="margin-top:6px"><b>Luật:</b> EMA34 ${'>'} EMA89 M30 và M30 đóng trên EMA34 → chỉ BUY (ngược lại SELL) · nến M5 đóng phá swing gần nhất → LIMIT tại mức phá, chờ test ≤ 6h · SL đáy/đỉnh swing của chân phá · TP 1.2R · giữ ≤ 24h · mỗi lần 1 lệnh · giá test trong giờ cấm thì bỏ lệnh và đứng ngoài tới khi lệnh đó kết thúc. Kiểm ${esc(BOSRT.BACKTEST[sym] || '')}.</p>`;
   }
+  // ---------------- 💼 Tài khoản DEMO giống MT5 ----------------
+  const CSZ = { XAU: 100, BTC: 1 };
+  function renderAcct() {
+    const el = $('acctStats'); if (!el) return; const A = S.journal && S.journal.acct;
+    if (!A) { el.innerHTML = '<div><b>500.00$</b><small>Máy chủ mở tài khoản ở lần chạy tới</small></div>'; $('acctTbl').innerHTML = ''; $('acctMeta').textContent = ''; return; }
+    const dp = (sym) => (SYMS[sym] && SYMS[sym].dp) || 2, f2 = (v) => (v >= 0 ? '' : '−') + Math.abs(v).toFixed(2), sg = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(2);
+    // lời/lỗ thả nổi: mã đang xem dùng giá trực tiếp trên trang (đã căn TradingView), mã còn lại dùng số máy chủ
+    const open = A.orders.filter(o => !o.closed && o.fillT), pend = A.orders.filter(o => !o.closed && !o.fillT);
+    let fl = 0, mg = 0; for (const o of open) { const d = S.raw[o.sym]; let cur = o.cur, fv = o.float || 0;
+      if (o.sym === S.sym && d && d.m5.length && (S.curOff != null)) { const px = d.m5[d.m5.length - 1].c + (S.curOff || 0); cur = o.side > 0 ? px : px + SYMS[o.sym].spread; fv = o.side * (cur - o.entry) * CSZ[o.sym] * o.lot; }
+      o._cur = cur; o._fl = fv; fl += fv; mg += o.lot * CSZ[o.sym] * o.entry / A.lev; }
+    const eq = A.balance + fl, free = eq - mg, lvl = mg ? eq / mg * 100 : null, pl = A.balance - A.bal0, wr = A.closedN ? Math.round(100 * A.wins / A.closedN) : 0;
+    el.innerHTML = `<div><b>${A.balance.toFixed(2)}$</b><small>Số dư</small></div><div><b>${eq.toFixed(2)}$</b><small>Vốn (equity)</small></div>
+      <div><b class="${fl > 0 ? 'win' : fl < 0 ? 'loss' : ''}">${sg(fl)}$</b><small>Lời/lỗ thả nổi</small></div><div><b>${mg.toFixed(2)}$</b><small>Ký quỹ</small></div>
+      <div><b>${free.toFixed(2)}$</b><small>Ký quỹ tự do</small></div><div><b>${lvl ? lvl.toFixed(0) + '%' : '—'}</b><small>Mức ký quỹ</small></div>
+      <div><b class="${pl >= 0 ? 'win' : 'loss'}">${sg(pl)}$</b><small>Lời/lỗ từ lúc mở</small></div><div><b>${A.closedN ? wr + '%' : '—'}</b><small>${A.wins} lời · ${A.losses} lỗ · sụt ${A.maxDD.toFixed(2)}$</small></div>`;
+    $('acctMeta').textContent = `${A.login} · mở ${ft(A.start)} · vốn ${A.bal0}$ · 1:${A.lev} · máy chủ cập nhật ${ft(A.updated)}`;
+    const typ = (o) => `<span class="chip ${o.side > 0 ? 'buy' : 'sell'}">${o.side > 0 ? 'buy' : 'sell'}${!o.fillT && !o.closed ? ' limit' : ''}</span>`;
+    const mdl = (o) => o.grade === 'X' ? '🧭' : o.grade === 'Z' ? '🧱' : o.grade === 'H' ? '🎯' : o.grade;
+    if (S.acctTab === 'hist') {
+      const H = A.orders.filter(o => o.closed).slice().reverse();
+      $('acctTbl').innerHTML = `<thead><tr><th>Ticket</th><th>Mở lúc</th><th>Loại</th><th>Lot</th><th>Mã</th><th>Giá vào</th><th>S/L</th><th>T/P</th><th>Đóng lúc</th><th>Giá đóng</th><th>Lý do</th><th>Lợi nhuận</th><th>Số dư</th></tr></thead><tbody>${H.length ? H.map(o => `<tr${o.cancelled ? ' class="muted"' : ''}><td class="mono">${o.ticket}</td><td>${ft(o.fillT || o.placed)}</td><td>${mdl(o)} ${typ(o)}</td><td>${o.lot.toFixed(2)}</td><td>${o.sym}</td><td class="mono">${o.entry.toFixed(dp(o.sym))}</td><td class="mono">${o.sl.toFixed(dp(o.sym))}</td><td class="mono">${o.tp.toFixed(dp(o.sym))}</td><td>${o.exitT ? ft(o.exitT) : '—'}</td><td class="mono">${o.exitP != null ? o.exitP.toFixed(dp(o.sym)) : '—'}</td><td title="${esc(o.reason || '')}">${o.cancelled ? 'Huỷ lệnh chờ' : esc(o.reason || '')}</td><td class="${o.profit > 0 ? 'win' : o.profit < 0 ? 'loss' : 'muted'}">${o.cancelled ? '—' : sg(o.profit)}</td><td>${o.bal != null ? o.bal.toFixed(2) : '—'}</td></tr>`).join('') : '<tr><td colspan="13" class="muted">Chưa có lệnh nào đóng.</td></tr>'}</tbody>`;
+    } else {
+      const rows = [...open.map(o => `<tr><td class="mono">${o.ticket}</td><td>${ft(o.fillT)}</td><td>${mdl(o)} ${typ(o)}</td><td>${o.lot.toFixed(2)}</td><td>${o.sym}</td><td class="mono">${o.entry.toFixed(dp(o.sym))}</td><td class="mono">${o.sl.toFixed(dp(o.sym))}</td><td class="mono">${o.tp.toFixed(dp(o.sym))}</td><td class="mono">${o._cur != null ? o._cur.toFixed(dp(o.sym)) : '—'}</td><td class="${o._fl > 0 ? 'win' : o._fl < 0 ? 'loss' : ''}"><b>${sg(o._fl || 0)}</b></td></tr>`),
+        ...(pend.length ? [`<tr><td colspan="10" class="muted" style="padding-top:10px">Lệnh chờ</td></tr>`] : []),
+        ...pend.map(o => `<tr><td class="mono">${o.ticket}</td><td>${ft(o.placed)}</td><td>${mdl(o)} ${typ(o)}</td><td>${o.lot.toFixed(2)}</td><td>${o.sym}</td><td class="mono">${o.entry.toFixed(dp(o.sym))}</td><td class="mono">${o.sl.toFixed(dp(o.sym))}</td><td class="mono">${o.tp.toFixed(dp(o.sym))}</td><td class="muted">chờ giá chạm</td><td class="muted">—</td></tr>`)];
+      $('acctTbl').innerHTML = `<thead><tr><th>Ticket</th><th>Thời gian</th><th>Loại</th><th>Lot</th><th>Mã</th><th>Giá vào</th><th>S/L</th><th>T/P</th><th>Giá hiện tại</th><th>Lợi nhuận</th></tr></thead><tbody>${rows.length ? rows.join('') : '<tr><td colspan="10" class="muted">Không có lệnh đang chạy hay lệnh chờ — máy đang đợi tín hiệu 🧭 🧱 🎯.</td></tr>'}</tbody>`;
+    }
+  }
+  document.querySelectorAll('#acctTabs button').forEach(b => b.onclick = () => { S.acctTab = b.dataset.a; document.querySelectorAll('#acctTabs button').forEach(x => x.classList.toggle('on', x === b)); renderAcct(); });
   function renderDemo(J) {
     const D = J && J.demo, el = $('dStats'); if (!el) return;
     if (!D) { el.innerHTML = '<div><b>—</b><small>Máy chủ mở tài khoản ở lần chạy tới</small></div>'; $('dBody').innerHTML = ''; $('dOpen').textContent = ''; return; }
@@ -479,7 +509,7 @@
   }
   function renderJournal() {
     const J = S.journal;
-    renderDemo(J); renderK(); renderAI(); renderKH();
+    renderDemo(J); renderAcct(); renderK(); renderAI(); renderKH();
     if (!J) { $('jBody').innerHTML = `<tr><td colspan="9" class="muted">${S.jErr ? 'Chưa đọc được nhật ký (' + esc(S.jErr) + '). Máy chủ ghi lần đầu sau khi workflow chạy.' : 'Đang tải nhật ký…'}</td></tr>`; return; }
     const rows = jRows(), st = V3.stats(rows.filter(t => t.state !== 'SKIP')), p = (t, v) => v == null ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: t.dp || 2, maximumFractionDigits: t.dp || 2 });
     setTimeout(() => { const b = $('jMore'); if (b) b.onclick = () => { S.jLimit = (S.jLimit || 200) + 300; renderJournal(); }; });
@@ -604,6 +634,7 @@
       $('offNote').innerHTML = S.isMT5 ? 'Giá MT5 Exness (không căn).' : S.tvUsed ? `💱 <b>Giá TradingView ${esc(S.tvNow.code)}</b> — đã cộng ${off >= 0 ? '+' : ''}${fx(off)} vào giá ${esc(S.srcName)} (máy chủ so TradingView lúc ${ft(S.tvNow.at)}, ${S.tvNow.n} mẫu). Mọi Entry/SL/TP trên trang là giá TradingView.`
         : S.align === 'tv' ? `<span class="loss">Chưa căn được theo TradingView (${esc(S.tvErr || '?')}) — đang hiện giá gốc ${esc(S.srcName)}.</span>` : off ? `Đã căn theo giá Exness nhập tay: chênh ${off >= 0 ? '+' : ''}${fx(off)} so với nguồn dữ liệu.` : `Giá gốc ${esc(S.srcName)} (không căn).`;
       $('src').textContent = S.srcName + (S.tvUsed ? ' → giá TradingView' : '') + (MT5.db && !S.isMT5 ? ' (MT5 chưa kết nối)' : ''); $('src').className = 'chip ' + (S.isMT5 || S.tvUsed ? 'buy' : (MT5.db ? 'warn' : ''));
+      renderAcct();
       S.k = window.BOSRT ? BOSRT.run({ m5: cd.m5, m15: cd.m15 }, { spread: SYMS[sym].spread, sym }) : null; renderK();
       S.zr = window.ZONES ? ZONES.analyze({ h1: cd.h1, m15: cd.m15, m5: cd.m5 }, { spread: SYMS[sym].spread }) : null; if ($('znow')) $('znow').innerHTML = zCard();
       $('proj').innerHTML = projCard(); // engine cũ (entry M5) đã bỏ khỏi trang

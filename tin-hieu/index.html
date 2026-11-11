@@ -68,6 +68,16 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 
 <main>
   <section style="display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-content:start;min-width:0">
+    <div class="card" id="acctCard" style="border-color:color-mix(in srgb,var(--gold) 45%,var(--line))">
+      <div style="display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;justify-content:space-between">
+        <h3 style="margin:0">💼 Tài khoản DEMO 500$ · máy tự vào lệnh 0.02 lot</h3>
+        <span class="note" id="acctMeta">Đang tải tài khoản…</span>
+      </div>
+      <div class="stat" id="acctStats" style="margin-top:10px"></div>
+      <div class="seg" id="acctTabs" style="margin:10px 0 8px"><button data-a="pos" class="on">Giao dịch</button><button data-a="hist">Lịch sử</button></div>
+      <div class="tw"><table id="acctTbl"></table></div>
+      <p class="note" style="margin:6px 0 0">Giống MT5: máy chủ tự đặt đúng các lệnh bot gửi Telegram (🧭 Phá biên Á · 🧱 Vùng S/R · 🎯 Hồi sâu, đã qua luật "không vào khi"), 0.02 lot, lệnh LIMIT nằm ở "Lệnh chờ" tới khi giá chạm. Khớp và đóng theo nến M5 giá TradingView, có spread. Đòn bẩy 1:500. Chưa tính swap qua đêm và hoa hồng. Chạy cả khi bạn tắt máy.</p>
+    </div>
     <div class="card">
       <div class="price"><b id="px">—</b><span id="chg" class="chip">—</span><span id="src" class="chip">đang tải…</span><span id="upd" class="note"></span></div>
       <div class="note" id="offNote" style="margin-top:4px"></div>
@@ -128,7 +138,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
     <div class="card" id="kCard">
       <h3>🔂 BOS M5 + retest — tỷ lệ vào lệnh riêng · TP 1.2R · bỏ giờ thua · đã thôi gửi Telegram (11/11)</h3>
       <div id="know"><p class="note">Đang tính…</p></div>
-    </div>    <div class="card" id="demoCard">
+    </div>    <div class="card hide" id="demoCard">
       <h3>💼 Tài khoản demo 500$ — chạy đúng luật EA (EMA hồi + Test EMA21 M30) và 🤖 AI Vùng S/R, 0.02 lot, mỗi lần 1 lệnh</h3>
       <div class="stat" id="dStats"></div>
       <div id="dOpen" class="note" style="margin-bottom:8px"></div>
@@ -191,6 +201,6 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 <script src="ai.js?v=1"></script>
 <script src="xuhuong.js?v=1"></script>
 <script src="hoisau.js?v=1"></script>
-<script src="app.js?v=42"></script>
+<script src="app.js?v=43"></script>
 </body>
 </html>

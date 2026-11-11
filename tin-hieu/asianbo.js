@@ -31,7 +31,7 @@
         const d = up ? 1 : -1, entry = d > 0 ? lvB : lvS, slRaw = d > 0 ? r.l - buf : r.h + buf, cap = cfg.capPct / 100 * entry;
         const sl0 = d * (entry - slRaw) > cap ? entry - d * cap : slRaw, risk = Math.abs(entry - sl0), tp = entry + d * cfg.rr * risk;
         const s = { id: `pb-${k}-${d > 0 ? 'B' : 'S'}`, tf: 'm5', model: NAME, grade: 'P', side: d, t: z.t, ct: z.t + bar, entry, sl: sl0, tp, risk, rr: cfg.rr, spread: SP,
-          range: { hi: r.h, lo: r.l, pct: +pct.toFixed(2) }, state: 'OPEN', fillT: z.t, exitT: null, exitP: null, r: null, pts: null, tgOK: false, hour: (hU(z.t) + 7) % 24,
+          range: { hi: r.h, lo: r.l, pct: +pct.toFixed(2) }, state: 'OPEN', fillT: z.t, exitT: null, exitP: null, r: null, pts: null, tgOK: true, hour: (hU(z.t) + 7) % 24,
           info: [`biên phiên Á (7h–13h VN) ${r.l.toFixed(2)}–${r.h.toFixed(2)} = ${w.toFixed(1)} giá (${pct.toFixed(2)}% giá)`, `${d > 0 ? 'BUY STOP' : 'SELL STOP'} ${entry.toFixed(2)} khớp lúc ${vn(z.t)} VN`, `SL phía bên kia biên ${sl0.toFixed(2)} (${risk.toFixed(1)} giá)${d * (entry - slRaw) > cap ? ' — giới hạn 0.6% giá' : ''}`, `TP 2.5R ${tp.toFixed(2)} · lời 1.5R dời SL về hoà vốn · 2h sáng VN còn lệnh thì đóng`] };
         // quản lý: nến khớp chỉ xét SL (bảo thủ)
         let sl = sl0, be = false, u = j;
@@ -53,5 +53,5 @@
     if (!nA) return null; const pct = 100 * (h - l) / ((h + l) / 2); return { day: k, hi: h, lo: l, pct, ok: pct >= cfg.minPct && pct <= cfg.maxPct, done: hU(c[c.length - 1].t) >= cfg.asiaEndH }; }
   const FINAL = { WIN: 1, LOSS: 1, TIME: 1 };
   const RULE = 'Biên phiên Á 7h–13h VN (rộng 0.3–1.6% giá) → 13h VN đặt BUY STOP trên đỉnh / SELL STOP dưới đáy (khớp 1 huỷ 1, 1 lệnh/ngày, vào đến 22h) → SL phía bên kia biên (≤ 0.6% giá) · TP 2.5R · lời 1.5R dời hoà vốn · 2h sáng đóng';
-  return { run, plan, CFG, FINAL, RULE, NAME, version, telegram: false }; // sụt tối đa lớn ở năm 2026 → chỉ ghi nhật ký
+  return { run, plan, CFG, FINAL, RULE, NAME, version, telegram: true }; // 11/11/2026: lời cả 2 năm (audit-all) → gửi Telegram; sụt tối đa lớn → lot nhỏ
 });

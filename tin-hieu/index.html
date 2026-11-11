@@ -167,7 +167,8 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
         <label class="f hide">Điểm tối thiểu<input id="cScore" type="number" step="5" min="50" max="100" value="85"></label>
         <label class="f">Vốn tài khoản (USD)<input id="rBal" type="number" step="10" min="0" placeholder="VD: 1000"></label>
         <label class="f">Rủi ro mỗi lệnh (%)<input id="rPct" type="number" step="0.1" min="0.1" max="5" value="1"></label>
-        <label class="f full">Giá Exness/MT5 hiện tại (để căn chỉnh chênh lệch)<input id="cEx" type="number" step="0.01" placeholder="VD: 4003.25 — để trống = không chỉnh"></label>
+        <label class="f full">Căn giá theo<select id="cAlign"><option value="tv">💱 TradingView (tự động — OANDA:XAUUSD / BITSTAMP:BTCUSD)</option><option value="ex">Giá Exness/MT5 nhập tay ở dưới</option><option value="none">Không căn (giá gốc Binance/OKX)</option></select></label>
+        <label class="f full">Giá Exness/MT5 hiện tại (chỉ dùng khi chọn "nhập tay")<input id="cEx" type="number" step="0.01" placeholder="VD: 4003.25 — để trống = không chỉnh"></label>
         <button class="btn full" id="cApply">Áp dụng</button>
       </div>
       <p class="note">Nguồn: vàng = Binance Futures XAUUSDT (dự phòng OKX, Bybit); BTC = Binance BTCUSDT. Giá này lệch Exness vài giá; nhập giá Exness để các mức Entry/SL/TP được dời theo đúng chênh lệch.</p>
@@ -190,6 +191,6 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 <script src="ai.js?v=1"></script>
 <script src="xuhuong.js?v=1"></script>
 <script src="hoisau.js?v=1"></script>
-<script src="app.js?v=41"></script>
+<script src="app.js?v=42"></script>
 </body>
 </html>

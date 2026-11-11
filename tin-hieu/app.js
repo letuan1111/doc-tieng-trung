@@ -10,7 +10,7 @@
       { n: 'Binance Futures XAUUSDT', f: (iv, tot) => binance('XAUUSDT', iv, tot, true) },
       { n: 'OKX XAU-USDT-SWAP', f: (iv, tot) => okx('XAU-USDT-SWAP', iv, Math.min(tot, 1400)) },
       { n: 'Bybit XAUUSDT', f: (iv, tot) => bybit('XAUUSDT', iv, Math.min(tot, 1000)) }] },
-    BTC: { name: 'BTCUSD', dp: 2, minBuf: 40, spread: 20, tv: 'BINANCE:BTCUSDT', src: [
+    BTC: { name: 'BTCUSD', dp: 2, minBuf: 40, spread: 20, tv: 'BITSTAMP:BTCUSD', src: [
       { n: 'Binance BTCUSDT', f: (iv, tot) => binance('BTCUSDT', iv, tot, false) },
       { n: 'OKX BTC-USDT', f: (iv, tot) => okx('BTC-USDT', iv, Math.min(tot, 1400)) },
       { n: 'Bybit BTCUSDT', f: (iv, tot) => bybit('BTCUSDT', iv, Math.min(tot, 1000), 'spot') }] },
@@ -59,7 +59,7 @@
   // ---------------- trạng thái ----------------
   const S = {
     sym: LS.get('smc.sym', 'XAU'), tf: 'm15', view: 'chart', srcIdx: {}, raw: {}, res: null, offset: LS.get('smc.off', {}),
-    cfg: Object.assign({ mode: 'strict', entry: 'A', minRR: 1.5, minScore: 85, tier: 'A' }, LS.get('smc.cfg', {})), seen: LS.get('smc.seen', {}), notif: LS.get('smc.notif', false),
+    cfg: Object.assign({ mode: 'strict', entry: 'A', minRR: 1.5, minScore: 85, tier: 'A' }, LS.get('smc.cfg', {})), seen: LS.get('smc.seen', {}), notif: LS.get('smc.notif', false), align: LS.get('smc.align', 'tv'), tvFd: {},
   };
 
   async function loadAll(sym, full) {
@@ -80,6 +80,19 @@
       } catch (e) { lastErr = e; console.warn('Nguồn lỗi', e); }
     }
     throw lastErr || new Error('Không tải được dữ liệu');
+  }
+  // ---- 💱 giá TradingView: máy chủ (GitHub) lấy giá TradingView + giá OKX mỗi 5 phút → tv.json (độ lệch TV − OKX, trung vị ~1 giờ)
+  // trình duyệt lấy giá OKX và giá nguồn đang dùng CÙNG LÚC → độ lệch nguồn = (TV − OKX) + (OKX − nguồn) → cộng vào mọi nến
+  const TVJ = 'https://raw.githubusercontent.com/letuan1111/doc-tieng-trung/bot-data/tv.json';
+  async function tvOffset(sym, d) {
+    try { if (!S.tvj || Date.now() - S.tvjAt > 4 * 60e3) { S.tvj = await getJSON(TVJ + '?t=' + Date.now()); S.tvjAt = Date.now(); } } catch (e) { S.tvErr = 'không đọc được tv.json'; return null; }
+    const T = S.tvj && S.tvj[sym]; if (!T || !T.ok || !T.at || Date.now() - T.at > 3 * 864e5) { S.tvErr = 'máy chủ chưa lấy được giá TradingView'; return null; }
+    const last = d.m5[d.m5.length - 1].c; let fd = 0;
+    if (!/^OKX XAU-USDT-SWAP|^OKX BTC-USDT-SWAP/.test(S.srcName || '')) {
+      try { const tk = await getJSON(`https://www.okx.com/api/v5/market/ticker?instId=${T.okxInst}`), ok = +tk.data[0].last, src = (await sources(sym)[S.srcIdx[sym] || 0].f('5m', 2)).slice(-1)[0].c;
+        const A = S.tvFd[sym] = [...(S.tvFd[sym] || []), ok - src].slice(-8); const v = [...A].sort((a, b) => a - b); fd = v[v.length >> 1];
+      } catch (e) { const A = S.tvFd[sym]; if (A && A.length) { const v = [...A].sort((a, b) => a - b); fd = v[v.length >> 1]; } else { S.tvErr = 'không lấy được giá OKX để so'; return null; } } }
+    S.tvErr = ''; S.tvNow = { code: T.code, off: T.off, fd, at: T.at, n: T.n, px: T.px }; return +(T.off + fd).toFixed(SYMS[sym].dp);
   }
   const closedOnly = (d, off) => {
     const now = Date.now(), o = {};
@@ -479,7 +492,7 @@
     $('jBody').innerHTML = rows.length ? shown.map(t => `<tr><td>${ft(t.ct)}</td><td>${t.sym} · ${t.tf.toUpperCase()} ${GR(t)}${t.grade === 'K' && t.tgOK ? ' <span class="chip" title="Lệnh trong khung giờ thắng cao — có gửi Telegram">📲</span>' : ''}</td><td><span class="chip ${t.side > 0 ? 'buy' : 'sell'}">${t.side > 0 ? 'BUY' : 'SELL'}</span></td>
       <td class="mono">${t.sweepName ? esc(t.sweepName) + ' ' + p(t, t.sweep) : t.grade === 'P' || t.grade === 'X' ? `biên Á ${p(t, t.range && t.range.lo)}–${p(t, t.range && t.range.hi)}` : t.grade === 'I' ? esc((t.types || []).join(' + ')) : '—'}</td><td class="mono">${p(t, t.entry)}${t.fvg ? `<br><small class="note">FVG ${t.tf.toUpperCase()} ${p(t, t.fvg.bot)}–${p(t, t.fvg.top)}</small>` : ''}</td><td class="mono">${p(t, t.sl)}</td><td class="mono">${p(t, t.tp)}</td>
       <td class="${t.r > 0 ? 'win' : t.r < 0 ? 'loss' : 'muted'}">${V3.STATE_VI[t.state] || t.state}${t.r != null ? ` (${t.r > 0 ? '+' : ''}${t.r.toFixed(2)}R)` : ''}</td>
-      <td class="note">${t.ctx ? '<span title="Bối cảnh giá lúc tín hiệu">' + esc(V3.ctxText(t.ctx)) + '</span><br>' : ''}${t.grade === 'H' || t.grade === 'X' ? `${t.gate ? '⛔ không gửi Telegram: ' + esc(t.gate) + ' · ' : ''}${esc((t.info || []).join(' · '))}${t.why ? ' · ' + esc(t.why) : ''}${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'I' ? `🤖 AI chấm ${Math.round(100 * (t.prob || 0))}% · ${esc((t.info || []).join(' · '))}${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'P' ? `${esc((t.info || []).join(' · '))}${t.why ? ' · ' + esc(t.why) : ''}${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'Q' ? `${esc((t.info || []).join(' · '))}${t.after && t.after.length ? ' · sau khi vào: ' + esc(t.after.join(', ')) : ''}${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'K' ? `EMA34 ${p(t, t.ema34)} / EMA89 ${p(t, t.ema89)} M30 · M5 phá ${t.side > 0 ? 'đỉnh' : 'đáy'} swing ${p(t, t.lvl)} → limit chờ test đến ${ft(t.expT)}${t.fillT ? ` · test lúc ${ft(t.fillT)}` : ''} · SL ${t.side > 0 ? 'đáy' : 'đỉnh'} swing${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(t.dp === 1 ? 0 : 1)} giá` : ''} ` : t.grade === 'Z' ? `Vùng ${p(t, t.zone && t.zone.lo)}–${p(t, t.zone && t.zone.hi)} (${t.zone ? t.zone.score : '?'}đ) · MSS M15 qua ${p(t, t.mss)} sau ${t.mssBars} nến · 🤖 ${t.ai} điểm: ${esc((t.aiWhy || []).join(', '))}${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'R' ? `EMA34 ${p(t, t.ema34)} / EMA89 ${p(t, t.ema89)} M30 · test EMA21 M30 ${p(t, t.ema21)} lúc ${ft(t.touchT)} (râu ${p(t, t.touchP)}) → nến M5 bật lại → vào ngay${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'E' ? `EMA ${esc(t.emaTF || 'M15')} · hồi về EMA34 lúc ${ft(t.pullT)} (${esc(t.sweepName)}) → ${esc(t.breakType || 'MSS')} M5 + FVG${t.ob ? ' + OB' : ''} → vào ngay · EMA34 ${p(t, t.ema34)} / EMA89 ${p(t, t.ema89)}${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'W' ? `Quét ${esc(t.sweepName)} lúc ${ft(t.sweepT)} → MSS M5 sau ${t.mssMin} phút · mục tiêu ${p(t, Math.abs(t.tp - t.entry))} giá${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.ver && t.ver !== V3.version ? '[' + esc(t.ver) + '] ' : (!t.ver ? '[v3 cũ] ' : '')}${esc(t.why || '')}${t.live === false ? ' · tính lại từ lịch sử' : ''}${t.fillT ? ' · khớp ' + ft(t.fillT) : ''}${t.exitT && t.state !== 'PENDING' && t.state !== 'OPEN' ? ' · đóng ' + ft(t.exitT) : ''} · ${esc(t.src || '')}</td></tr>`).join('') + (rows.length > lim ? `<tr><td colspan="9" style="text-align:center"><button class="btn" id="jMore">Hiện thêm (${rows.length - lim} lệnh cũ hơn)</button></td></tr>` : '')
+      <td class="note">${t.pxSrc ? `<span class="chip" title="${esc(t.pxSrc)}" style="margin-right:4px">${/TradingView/.test(t.pxSrc) ? '💱 giá TV' : 'giá ' + esc((t.src || '').split(' ')[0])}</span>` : ''}${t.ctx ? '<span title="Bối cảnh giá lúc tín hiệu">' + esc(V3.ctxText(t.ctx)) + '</span><br>' : ''}${t.grade === 'H' || t.grade === 'X' ? `${t.gate ? '⛔ không gửi Telegram: ' + esc(t.gate) + ' · ' : ''}${esc((t.info || []).join(' · '))}${t.why ? ' · ' + esc(t.why) : ''}${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'I' ? `🤖 AI chấm ${Math.round(100 * (t.prob || 0))}% · ${esc((t.info || []).join(' · '))}${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'P' ? `${esc((t.info || []).join(' · '))}${t.why ? ' · ' + esc(t.why) : ''}${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'Q' ? `${esc((t.info || []).join(' · '))}${t.after && t.after.length ? ' · sau khi vào: ' + esc(t.after.join(', ')) : ''}${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'K' ? `EMA34 ${p(t, t.ema34)} / EMA89 ${p(t, t.ema89)} M30 · M5 phá ${t.side > 0 ? 'đỉnh' : 'đáy'} swing ${p(t, t.lvl)} → limit chờ test đến ${ft(t.expT)}${t.fillT ? ` · test lúc ${ft(t.fillT)}` : ''} · SL ${t.side > 0 ? 'đáy' : 'đỉnh'} swing${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(t.dp === 1 ? 0 : 1)} giá` : ''} ` : t.grade === 'Z' ? `Vùng ${p(t, t.zone && t.zone.lo)}–${p(t, t.zone && t.zone.hi)} (${t.zone ? t.zone.score : '?'}đ) · MSS M15 qua ${p(t, t.mss)} sau ${t.mssBars} nến · 🤖 ${t.ai} điểm: ${esc((t.aiWhy || []).join(', '))}${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'R' ? `EMA34 ${p(t, t.ema34)} / EMA89 ${p(t, t.ema89)} M30 · test EMA21 M30 ${p(t, t.ema21)} lúc ${ft(t.touchT)} (râu ${p(t, t.touchP)}) → nến M5 bật lại → vào ngay${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'E' ? `EMA ${esc(t.emaTF || 'M15')} · hồi về EMA34 lúc ${ft(t.pullT)} (${esc(t.sweepName)}) → ${esc(t.breakType || 'MSS')} M5 + FVG${t.ob ? ' + OB' : ''} → vào ngay · EMA34 ${p(t, t.ema34)} / EMA89 ${p(t, t.ema89)}${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.grade === 'W' ? `Quét ${esc(t.sweepName)} lúc ${ft(t.sweepT)} → MSS M5 sau ${t.mssMin} phút · mục tiêu ${p(t, Math.abs(t.tp - t.entry))} giá${t.pts != null ? ` · kết quả ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(1)} giá` : ''} ` : t.ver && t.ver !== V3.version ? '[' + esc(t.ver) + '] ' : (!t.ver ? '[v3 cũ] ' : '')}${esc(t.why || '')}${t.live === false ? ' · tính lại từ lịch sử' : ''}${t.fillT ? ' · khớp ' + ft(t.fillT) : ''}${t.exitT && t.state !== 'PENDING' && t.state !== 'OPEN' ? ' · đóng ' + ft(t.exitT) : ''} · ${esc(t.src || '')}</td></tr>`).join('') + (rows.length > lim ? `<tr><td colspan="9" style="text-align:center"><button class="btn" id="jMore">Hiện thêm (${rows.length - lim} lệnh cũ hơn)</button></td></tr>` : '')
       : '<tr><td colspan="9" class="muted">Chưa có lệnh nào trong nhật ký.</td></tr>';
   }
   function journalCSV() {
@@ -579,16 +592,18 @@
     try {
       const sym = S.sym, d = await loadAll(sym, full);
       if (sym !== S.sym) return;
-      const off = S.isMT5 ? 0 : (S.offset[sym] || 0);
-      const cd = closedOnly(d, off);
+      let off = 0; S.tvUsed = false;
+      if (!S.isMT5) { if (S.align === 'tv') { const o = await tvOffset(sym, d); if (o != null) { off = o; S.tvUsed = true; } } else if (S.align === 'ex') off = S.offset[sym] || 0; }
+      S.curOff = off; const cd = closedOnly(d, off);
       S.res = SMC.analyze(cd, { ...S.cfg, minBuf: SYMS[sym].minBuf, spread: SYMS[sym].spread });
       { const all = V3.runAll({ m15: cd.m15, h1: cd.h1 }, { spread: SYMS[sym].spread, now: Date.now() }); S.v3 = sym === 'XAU' ? [...all, ...V3.runBos({ m15: cd.m15, h1: cd.h1 }, { spread: SYMS[sym].spread, now: Date.now() })].sort((a, b) => a.ct - b.ct) : all; }
       const m5 = d.m5, last = m5[m5.length - 1], prevDay = m5[Math.max(0, m5.length - 289)];
       $('px').textContent = fx(last.c + off);
       const ch = (last.c - prevDay.c) / prevDay.c * 100; $('chg').textContent = (ch >= 0 ? '+' : '') + ch.toFixed(2) + '% 24h'; $('chg').className = 'chip ' + (ch >= 0 ? 'buy' : 'sell');
-      $('src').textContent = S.srcName; $('src').className = 'chip ' + (S.isMT5 ? 'buy' : (MT5.db ? 'warn' : ''));
-      if (MT5.db && !S.isMT5) $('src').textContent += ' (MT5 chưa kết nối)'; $('upd').textContent = 'Cập nhật ' + new Date().toLocaleTimeString('vi-VN');
-      $('offNote').textContent = off ? `Đã căn theo giá Exness: chênh ${off >= 0 ? '+' : ''}${fx(off)} so với nguồn dữ liệu.` : '';
+      $('upd').textContent = 'Cập nhật ' + new Date().toLocaleTimeString('vi-VN');
+      $('offNote').innerHTML = S.isMT5 ? 'Giá MT5 Exness (không căn).' : S.tvUsed ? `💱 <b>Giá TradingView ${esc(S.tvNow.code)}</b> — đã cộng ${off >= 0 ? '+' : ''}${fx(off)} vào giá ${esc(S.srcName)} (máy chủ so TradingView lúc ${ft(S.tvNow.at)}, ${S.tvNow.n} mẫu). Mọi Entry/SL/TP trên trang là giá TradingView.`
+        : S.align === 'tv' ? `<span class="loss">Chưa căn được theo TradingView (${esc(S.tvErr || '?')}) — đang hiện giá gốc ${esc(S.srcName)}.</span>` : off ? `Đã căn theo giá Exness nhập tay: chênh ${off >= 0 ? '+' : ''}${fx(off)} so với nguồn dữ liệu.` : `Giá gốc ${esc(S.srcName)} (không căn).`;
+      $('src').textContent = S.srcName + (S.tvUsed ? ' → giá TradingView' : '') + (MT5.db && !S.isMT5 ? ' (MT5 chưa kết nối)' : ''); $('src').className = 'chip ' + (S.isMT5 || S.tvUsed ? 'buy' : (MT5.db ? 'warn' : ''));
       S.k = window.BOSRT ? BOSRT.run({ m5: cd.m5, m15: cd.m15 }, { spread: SYMS[sym].spread, sym }) : null; renderK();
       S.zr = window.ZONES ? ZONES.analyze({ h1: cd.h1, m15: cd.m15, m5: cd.m5 }, { spread: SYMS[sym].spread }) : null; if ($('znow')) $('znow').innerHTML = zCard();
       $('proj').innerHTML = projCard(); // engine cũ (entry M5) đã bỏ khỏi trang
@@ -608,7 +623,7 @@
     try {
       const src = sources(S.sym)[S.srcIdx[S.sym] || 0], a = await src.f('5m', 2);
       const m = new Map(d.m5.map(x => [x.t, x])); a.forEach(x => m.set(x.t, x)); d.m5 = [...m.values()].sort((p, q) => p.t - q.t);
-      const off = S.isMT5 ? 0 : (S.offset[S.sym] || 0), l = d.m5[d.m5.length - 1]; $('px').textContent = fx(l.c + off);
+      const off = S.curOff || 0, l = d.m5[d.m5.length - 1]; $('px').textContent = fx(l.c + off);
       cs && cs.update && S.tf === 'm5' && cs.update({ time: tsec(l.t), open: l.o + off, high: l.h + off, low: l.l + off, close: l.c + off });
     } catch (_) {}
   }
@@ -630,11 +645,11 @@
     MT5.db = $('mDb').value.trim(); MT5.XAU = $('mX').value.trim() || 'XAUUSDm'; MT5.BTC = $('mB').value.trim() || 'BTCUSDm';
     LS.set('smc.mt5', MT5); S.srcIdx = {}; S.raw = {}; S.botLogin = null; loadBot(); toast(MT5.db ? 'Đã lưu – đang lấy dữ liệu từ MT5…' : 'Đã tắt nguồn MT5'); refresh(true);
   };
+  $('cAlign').value = S.align;
   $('cApply').onclick = () => {
     S.cfg = { tier: $('cTier').value, mode: $('cMode').value, entry: $('cEntry').value, minRR: +$('cRR').value || 1.5, minScore: +$('cScore').value || 85 }; LS.set('smc.cfg', S.cfg);
     const ex = parseFloat($('cEx').value), d = S.raw[S.sym];
-    if (isFinite(ex) && d) { S.offset[S.sym] = +(ex - d.m5[d.m5.length - 1].c).toFixed(3); LS.set('smc.off', S.offset); }
-    else if ($('cEx').value === '' ) { /* giữ nguyên */ }
+    S.align = $('cAlign').value; if (isFinite(ex) && d) { S.offset[S.sym] = +(ex - d.m5[d.m5.length - 1].c).toFixed(3); LS.set('smc.off', S.offset); if (S.align === 'tv') { S.align = 'ex'; $('cAlign').value = 'ex'; } } LS.set('smc.align', S.align);
     refresh(false); toast('Đã áp dụng cài đặt');
   };
   const nb = $('notifBtn');

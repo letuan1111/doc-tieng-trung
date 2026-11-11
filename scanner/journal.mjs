@@ -27,10 +27,11 @@ const SYMS = { XAU: { okx: 'XAU-USDT-SWAP', mt5: 'XAUUSDm', spread: 0.35, dp: 2 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 async function j(u) { for (let k = 0; k < 4; k++) { try { const r = await fetch(u, { signal: AbortSignal.timeout(20000) }); if (r.ok) return await r.json(); } catch (_) {} await sleep(1500 * (k + 1)); } throw new Error('Không tải được ' + u.slice(0, 80)); }
 const BAR = { m5: '5m', m15: '15m', h1: '1H' }; NEED.m5 = 2000;
+const OFF = {}; // 💱 độ lệch TradingView − OKX theo instId (cộng vào mọi nến OKX → mọi giá trong nhật ký & Telegram là giá TradingView)
 async function okx(inst, tf) {
   let out = (await j(`https://www.okx.com/api/v5/market/candles?instId=${inst}&bar=${BAR[tf]}&limit=300`)).data || [];
   while (out.length < NEED[tf]) { const a = (await j(`https://www.okx.com/api/v5/market/history-candles?instId=${inst}&bar=${BAR[tf]}&limit=100&after=${out[out.length - 1][0]}`)).data || []; if (!a.length) break; out = out.concat(a); await sleep(120); }
-  return out.reverse().map(k => ({ t: +k[0], ct: +k[0] + MS[tf], o: +k[1], h: +k[2], l: +k[3], c: +k[4] }));
+  const d = OFF[inst] || 0; return out.reverse().map(k => ({ t: +k[0], ct: +k[0] + MS[tf], o: +k[1] + d, h: +k[2] + d, l: +k[3] + d, c: +k[4] + d }));
 }
 async function mt5(sym, tf) {
   const o = await j(`${FB}/mt5/${sym}/${tf}.json`); if (!o) return null;
@@ -71,7 +72,7 @@ function tgText(t) {
   const f = (v) => v == null ? '—' : (+v).toFixed(t.dp ?? 2), side = t.side > 0 ? 'BUY' : 'SELL', tag = t.grade === 'H' ? '🎯 Hồi sâu qua EMA89' : t.grade === 'X' ? '🧭 Phá biên Á theo xu hướng' : t.grade === 'I' ? '🤖 AI trợ lý' : t.grade === 'P' ? '🌅 Phá biên phiên Á' : t.grade === 'Q' ? '💧 Quét biên tích lũy' : t.grade === 'K' ? '🔂 BOS M5 + retest' : t.grade === 'C' ? '📐 Công thức' : t.grade === 'Z' ? '🧱 AI Vùng S/R H4/H1' : t.grade === 'R' ? '🧲 Test EMA21 M30' : t.grade === 'E' ? '🔁 EMA hồi' : t.grade === 'S' ? '🎯 BOS 15' : t.grade === 'W' ? '🌊 Sóng 15' : t.grade === 'B' ? '🔎 Ghi nhận' : '⭐ Chuẩn';
   const head = `<b>${t.sym} · ${t.tf.toUpperCase()} · ${side} ${t.grade === 'E' || t.grade === 'R' || t.grade === 'Z' || t.grade === 'I' || t.grade === 'P' || t.grade === 'H' ? 'VÀO NGAY' : 'LIMIT'}</b> — ${tag}`;
   const zone = `Vùng FVG ${t.tf.toUpperCase()}: ${f(t.fvg && t.fvg.bot)} – ${f(t.fvg && t.fvg.top)}`;
-  const lv = `Entry <b>${f(t.entry)}</b> · SL <b>${f(t.sl)}</b> · TP <b>${f(t.tp)}</b> (${(t.rr || 2).toFixed(1)}R)`;
+  const lv = `Entry <b>${f(t.entry)}</b> · SL <b>${f(t.sl)}</b> · TP <b>${f(t.tp)}</b> (${(t.rr || 2).toFixed(1)}R)${t.pxSrc ? `\n💱 ${t.pxSrc}` : ''}`;
   const sw = `Đã quét ${esc(t.sweepName)} ${f(t.sweep)} → MSS + FVG`;
   switch (t.state) {
     case 'PENDING': if (t.grade === 'I') { const R0 = (AIM.report.rows || []).find(r => r.thr === AIM.thr) || {};
@@ -112,13 +113,39 @@ function gate(t) {
   if (J.trades.some(z => PLAN.has(z.grade) && z !== t && z.tgOK && z.live && z.state === 'OPEN')) return 'đang có lệnh khác của kế hoạch';
   return null;
 }
-const notify = (t) => { if (t.live && TGONLY(t.grade) && t.tgOK && !t.tg && !t.gated) { t.gated = true; const why = gate(t); if (why) { t.tgOK = false; t.gate = why; } } if (!t.live || !TGONLY(t.grade) || !(t.tgOK || (t.tg && t.tg.length))) return; t.tg = t.tg || []; if (t.state === 'OPEN' && !t.tg.includes('PENDING')) { t.tg.push('PENDING'); if (NOWIN(t.grade)) t.tg.push('OPEN'); toSend.push(tgText({ ...t, state: 'PENDING' })); } if (NOWIN(t.grade) && !t.tg.includes('PENDING')) { t.tg.push('PENDING', 'OPEN'); toSend.push(tgText({ ...t, state: 'PENDING' })); }
+const pxTag = (t) => { if (t.pxSrc || !t.sym) return; const T = J.tv[t.sym]; if (TVON(t.sym)) { t.pxSrc = `Giá TradingView ${T.code} (đã cộng ${T.off >= 0 ? '+' : ''}${T.off} vào giá OKX)`; t.tvOff = T.off; } else t.pxSrc = 'Giá ' + (SRC[t.sym] || 'OKX') + (J.tv[t.sym] && J.tv[t.sym].code ? ' — chưa lấy được giá TradingView' : ''); };
+const notify = (t) => { pxTag(t); if (t.live && TGONLY(t.grade) && t.tgOK && !t.tg && !t.gated) { t.gated = true; const why = gate(t); if (why) { t.tgOK = false; t.gate = why; } } if (!t.live || !TGONLY(t.grade) || !(t.tgOK || (t.tg && t.tg.length))) return; t.tg = t.tg || []; if (t.state === 'OPEN' && !t.tg.includes('PENDING')) { t.tg.push('PENDING'); if (NOWIN(t.grade)) t.tg.push('OPEN'); toSend.push(tgText({ ...t, state: 'PENDING' })); } if (NOWIN(t.grade) && !t.tg.includes('PENDING')) { t.tg.push('PENDING', 'OPEN'); toSend.push(tgText({ ...t, state: 'PENDING' })); }
   if (V3.FINAL[t.state] && t.fillT && !t.tg.includes('OPEN') && t.state !== 'SKIP') { t.tg.push('OPEN'); toSend.push(tgText({ ...t, state: 'OPEN' })); } if (t.tg.includes(t.state)) return; t.tg.push(t.state); toSend.push(tgText(t)); };
 const closed = (c) => c.filter(x => x.ct <= NOW());
 
 const RULES = 'Ghi nhận mọi setup ICT/SMC quét thanh khoản (PDH/PDL, tuần, London, phiên Á, swing) → MSS + FVG; nhãn Chuẩn = Quét PDH/PDL → MSS có displacement → limit tại FVG · M15: cấu trúc swing H4 cùng chiều, ngoài phiên Á (mép, SL+0.5ATR) · M30: mọi setup (CE, SL+1ATR) · H1: cả hai chiều (mép, SL+1ATR) · chờ khớp M15 6h / M30 10h / H1 16h · TP 2R';
 let J = { version: V3.version, rules: RULES, trades: [] };
 try { J = { ...J, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) }; } catch (_) {}
+// ---- 💱 Giá theo TradingView: mỗi lượt lấy giá TradingView + giá OKX cùng lúc → độ lệch = trung vị 12 lượt gần nhất (~1 giờ)
+// cộng độ lệch vào nến OKX trước khi phân tích → Entry/SL/TP trên web & Telegram là giá TradingView (MT5 Exness thì giữ nguyên giá MT5)
+const TVC = { XAU: process.env.TV_XAU || 'OANDA:XAUUSD', BTC: process.env.TV_BTC || 'BITSTAMP:BTCUSD' };
+async function tvPrice(code) {
+  const tries = [
+    async () => (await j(`https://scanner.tradingview.com/symbol?symbol=${encodeURIComponent(code)}&fields=close`)).close,
+    async () => { const r = await fetch('https://scanner.tradingview.com/global/scan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ symbols: { tickers: [code], query: { types: [] } }, columns: ['close'] }), signal: AbortSignal.timeout(15000) }); const x = await r.json(); return x.data && x.data[0] && x.data[0].d[0]; }];
+  for (const f of tries) { try { const v = +(await f()); if (isFinite(v) && v > 0) return v; } catch (e) { console.log('TradingView lỗi', code, e.message); } }
+  return null;
+}
+const goldOpenNow = (t) => { const d = new Date(t + 7 * 36e5), wd = d.getUTCDay(), h = d.getUTCHours(); return wd === 0 ? false : wd === 6 ? h < 4 : wd === 1 ? h >= 5 : true; };
+J.tv = J.tv || {}; const RUN0 = NOW() - 1000;
+for (const sym of Object.keys(SYMS)) {
+  const T = J.tv[sym] = { hist: [], ...(J.tv[sym] || {}), code: TVC[sym], okxInst: SYMS[sym].okx };
+  if (!process.env.MOCK_DIR && (sym !== 'XAU' || goldOpenNow(Date.now()))) { // vàng cuối tuần: TradingView đứng giá, OKX vẫn chạy → không lấy mẫu
+    try { const [px, tk] = await Promise.all([tvPrice(T.code), j(`https://www.okx.com/api/v5/market/ticker?instId=${SYMS[sym].okx}`)]), ok = tk && tk.data && tk.data[0] && +tk.data[0].last;
+      if (px && ok) T.hist = [...T.hist.filter(h => h.code === T.code), { at: Date.now(), px, okx: ok, d: +(px - ok).toFixed(4), code: T.code }].slice(-12);
+      else T.lastErr = 'Không lấy được giá ' + (px ? 'OKX' : 'TradingView ' + T.code); } catch (e) { T.lastErr = e.message; }
+  }
+  const H = T.hist.filter(h => (process.env.MOCK_DIR ? 0 : Date.now()) - h.at < 3 * 864e5);
+  if (H.length) { const v = H.map(h => h.d).sort((a, b) => a - b); T.off = +v[v.length >> 1].toFixed(SYMS[sym].dp); T.n = H.length; T.at = H[H.length - 1].at; T.px = H[H.length - 1].px; T.okx = H[H.length - 1].okx; T.ok = true; OFF[SYMS[sym].okx] = T.off; }
+  else { T.ok = false; T.off = 0; }
+}
+const TVON = (sym) => !!(J.tv[sym] && J.tv[sym].ok) && !/^MT5/.test(SRC[sym] || '');
+const pxLabel = (t) => t.pxSrc ? t.pxSrc : '';
 // đổi bản quy tắc: bỏ các lệnh "tính lại" của bản cũ (sẽ tính lại theo bản mới), giữ nguyên lệnh đã ghi trực tiếp
 if (J.version !== V3.version) J.trades = J.trades.filter(t => t.live || (t.grade === 'W' && t.ver === WAVE.version) || (t.grade === 'E' && t.ver === EMAPB.version) || (t.grade === 'R' && t.ver === EMA21.version) || (t.grade === 'Z' && t.ver === ZONES.version) || (t.grade === 'Q' && t.ver === QB.version) || (t.grade === 'P' && t.ver === PB.version) || (t.grade === 'C' && t.ver === CT.version) || (t.grade === 'K' && t.ver === BOSRT.version) || (t.grade === 'I' && t.ver === AIB.version) || (t.grade === 'X' && t.ver === XH.version) || (t.grade === 'H' && t.ver === HS.version));
 J.version = V3.version; J.rules = RULES;
@@ -324,6 +351,9 @@ J.updated = NOW(); J.errors = errs;
 J.stats = {}; for (const sym of Object.keys(SYMS)) J.stats[sym] = { hoiSau: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'H')), keHoach: V3.stats(J.trades.filter(t => t.sym === sym && PLAN.has(t.grade))), xuHuong: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'X')), giuLai: V3.stats(J.trades.filter(t => t.sym === sym && KEEP.has(t.grade) && t.state !== 'SKIP')), aiTroLy: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'I')), phaBienA: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'P')), quetBien: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'Q')), chuan: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'A')), song15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'W')), bos15: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'S')), emaHoi: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'E')), vungSR: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'Z' && t.state !== 'SKIP')), test21: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'R')), bos5: BOSRT.stats(J.trades.filter(t => t.sym === sym && t.grade === 'K' && t.ver === BOSRT.version)), congThuc: V3.stats(J.trades.filter(t => t.sym === sym && t.grade === 'C')), tatca: V3.stats(J.trades.filter(t => t.sym === sym)) };
 fs.mkdirSync(DATA, { recursive: true });
 J.telegram = { chats: CHATS.length, token: !!TOKEN };
+for (const t of J.trades) if (t.seen && t.seen >= RUN0 && !t.pxSrc) pxTag(t); // lệnh mới lượt này: ghi rõ đang là giá gì
+J.tvInfo = Object.fromEntries(Object.keys(SYMS).map(k => [k, { code: J.tv[k].code, ok: !!J.tv[k].ok, on: TVON(k), off: J.tv[k].off, n: J.tv[k].n || 0, at: J.tv[k].at || null, px: J.tv[k].px || null, okx: J.tv[k].okx || null, okxInst: SYMS[k].okx, src: SRC[k] || null, err: J.tv[k].lastErr || null }]));
+try { fs.writeFileSync(path.join(DATA, 'tv.json'), JSON.stringify({ updated: NOW(), ...J.tvInfo })); } catch (_) {}
 fs.writeFileSync(FILE, JSON.stringify(J));
 for (const m of toSend.slice(0, 20)) await tgSend(m);
 console.log(`Nhật ký V4: ${J.trades.length} dòng (+${added} mới, ${changed} đổi trạng thái)${errs.length ? ' · lỗi: ' + errs.join('; ') : ''}`);

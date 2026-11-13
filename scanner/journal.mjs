@@ -348,13 +348,14 @@ J.stats = {}; for (const sym of Object.keys(SYMS)) J.stats[sym] = { hoiSau: V3.s
 fs.mkdirSync(DATA, { recursive: true });
 J.telegram = { chats: CHATS.length, token: !!TOKEN };
 // ---- 💼 TÀI KHOẢN DEMO-500 giống MT5 (mở 11/11/2026 theo yêu cầu Letuan): máy TỰ vào đúng các lệnh bot gửi Telegram
-//  (kế hoạch 🧭 X · 🧱 Z · 🎯 H, đã qua luật "không vào khi") · 0.02 lot · lệnh limit nằm ở "Lệnh chờ" tới khi khớp · khớp/đóng theo nến M5 giá TradingView, có spread
+//  (từ 13/11: MỌI lệnh của mọi chiến lược, kể cả bị chặn Telegram) · 0.02 lot · lệnh limit nằm ở "Lệnh chờ" tới khi khớp · khớp/đóng theo nến M5 giá TradingView, có spread
 //  Ký quỹ đòn bẩy 1:500 · chưa tính swap qua đêm và hoa hồng
 { const A = J.acct = J.acct || { login: 'DEMO-500', server: 'Máy chủ bot (tài khoản giấy)', start: NOW(), bal0: 500, lot: 0.02, lev: 500, next: 100000001, orders: [] };
   const CS = { XAU: 100, BTC: 1 }, FINX = (st) => /^(WIN|LOSS|TIME)$/.test(st), CANC = (st) => /^(EXPIRED|INVALID|SKIP|MISSED|CANCEL)/.test(st);
   const have = new Set(A.orders.map(o => o.id));
-  for (const t of J.trades.filter(t => t.live && TGONLY(t.grade) && t.tgOK && t.ct >= A.start && !have.has(t.id)).sort((a, b) => a.ct - b.ct)) {
-    A.orders.push({ ticket: A.next++, id: t.id, sym: t.sym, grade: t.grade, model: t.model, side: t.side, lot: A.lot, placed: t.ct, kind: t.state === 'PENDING' || (t.fillT && t.fillT > t.ct + 6e4) || (!t.fillT && !FINX(t.state)) ? 'limit' : 'market', entry: t.entry, sl: t.sl, tp: t.tp, state: t.state, pxSrc: t.pxSrc || null });
+  // 13/11/2026 22h (Letuan): vào HẾT mọi lệnh của mọi chiến lược (vàng + BTC), kể cả lệnh bị luật chặn Telegram — tính lại từ ngày mở tài khoản
+for (const t of J.trades.filter(t => t.live && t.state !== 'SKIP' && t.ct >= A.start && !have.has(t.id)).sort((a, b) => a.ct - b.ct)) {
+    A.orders.push({ ticket: A.next++, id: t.id, sym: t.sym, grade: t.grade, model: t.model, side: t.side, lot: A.lot, placed: t.ct, kind: t.state === 'PENDING' || (t.fillT && t.fillT > t.ct + 6e4) || (!t.fillT && !FINX(t.state)) ? 'limit' : 'market', entry: t.entry, sl: t.sl, tp: t.tp, state: t.state, pxSrc: t.pxSrc || null, tg: !!(TGONLY(t.grade) && t.tgOK) });
     have.add(t.id); }
   for (const o of A.orders) { if (o.closed) continue; const t = byId.get(o.id); if (!t) continue;
     Object.assign(o, { state: t.state, entry: t.entry, sl: t.sl, tp: t.tp, exitT: t.exitT || null, exitP: t.exitP != null ? t.exitP : null });

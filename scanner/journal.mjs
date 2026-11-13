@@ -78,7 +78,7 @@ function tgText(t) {
     case 'PENDING': if (t.grade === 'I') { const R0 = (AIM.report.rows || []).find(r => r.thr === AIM.thr) || {};
         return `🆕 ${head}\n🤖 AI chấm <b>${Math.round(100 * t.prob)}%</b> khả năng chạm TP trước SL (ngưỡng ${Math.round(100 * AIM.thr)}%)\n${(t.info || []).map(x => '• ' + esc(x)).join('\n')}\n${lv} · 0.02 lot ≈ ${(t.risk * 2).toFixed(0)}$ rủi ro\n⏳ Giữ tối đa 12h (48 nến M15)\n<i>Kiểm ngoài mẫu ${esc(AIM.report.from)}→${esc(AIM.report.to)}: ${R0.n} lệnh · thắng ${R0.win}% · ${R0.R >= 0 ? '+' : ''}${R0.R}R</i>\n<a href="${PAGE}">Mở trang</a>`; }
       if (t.grade === 'H') return `🆕 ${head}\n${(t.info || []).map(x => '• ' + esc(x)).join('\n')}\n${lv}\nTP 12 giá · SL ${t.risk.toFixed(1)} giá · 0.01 lot ≈ ${t.risk.toFixed(0)}$ rủi ro · giữ ≤ 24h\n<i>Kèo hiếm (~1 lệnh/10 ngày). Kiểm 2 năm vàng: năm 1 11 lệnh thắng 55% · năm 2 28 lệnh thắng 68% — mẫu nhỏ.</i>\n<a href="${PAGE}">Mở trang</a>`;
-      if (t.grade === 'X') return `🆕 ${head}\n${(t.info || []).map(x => '• ' + esc(x)).join('\n')}\n${lv} · 0.02 lot ≈ ${(t.risk * 2).toFixed(0)}$ rủi ro\nHuỷ nếu chưa khớp trước ${vnT(t.expT)} · 3h sáng VN còn lệnh thì đóng\n<i>Kiểm 2 năm vàng: 134 lệnh · lãi 40% · +24R · năm 1 +235$ · năm 2 +316$</i>\n<a href="${PAGE}">Mở trang</a>`;
+      if (t.grade === 'X') return `🆕 ${head}\n${(t.info || []).map(x => '• ' + esc(x)).join('\n')}\n${lv} · 0.01 lot ≈ ${t.risk.toFixed(0)}$ rủi ro (${(t.risk / 5).toFixed(1)}% TK 500$)\nHuỷ nếu chưa khớp trước ${vnT(t.expT)} · 3h sáng VN còn lệnh thì đóng\n<i>Kiểm 2 năm vàng: 134 lệnh · lãi 40% · +24R · năm 1 +235$ · năm 2 +316$</i>\n<a href="${PAGE}">Mở trang</a>`;
       if (t.grade === 'P') return `🆕 ${head}\n${(t.info || []).map(x => '• ' + esc(x)).join('\n')}\n${lv} · 0.02 lot ≈ ${(t.risk * 2).toFixed(0)}$ rủi ro\nLời 1.5R dời SL về hoà vốn · 2h sáng VN còn lệnh thì đóng\n<i>Kiểm 2 năm vàng: 391 lệnh · lãi 48% · +38R · năm 1 +1212$ · năm 2 +464$ (sụt tối đa 1393$ → lot nhỏ)</i>\n<a href="${PAGE}">Mở trang</a>`;
       if (t.grade === 'K') { const usd = t.sym === 'BTC' ? 0.02 : 2;
         return `🆕 ${head}\n📈 EMA34 M30 ${f(t.ema34)} ${t.side > 0 ? '>' : '<'} EMA89 M30 ${f(t.ema89)} · giá M30 ${t.side > 0 ? 'trên' : 'dưới'} EMA34\n💥 M5 phá ${t.side > 0 ? 'đỉnh' : 'đáy'} swing ${f(t.lvl)} lúc ${vnT(t.ct)} → đặt LIMIT chờ giá quay lại test\n${lv}\nSL = ${t.side > 0 ? 'đáy swing low' : 'đỉnh swing high'} của chân phá · 0.02 lot ≈ ${(t.risk * usd).toFixed(0)}$ rủi ro\n⏳ Huỷ nếu chưa test trước ${vnT(t.expT)} hoặc giá thủng SL trước\n⛔ Không vào nếu giá test trong giờ: ${t.badHours.join(', ')}h\n<a href="${PAGE}">Mở trang</a>`; }
@@ -106,7 +106,7 @@ const TGONLY = (g) => PLAN.has(g);
 // luật "không vào khi" của kế hoạch — chặn gửi Telegram lệnh mới
 function gate(t) {
   const h = (new Date(t.ct).getUTCHours() + 7) % 24; if (h >= 23 || h < 7) return 'ngoài giờ (23h–7h VN)';
-  if (t.risk > 15) return `SL ${t.risk.toFixed(1)} giá > 15`;
+  // 13/11: bỏ luật 'SL > 15 giá' — kiểm 2 năm: lệnh 🧱 SL > 15 lời +1361$ (≤15 chỉ +334$), 🧭 SL > 15 lời +393$ → chặn là bỏ mất nửa tốt nhất. Thay bằng ghi rõ rủi ro $ theo lot.
   const nw = (J.news || []).find(z => Math.abs(z.t - t.ct) <= 18e5); if (nw) return `sát tin ${nw.title}`;
   const d0 = Math.floor((t.ct + 7 * 36e5) / 864e5); const loss = J.trades.filter(z => PLAN.has(z.grade) && z.state === 'LOSS' && z.tgOK && z.exitT && Math.floor((z.exitT + 7 * 36e5) / 864e5) === d0 && z.exitT <= t.ct).length;
   if (loss >= 2) return 'đã thua 2 lệnh hôm nay';

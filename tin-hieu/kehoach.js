@@ -130,7 +130,7 @@
     L.push(`\n<b>4. Chờ gì / vào ở đâu</b>`); for (const p of R.plans) L.push(esc(p.txt));
     if (R.warn.length) { L.push(`\n<b>5. Không vào khi</b>`); for (const w of R.warn) L.push(esc(w)); }
     if (R.ai) L.push(`\n🤖 AI: ${esc(R.ai.biasTxt)} · ${esc(R.ai.now)}`);
-    L.push(`\n<i>0.01 lot cho TK 500$ · mỗi lúc 1 lệnh · thua 2 lệnh/ngày thì nghỉ. Không phải lời khuyên đầu tư.</i>`);
+    L.push(`\n<i>0.01 lot: rủi ro (USD) = số giá SL · mỗi lúc 1 lệnh · thua 2 lệnh/ngày thì nghỉ. Không phải lời khuyên đầu tư.</i>`);
     return L.join('\n');
   }
   return { report, text, sessionOf, version };

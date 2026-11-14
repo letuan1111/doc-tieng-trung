@@ -14,24 +14,25 @@
   function atr(c, p = 14) { const o = new Array(c.length); let a = c.length ? c[0].h - c[0].l : 0; for (let i = 0; i < c.length; i++) { const tr = i ? Math.max(c[i].h - c[i].l, Math.abs(c[i].h - c[i - 1].c), Math.abs(c[i].l - c[i - 1].c)) : c[i].h - c[i].l; a = i < p ? (a * i + tr) / (i + 1) : (a * (p - 1) + tr) / p; o[i] = a; } return o; }
   function pivots(c, L) { const H = [], Lw = []; for (let i = L; i < c.length - L; i++) { let ph = true, pl = true; for (let k = 1; k <= L; k++) { if (c[i - k].h >= c[i].h || c[i + k].h > c[i].h) ph = false; if (c[i - k].l <= c[i].l || c[i + k].l < c[i].l) pl = false; } if (ph) H.push({ i, p: c[i].h, conf: i + L }); if (pl) Lw.push({ i, p: c[i].l, conf: i + L }); } return { H, L: Lw }; }
   function run(D, opt) {
-    opt = opt || {}; const SP = opt.spread || 0, c = D.m15, out = []; if (!c || c.length < 200) return out;
+    opt = opt || {}; const CF = { ...CFG, ...(opt.cfg || {}) }, SP = opt.spread || 0, c = D.m15, out = []; if (!c || c.length < 200) return out;
     const n = c.length, e34 = ema(c.map(x => x.c), 34), e89 = ema(c.map(x => x.c), 89), A = atr(c), pv = pivots(c, 2); let busy = -1;
     for (let k = 120; k < n; k++) { const x = c[k], a = A[k];
       for (const d of [1, -1]) {
-        if (k <= busy || d * (e34[k] - e89[k]) <= 0 || d * (x.c - e89[k]) > -CFG.deep) continue;
-        const sw = (d > 0 ? pv.L : pv.H).filter(q => q.conf <= k - 1 && q.i >= k - CFG.look && q.i < k).slice(-1)[0]; if (!sw) continue;
+        const deep = CF.deepA ? CF.deepA * a : CF.deep, TPp = CF.tpA ? CF.tpA * a : CF.tp, mnS = CF.minA ? CF.minA * a : CF.minSL, mxS = CF.maxA ? CF.maxA * a : CF.maxSL;
+        if (k <= busy || d * (e34[k] - e89[k]) <= 0 || d * (x.c - e89[k]) > -deep) continue;
+        const sw = (d > 0 ? pv.L : pv.H).filter(q => q.conf <= k - 1 && q.i >= k - CF.look && q.i < k).slice(-1)[0]; if (!sw) continue;
         let fresh = true; for (let u = sw.i + 1; u < k; u++) if (d > 0 ? c[u].l < sw.p : c[u].h > sw.p) { fresh = false; break; }
         if (!fresh || !(d > 0 ? x.l < sw.p && x.c > sw.p : x.h > sw.p && x.c < sw.p)) continue;
-        const ext = d > 0 ? x.l : x.h, entry = x.c + (d > 0 ? SP : 0); let sl = ext - d * CFG.pad * a + (d < 0 ? SP : 0), risk = d * (entry - sl);
-        if (risk < CFG.minSL) { risk = CFG.minSL; sl = entry - d * risk; } if (risk > CFG.maxSL) continue;
-        const tp = entry + d * CFG.tp;
-        const s = { id: `hs-${x.t}-${d > 0 ? 'B' : 'S'}`, tf: 'm15', model: NAME, grade: 'H', side: d, t: x.t, ct: x.ct, entry, sl, tp, risk, rr: +(CFG.tp / risk).toFixed(2), spread: SP,
+        const ext = d > 0 ? x.l : x.h, entry = x.c + (d > 0 ? SP : 0); let sl = ext - d * CF.pad * a + (d < 0 ? SP : 0), risk = d * (entry - sl);
+        if (risk < mnS) { risk = mnS; sl = entry - d * risk; } if (risk > mxS) continue;
+        const tp = entry + d * TPp;
+        const s = { id: `hs-${x.t}-${d > 0 ? 'B' : 'S'}`, tf: 'm15', model: NAME, grade: 'H', side: d, t: x.t, ct: x.ct, entry, sl, tp, risk, rr: +(TPp / risk).toFixed(2), spread: SP,
           sweep: ext, sweepName: `${d > 0 ? 'đáy' : 'đỉnh'} swing M15 ${sw.p.toFixed(2)}`, ema34: e34[k], ema89: e89[k],
           info: [`EMA34 ${e34[k].toFixed(2)} ${d > 0 ? '>' : '<'} EMA89 ${e89[k].toFixed(2)} (M15)`, `giá hồi qua EMA89 ${Math.abs(x.c - e89[k]).toFixed(1)} giá`, `quét ${d > 0 ? 'đáy' : 'đỉnh'} swing M15 ${sw.p.toFixed(2)} (râu ${ext.toFixed(2)}) rồi đóng lại`],
           hour: (new Date(x.ct).getUTCHours() + 7) % 24, tgOK: true, state: 'OPEN', fillT: x.ct, exitT: null, exitP: null, r: null, pts: null };
-        let u = k + 1; for (; u < Math.min(n, k + CFG.hold); u++) { const y = c[u], lo = d > 0 ? y.l : y.l + SP, hi = d > 0 ? y.h : y.h + SP;
+        let u = k + 1; for (; u < Math.min(n, k + CF.hold); u++) { const y = c[u], lo = d > 0 ? y.l : y.l + SP, hi = d > 0 ? y.h : y.h + SP;
           if (d > 0 ? lo <= sl : hi >= sl) { s.state = 'LOSS'; s.exitP = sl; s.exitT = y.ct; break; } if (d > 0 ? hi >= tp : lo <= tp) { s.state = 'WIN'; s.exitP = tp; s.exitT = y.ct; break; } }
-        if (s.state === 'OPEN' && k + CFG.hold < n) { const y = c[k + CFG.hold - 1]; s.state = 'TIME'; s.exitP = d > 0 ? y.c : y.c + SP; s.exitT = y.ct; u = k + CFG.hold - 1; }
+        if (s.state === 'OPEN' && k + CF.hold < n) { const y = c[k + CF.hold - 1]; s.state = 'TIME'; s.exitP = d > 0 ? y.c : y.c + SP; s.exitT = y.ct; u = k + CF.hold - 1; }
         if (s.exitP != null) { s.pts = d * (s.exitP - entry); s.r = s.pts / risk; }
         busy = s.state === 'OPEN' ? Infinity : u; out.push(s); break; }
     }

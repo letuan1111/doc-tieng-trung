@@ -17,7 +17,7 @@
   };
 
   // ---------------- nguồn dữ liệu ----------------
-  async function getJSON(u) { const r = await fetch(u, { cache: 'no-store' }); if (!r.ok) throw new Error(r.status + ' ' + u); return r.json(); }
+  async function getJSON(u) { const r = await fetch(u, { cache: 'no-store', signal: AbortSignal.timeout(20000) }); if (!r.ok) throw new Error(r.status + ' ' + u); return r.json(); }
   async function binance(sym, iv, total, fut) {
     const base = fut ? 'https://fapi.binance.com/fapi/v1/klines' : 'https://api.binance.com/api/v3/klines', lim = fut ? 1500 : 1000;
     let out = [], end = null;
@@ -62,7 +62,7 @@
     cfg: Object.assign({ mode: 'strict', entry: 'A', minRR: 1.5, minScore: 85, tier: 'A' }, LS.get('smc.cfg', {})), seen: LS.get('smc.seen', {}), notif: LS.get('smc.notif', false), align: LS.get('smc.align', 'tv'), tvFd: {},
   };
 
-  async function loadAll(sym, full) {
+  async function loadAll(sym, full, request) {
     const srcs = sources(sym); let lastErr;
     const order = [S.srcIdx[sym] || 0, ...srcs.map((_, i) => i)].filter((v, i, a) => a.indexOf(v) === i);
     for (const si of order) {
@@ -72,12 +72,17 @@
           const prev = S.raw[sym] && S.raw[sym][k];
           if (!full && prev && prev.length && S.srcIdx[sym] === si) { // chỉ tải phần mới
             const fresh = await src.f(IV[k], 30);
+            if (!fresh.length) throw new Error("Không có nến mới từ nguồn");
             const m = new Map(prev.map(x => [x.t, x])); fresh.forEach(x => m.set(x.t, x));
             d[k] = [...m.values()].sort((a, b) => a.t - b.t).slice(-NEED[k] - 50);
           } else d[k] = await src.f(IV[k], NEED[k]);
         }
+        if (!d.m5.length || Date.now() - d.m5.at(-1).ct > 15 * 60e3 ||
+            Object.keys(NEED).some(k => d[k].filter(x => x.ct <= Date.now()).length < 90))
+          throw new Error('Nguồn thiếu lịch sử hoặc nến M5 đã cũ');
+        if (request !== revision) return;
         S.srcIdx[sym] = si; S.raw[sym] = d; S.srcName = src.n; S.isMT5 = !!src.mt5; return d;
-      } catch (e) { lastErr = e; console.warn('Nguồn lỗi', e); }
+      } catch (e) { if (request !== revision) return; lastErr = e; console.warn('Nguồn lỗi', e); }
     }
     throw lastErr || new Error('Không tải được dữ liệu');
   }
@@ -86,7 +91,7 @@
   const TVJ = 'https://raw.githubusercontent.com/letuan1111/doc-tieng-trung/bot-data/tv.json';
   async function tvOffset(sym, d) {
     try { if (!S.tvj || Date.now() - S.tvjAt > 4 * 60e3) { S.tvj = await getJSON(TVJ + '?t=' + Date.now()); S.tvjAt = Date.now(); } } catch (e) { S.tvErr = 'không đọc được tv.json'; return null; }
-    const T = S.tvj && S.tvj[sym]; if (!T || !T.ok || !T.at || Date.now() - T.at > 3 * 864e5) { S.tvErr = 'máy chủ chưa lấy được giá TradingView'; return null; }
+    const T = S.tvj && S.tvj[sym]; if (!T || !T.ok || !T.at || Date.now() - T.at > 20 * 60e3 || T.at > Date.now()) { S.tvErr = 'máy chủ chưa lấy được giá TradingView'; return null; }
     const last = d.m5[d.m5.length - 1].c; let fd = 0;
     if (!/^OKX XAU-USDT-SWAP|^OKX BTC-USDT-SWAP/.test(S.srcName || '')) {
       try { const tk = await getJSON(`https://www.okx.com/api/v5/market/ticker?instId=${T.okxInst}`), ok = +tk.data[0].last, src = (await sources(sym)[S.srcIdx[sym] || 0].f('5m', 2)).slice(-1)[0].c;
@@ -116,6 +121,7 @@
   const tsec = (t) => Math.floor(t / 1000) + TZ;
   function initChart() {
     const el = $('chart'), dark = document.documentElement.dataset.theme !== 'light';
+    if (!window.LightweightCharts) { el.textContent = 'Không tải được biểu đồ. Các bảng tín hiệu vẫn cập nhật riêng.'; return; }
     chart = LightweightCharts.createChart(el, {
       autoSize: true, layout: { background: { color: 'transparent' }, textColor: dark ? '#8b98a8' : '#5b6675', fontFamily: 'Be Vietnam Pro' },
       grid: { vertLines: { color: dark ? '#1c2430' : '#eef1f4' }, horzLines: { color: dark ? '#1c2430' : '#eef1f4' } },
@@ -170,7 +176,7 @@
     const a = v3Active();
     if (a) {
       const add = (p, col, t, st = 0) => p != null && plines.push(cs.createPriceLine({ price: p, color: col, lineWidth: 2, lineStyle: st, axisLabelVisible: true, title: t }));
-      add(a.entry, '#a855f7', `V4 ENTRY ${a.tf.toUpperCase()}`); add(a.sl, '#f43f5e', 'SL', 2); add(a.tp, '#22c55e', 'TP 2R', 2);
+      add(a.entry, '#a855f7', `V4 ENTRY ${a.tf.toUpperCase()}`); add(a.sl, '#f43f5e', 'SL', 2); add(a.tp, '#22c55e', 'TP ' + a.rr + 'R', 2);
       add(a.sweep, '#f59e0b', a.sweepName + ' đã quét', 1);
     }
     if (SHOW.bos5 && S.k) { const ka = S.k.filter(s => s.state === 'PENDING' || s.state === 'OPEN').slice(-1)[0];
@@ -250,7 +256,7 @@
       if (r.proj.inval) { const y = cs.priceToCoordinate(r.proj.inval.p), x = X(r.proj.path[0].t); if (y != null && x != null) { g.strokeStyle = 'rgba(245,158,11,.9)'; g.setLineDash([1, 3]); g.beginPath(); g.moveTo(x, y); g.lineTo(W - psW, y); g.stroke(); g.setLineDash([]); g.fillStyle = '#f59e0b'; g.font = '600 10px Be Vietnam Pro'; g.fillText('Vô hiệu ' + fx(r.proj.inval.p), x + 4, y - 4); } }
     }
     // setup mà bot MT5 đang theo dõi
-    const bs = SHOW.bot && botSym(), u = bs && bs.setup;
+    const bs = SHOW.bot && botFresh() && botSym(), u = bs && bs.setup;
     if (u) {
       const PK = 'rgba(244,114,182,.95)';
       if (u.zl > 0 && u.zh > u.zl) box(u.tZone || u.tMss || c[0].t, null, u.zl, u.zh, 'rgba(244,114,182,.15)', PK, `BOT ${u.zone} ${u.tf}`);
@@ -388,11 +394,11 @@
       <li><span class="y">+</span> Nhật ký còn <b>ghi nhận</b> mọi setup quét thanh khoản khác (đỉnh/đáy tuần, London, phiên Á, swing → MSS + FVG), nhãn <i>Ghi nhận</i>, mỗi khung một lệnh</li></ul>`;
     const hist = last.length ? `<p class="note" style="margin:8px 0 2px">Gần nhất:</p><ul class="ck">${last.map(s => `<li><span class="chip ${s.side > 0 ? 'buy' : 'sell'}">${s.side > 0 ? 'BUY' : 'SELL'} ${s.tf.toUpperCase()}</span> ${ft(s.ct)} · ${fx(s.entry)} · <b class="${s.r > 0 ? 'win' : s.r < 0 ? 'loss' : ''}">${V3.STATE_VI[s.state]}${s.r != null ? ` (${s.r > 0 ? '+' : ''}${s.r.toFixed(2)}R)` : ''}</b></li>`).join('')}</ul>` : '';
     if (!a) return `<div class="sig"><div class="t">Chưa có tín hiệu <span class="chip">ĐỨNG NGOÀI</span></div><p class="note" style="margin:8px 0 0">Chờ giá quét PDH/PDL rồi phá cấu trúc ngược lại.</p></div>${rules}${hist}`;
-    const b = a.side > 0, exp = a.ct + V3.CFG[a.tf].expiry * TFMS[a.tf];
+    const b = a.side > 0, exp = a.ct + (a.grade === 'S' ? V3.BOS15.expiry[a.tf] : V3.CFG[a.tf].expiry) * TFMS[a.tf];
     return `<div class="sig ${b ? 'buy' : 'sell'}">
       <div class="t">${b ? 'BUY' : 'SELL'} LIMIT ${a.tf.toUpperCase()} ${GR(a)} <span class="chip ${b ? 'buy' : 'sell'}">${a.state === 'OPEN' ? 'ĐÃ KHỚP · ĐANG CHẠY' : 'CHỜ GIÁ VỀ ENTRY'}</span></div>
       <div class="lv">
-        <span>Entry (FVG ${V3.CFG[a.tf].entry === 'ce' ? 'giữa' : 'mép'})</span><b>${fx(a.entry)}</b><span></span>
+        <span>Entry (FVG ${a.grade !== 'S' && V3.CFG[a.tf].entry === 'ce' ? 'giữa' : 'mép'})</span><b>${fx(a.entry)}</b><span></span>
         <span>Stop Loss</span><b class="loss">${fx(a.sl)}</b><span>−1R · ${fx(a.risk)}</span>
         <span>Take Profit</span><b class="win">${fx(a.tp)}</b><span>+${(a.rr || 2).toFixed(1)}R</span>
         ${(() => { const L = lotFor(S.sym, a.risk); return L ? `<span>Lot gợi ý</span><b>${L.lot >= 0.01 ? L.lot.toFixed(2) : '< 0.01'}</b><span>${L.lot >= 0.01 ? `mất ${L.real.toFixed(2)} USD nếu SL · lời ${(L.real * (a.rr || 2)).toFixed(2)} USD nếu TP` : `vốn quá nhỏ cho SL ${fx(a.risk)}`}</span>` : '<span>Lot gợi ý</span><b>—</b><span>nhập vốn ở mục Cài đặt</span>'; })()}
@@ -408,7 +414,7 @@
       const prev = seen[s.id]; if (prev === s.state) continue; seen[s.id] = s.state;
       if (first && !prev) continue;
       const tag = `${nm} ${s.side > 0 ? 'BUY' : 'SELL'} ${s.tf.toUpperCase()}${s.grade === 'B' ? ' [ghi nhận · ' + s.sweepName + ']' : ''}`;
-      if (s.state === 'PENDING') alertUser(`🆕 V4 ${tag}`, `Quét ${s.sweepName} ${fx(s.sweep)} · Entry ${fx(s.entry)} · SL ${fx(s.sl)} · TP ${fx(s.tp)} (2R)`);
+      if (s.state === 'PENDING') alertUser(`🆕 V4 ${tag}`, `Quét ${s.sweepName} ${fx(s.sweep)} · Entry ${fx(s.entry)} · SL ${fx(s.sl)} · TP ${fx(s.tp)} (${s.rr}R)`);
       else if (s.state === 'OPEN') alertUser(`🎯 V4 khớp ${tag}`, `Entry ${fx(s.entry)} · SL ${fx(s.sl)} · TP ${fx(s.tp)}`);
       else if (s.state === 'WIN') alertUser(`✅ V4 ${tag} chạm TP`, `+${s.r.toFixed(2)}R`);
       else if (s.state === 'LOSS') alertUser(`❌ V4 ${tag} dính SL`, `${s.r.toFixed(2)}R`);
@@ -427,20 +433,26 @@
   function renderKH() {
     const el = $('khnow'); if (!el) return; const J = S.journal, R = J && J.kh && J.kh.XAU;
     if (!R || !R.text) { el.innerHTML = '<p class="note">Máy chủ chưa chạy bản báo cáo phiên — chờ lượt cập nhật tới.</p>'; return; }
-    const age = Math.round((Date.now() - (J.updated || R.t)) / 6e4);
+    const age = Math.round((Date.now() - R.t) / 6e4);
+    if (!R.t || age > 20 || age < 0) { el.textContent = 'Báo cáo phiên chưa cập nhật. Bản gần nhất: ' + (R.t ? ft(R.t) : 'chưa rõ'); return; }
     el.innerHTML = `<div style="white-space:pre-wrap;line-height:1.55;font-size:.95em">${R.text.replace(/<(?!\/?(b|i)>)/g, '&lt;')}</div><p class="note">Vàng (giá OKX, Exness thường thấp hơn vài giá) · cập nhật ${age} phút trước${S.sym !== 'XAU' ? ' · báo cáo chỉ làm cho vàng' : ''}</p>`;
   }
   function renderAI() {
     const el = $('ainow'); if (!el) return; const J = S.journal; if (!J || !J.ai) { el.innerHTML = `<p class="note">${S.jErr ? 'Không tải được nhật ký máy chủ: ' + esc(S.jErr) : 'Máy chủ chưa chạy bản AI — chờ lượt cập nhật 5 phút tới.'}</p>`; return; }
     const A = J.ai, a = A[S.sym]; if (!a) { el.innerHTML = '<p class="note">Chưa có phân tích AI cho cặp này.</p>'; return; }
     const dp = S.sym === 'BTC' ? 1 : 2, R0 = (A.report.rows || []).find(r => r.thr === A.thr) || {}, age = Math.round((Date.now() - A.updated) / 6e4);
+    const candleAge = Date.now() - a.t;
+    if (!a.t || candleAge < 0 || candleAge > 30 * 60e3 || !A.updated || age > 20) {
+      el.textContent = 'Chưa có tín hiệu AI hiện tại. Nến M15 gần nhất: ' + (a.t ? ft(a.t) : 'chưa rõ') + '.';
+      return;
+    }
     const col = a.bias > 0 ? '#22c55e' : a.bias < 0 ? '#f43f5e' : '#eab308';
     const open = (J.trades || []).filter(t => t.grade === 'I' && t.sym === S.sym && t.state === 'OPEN');
     const lv = (a.levels || []).map(z => `<span class="chip" style="margin:2px">${esc(z.name)} ${z.p.toFixed(dp)} <small>(${z.dist >= 0 ? '+' : ''}${z.dist.toFixed(dp === 1 ? 0 : 1)})</small></span>`).join('');
     const rec = (a.recent || []).map(r => `<tr><td>${ft(r.t)}</td><td class="${r.side > 0 ? 'win' : 'loss'}">${r.side > 0 ? 'BUY' : 'SELL'}</td><td>${esc(r.types.join(' + '))}</td><td><b>${r.p == null ? '—' : Math.round(100 * r.p) + '%'}</b></td><td>${S.sym === 'XAU' ? (r.take ? '✅ vào' : '— bỏ') : 'tham khảo'}</td></tr>`).join('');
-    el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px"><b style="font-size:1.15em;color:${col}">${esc(a.biasTxt)}</b><span class="chip">${esc(a.session)}</span><span class="note">giá ${(+a.price).toFixed(dp)} · ATR M15 ${a.atr} · cập nhật ${age} phút trước</span></div>
+    el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px"><b style="font-size:1.15em;color:${col}">${a.bias > 0 ? 'Xu hướng tăng' : a.bias < 0 ? 'Xu hướng giảm' : 'Xu hướng chưa rõ'}</b><span class="chip">${esc(S.sym === 'BTC' && /thị trường vàng/.test(a.session) ? 'BTC · cuối tuần' : a.session)}</span><span class="note">giá ${(+a.price).toFixed(dp)} · ATR M15 ${a.atr} · cập nhật ${age} phút trước</span></div>
       <div class="note" style="margin-bottom:6px">${esc(a.trend)}</div>
-      <div style="font-size:1.08em;margin:8px 0"><b>Bây giờ:</b> ${esc(a.now)}</div>
+      <div style="font-size:1.08em;margin:8px 0"><b>Trạng thái AI:</b> ${open.length ? "Nhật ký đang theo dõi lệnh bên dưới." : /VÀO LỆNH/.test(a.now) ? "Có ứng viên đạt ngưỡng, nhật ký hiện chưa ghi nhận lệnh AI đang mở." : esc(a.now)}</div>
       ${open.map(t => `<div style="margin:6px 0;padding:6px 8px;border-radius:8px;background:rgba(34,197,94,.12)">🟢 Đang giữ lệnh AI ${t.side > 0 ? 'BUY' : 'SELL'} từ ${ft(t.ct)} · Entry <b>${t.entry.toFixed(dp)}</b> · SL <b>${t.sl.toFixed(dp)}</b> · TP <b>${t.tp.toFixed(dp)}</b> · AI ${Math.round(100 * t.prob)}%</div>`).join('')}
       <div><b>Chờ gì tiếp theo:</b><ul style="margin:4px 0 8px 18px;padding:0">${(a.plan || []).map(x => `<li>${esc(x)}</li>`).join('') || '<li>Không có mức gần — đứng ngoài</li>'}</ul></div>
       <div style="margin-bottom:6px"><b>Thanh khoản quanh giá:</b><br>${lv}</div>
@@ -546,11 +558,12 @@
     } catch (e) { S.botErr = e.message; }
     renderBot();
   }
+  const botFresh = () => S.bot && Date.now() >= S.bot.updated && Date.now() - S.bot.updated < 90000 && !S.botErr;
   function botSym() { const b = S.bot; if (!b || !b.symbols) return null; return Object.values(b.symbols).find(x => x.symbol === MT5[S.sym]) || null; }
   function renderBot() { $('bot').innerHTML = botCard(); drawBotLines(); if (S.res && S.view === 'chart') drawOverlay(); }
   function drawBotLines() {
     if (!cs) return; botLines.forEach(p => cs.removePriceLine(p)); botLines = [];
-    if (!SHOW.bot || !S.bot) return;
+    if (!SHOW.bot || !S.res || !S.bot || !botFresh()) return;
     const add = (p, col, t, st = 0) => p > 0 && botLines.push(cs.createPriceLine({ price: p, color: col, lineWidth: 2, lineStyle: st, axisLabelVisible: true, title: t }));
     const s = botSym(), u = s && s.setup;
     if (u) { add(u.entry, '#f472b6', 'BOT ENTRY'); add(u.sl, '#fb7185', 'BOT SL', 2); add(u.tp, '#4ade80', `BOT TP ${(+u.rr).toFixed(1)}R`, 2); }
@@ -564,9 +577,10 @@
     if (!MT5.db) return '<p class="note">Nhập địa chỉ Firebase ở ô <b>Nguồn MT5</b> bên dưới và bật <code>InpWebEnable</code> trong EA v16.1 để xem bot phân tích tại đây.</p>';
     const b = S.bot;
     if (!b) return `<p class="note">Chưa có dữ liệu bot${S.botErr ? ' (' + esc(S.botErr) + ')' : ''}. Kiểm tra EA v16.1 đang chạy với <code>InpWebEnable = true</code>, cùng địa chỉ Firebase, và quy tắc Firebase có mục <code>bot</code>.</p>`;
-    const age = Math.max(0, (Date.now() - b.updated) / 1000), live = age < 90;
+    const age = Math.max(0, (Date.now() - b.updated) / 1000), live = botFresh();
     const head = `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="chip ${live ? 'buy' : 'warn'}">${live ? 'TRỰC TIẾP' : 'MẤT KẾT NỐI ' + Math.round(age / 60) + ' phút'}</span>
       <span class="chip">v${esc(b.version)}</span>${b.today && b.today.stop ? `<span class="chip sell">DỪNG: ${esc(b.today.stop)}</span>` : `<span class="chip ${b.trading ? 'buy' : ''}">${b.trading ? 'Đang cho phép giao dịch' : 'Không giao dịch'}</span>`}</div>`;
+    if (!live) return '<p class="note">Bot MT5 chưa gửi trạng thái mới. Lần cập nhật cuối: ' + ft(b.updated) + '.</p>';
     const s = botSym();
     if (!s) return head + `<p class="note">Bot không theo dõi mã <b>${esc(MT5[S.sym])}</b>.</p>`;
     const tfs = ['M5', 'M15', 'H1', 'H4'].map(k => { const x = s.tfs && s.tfs[k]; if (!x) return `<span class="chip">${k} —</span>`;
@@ -616,14 +630,28 @@
   }
 
   // ---------------- vòng lặp ----------------
-  let busy = false, firstRun = {};
+  let busy = false, revision = 0, firstRun = {};
+  function clearSignals(message) {
+    S.res = S.v3 = S.zr = S.k = S.curOff = null;
+    for (const id of ['know', 'znow', 'proj', 'v3now', 'wnow']) if ($(id)) $(id).textContent = message;
+    for (const id of ['px','chg','upd','offNote']) $(id).textContent = '—';
+    if (chart) {
+      cs.setMarkers([]);
+      for (const line of plines.concat(botLines)) cs.removePriceLine(line);
+      plines = []; botLines = []; viewBars = [];
+      for (const series of [cs, e24, e34, e89]) series.setData([]);
+      $('ov').width = 0;
+    }
+  }
   async function refresh(full) {
     if (busy) return; busy = true;
+    const request = revision;
     try {
-      const sym = S.sym, d = await loadAll(sym, full);
-      if (sym !== S.sym) return;
+      const sym = S.sym, d = await loadAll(sym, full, request);
+      if (request !== revision) return;
       let off = 0; S.tvUsed = false;
       if (!S.isMT5) { if (S.align === 'tv') { const o = await tvOffset(sym, d); if (o != null) { off = o; S.tvUsed = true; } } else if (S.align === 'ex') off = S.offset[sym] || 0; }
+      if (request !== revision) return;
       S.curOff = off; const cd = closedOnly(d, off);
       S.res = SMC.analyze(cd, { ...S.cfg, minBuf: SYMS[sym].minBuf, spread: SYMS[sym].spread });
       { const all = V3.runAll({ m15: cd.m15, h1: cd.h1 }, { spread: SYMS[sym].spread, now: Date.now() }); S.v3 = sym === 'XAU' ? [...all, ...V3.runBos({ m15: cd.m15, h1: cd.h1 }, { spread: SYMS[sym].spread, now: Date.now() })].sort((a, b) => a.ct - b.ct) : all; }
@@ -631,9 +659,9 @@
       $('px').textContent = fx(last.c + off);
       const ch = (last.c - prevDay.c) / prevDay.c * 100; $('chg').textContent = (ch >= 0 ? '+' : '') + ch.toFixed(2) + '% 24h'; $('chg').className = 'chip ' + (ch >= 0 ? 'buy' : 'sell');
       $('upd').textContent = 'Cập nhật ' + new Date().toLocaleTimeString('vi-VN');
-      $('offNote').innerHTML = S.isMT5 ? 'Giá MT5 Exness (không căn).' : S.tvUsed ? `💱 <b>Giá TradingView ${esc(S.tvNow.code)}</b> — đã cộng ${off >= 0 ? '+' : ''}${fx(off)} vào giá ${esc(S.srcName)} (máy chủ so TradingView lúc ${ft(S.tvNow.at)}, ${S.tvNow.n} mẫu). Mọi Entry/SL/TP trên trang là giá TradingView.`
+      $('offNote').innerHTML = S.isMT5 ? 'Giá MT5 Exness (không căn).' : S.tvUsed ? `💱 <b>Giá TradingView ${esc(S.tvNow.code)}</b> — đã cộng ${off >= 0 ? '+' : ''}${fx(off)} vào giá ${esc(S.srcName)} (máy chủ so TradingView lúc ${ft(S.tvNow.at)}, ${S.tvNow.n} mẫu). Giá và mức tín hiệu tính trên biểu đồ là ước tính theo TradingView. Nhật ký dùng nguồn ghi riêng cho từng lệnh.`
         : S.align === 'tv' ? `<span class="loss">Chưa căn được theo TradingView (${esc(S.tvErr || '?')}) — đang hiện giá gốc ${esc(S.srcName)}.</span>` : off ? `Đã căn theo giá Exness nhập tay: chênh ${off >= 0 ? '+' : ''}${fx(off)} so với nguồn dữ liệu.` : `Giá gốc ${esc(S.srcName)} (không căn).`;
-      $('src').textContent = S.srcName + (S.tvUsed ? ' → giá TradingView' : '') + (MT5.db && !S.isMT5 ? ' (MT5 chưa kết nối)' : ''); $('src').className = 'chip ' + (S.isMT5 || S.tvUsed ? 'buy' : (MT5.db ? 'warn' : ''));
+      $('src').textContent = S.srcName + (S.tvUsed ? ' → ước tính TradingView' : '') + (MT5.db && !S.isMT5 ? ' (MT5 chưa kết nối)' : ''); $('src').className = 'chip ' + (S.isMT5 || S.tvUsed ? 'buy' : (MT5.db ? 'warn' : ''));
       renderAcct();
       S.k = window.BOSRT ? BOSRT.run({ m5: cd.m5, m15: cd.m15 }, { spread: SYMS[sym].spread, sym }) : null; renderK();
       S.zr = window.ZONES ? ZONES.analyze({ h1: cd.h1, m15: cd.m15, m5: cd.m5 }, { spread: SYMS[sym].spread }) : null; if ($('znow')) $('znow').innerHTML = zCard();
@@ -644,15 +672,19 @@
         $('wnow').innerHTML = (act.length ? act.map(row).join('') : '<p class="note">Chưa có lệnh Sóng 15 đang chờ. Gần nhất:</p>' + last.map(row).join('')) + '<p class="note" style="margin-top:6px">Quét PDH/PDL · tuần · London · phiên Á → MSS M5 → limit mép FVG M5 · SL ngoài điểm quét +0.3 ATR · TP max(2R, 15 giá). Kịch bản ghi nhận: 12 tháng ~1.2 lệnh/tuần, thắng 34%, +3.2R.</p>'; }
         else $('wnow').innerHTML = '<p class="note">Kịch bản Sóng 15 chỉ chạy cho vàng (XAU).</p>'; } renderChart(full); v3Alerts(!firstRun[sym]); firstRun[sym] = true;
     } catch (e) {
-      console.error(e); $('src').textContent = 'Lỗi tải dữ liệu'; $('v3now').innerHTML = `<p class="err">Không tải được dữ liệu (${e.message}). Thử tải lại trang.</p>`;
-    } finally { busy = false; }
+      if (request !== revision) return;
+      console.error(e); clearSignals('Chưa xác nhận được tín hiệu từ dữ liệu mới. Trang sẽ tự thử lại.'); $('src').textContent = 'Lỗi tải dữ liệu';
+    } finally { busy = false; if (request !== revision) refresh(true); }
   }
   async function tick() { // giá trực tiếp + phân tích lại khi có nến M5 mới đóng
-    const d = S.raw[S.sym]; if (!d) return;
+    if (busy) return;
+    const request = revision, d = S.raw[S.sym]; if (!d || !S.res) return refresh(false);
     const last = d.m5[d.m5.length - 1];
     if (Date.now() >= last.ct + 2000) return refresh(false);
     try {
       const src = sources(S.sym)[S.srcIdx[S.sym] || 0], a = await src.f('5m', 2);
+      if (request !== revision || busy || d !== S.raw[S.sym]) return;
+      if (!a.length || a.at(-1).t !== last.t) return refresh(false);
       const m = new Map(d.m5.map(x => [x.t, x])); a.forEach(x => m.set(x.t, x)); d.m5 = [...m.values()].sort((p, q) => p.t - q.t);
       const off = S.curOff || 0, l = d.m5[d.m5.length - 1]; $('px').textContent = fx(l.c + off);
       cs && cs.update && S.tf === 'm5' && cs.update({ time: tsec(l.t), open: l.o + off, high: l.h + off, low: l.l + off, close: l.c + off });
@@ -666,7 +698,7 @@
 
   // ---------------- sự kiện ----------------
   function seg(id, attr, fn) { $(id).addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; [...$(id).children].forEach(x => x.classList.toggle('on', x === b)); fn(b.dataset[attr]); }); }
-  seg('symSeg', 's', (s) => { S.sym = s; LS.set('smc.sym', s); S.res = null; S.v3 = null; renderBot(); renderJournal(); $('px').textContent = '—'; $('src').textContent = 'đang tải…'; $('cEx').value = ''; if (S.view === 'tv') renderTV(); refresh(true); });
+  seg('symSeg', 's', (s) => { revision++; S.sym = s; LS.set('smc.sym', s); clearSignals('Đang tải ' + SYMS[s].name + '…'); renderBot(); renderJournal(); $('px').textContent = '—'; $('src').textContent = 'đang tải…'; $('cEx').value = ''; if (S.view === 'tv') renderTV(); refresh(true); });
   seg('tfSeg', 'tf', (tf) => { S.tf = tf; if (S.view === 'tv') renderTV(); else renderChart(true); });
   seg('viewSeg', 'v', (v) => { S.view = v; $('chartWrap').classList.toggle('hide', v !== 'chart'); $('tv').classList.toggle('hide', v !== 'tv'); if (v === 'tv') renderTV(); else setTimeout(() => renderChart(false), 50); });
   [...$('symSeg').children].forEach(b => b.classList.toggle('on', b.dataset.s === S.sym));
@@ -674,14 +706,14 @@
   $('mDb').value = MT5.db; $('mX').value = MT5.XAU; $('mB').value = MT5.BTC;
   $('mSave').onclick = () => {
     MT5.db = $('mDb').value.trim(); MT5.XAU = $('mX').value.trim() || 'XAUUSDm'; MT5.BTC = $('mB').value.trim() || 'BTCUSDm';
-    LS.set('smc.mt5', MT5); S.srcIdx = {}; S.raw = {}; S.botLogin = null; loadBot(); toast(MT5.db ? 'Đã lưu – đang lấy dữ liệu từ MT5…' : 'Đã tắt nguồn MT5'); refresh(true);
+    LS.set('smc.mt5', MT5); revision++; clearSignals('Đang đổi nguồn dữ liệu…'); S.srcIdx = {}; S.raw = {}; S.botLogin = null; loadBot(); toast(MT5.db ? 'Đã lưu – đang lấy dữ liệu từ MT5…' : 'Đã tắt nguồn MT5'); refresh(true);
   };
   $('cAlign').value = S.align;
   $('cApply').onclick = () => {
     S.cfg = { tier: $('cTier').value, mode: $('cMode').value, entry: $('cEntry').value, minRR: +$('cRR').value || 1.5, minScore: +$('cScore').value || 85 }; LS.set('smc.cfg', S.cfg);
     const ex = parseFloat($('cEx').value), d = S.raw[S.sym];
     S.align = $('cAlign').value; if (isFinite(ex) && d) { S.offset[S.sym] = +(ex - d.m5[d.m5.length - 1].c).toFixed(3); LS.set('smc.off', S.offset); if (S.align === 'tv') { S.align = 'ex'; $('cAlign').value = 'ex'; } } LS.set('smc.align', S.align);
-    refresh(false); toast('Đã áp dụng cài đặt');
+    revision++; refresh(false); toast('Đã áp dụng cài đặt');
   };
   const nb = $('notifBtn');
   const setNB = () => { nb.textContent = S.notif ? '🔔 Thông báo: BẬT' : '🔕 Bật thông báo'; };

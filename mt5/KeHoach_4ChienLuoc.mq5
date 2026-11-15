@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
 //| KeHoach_4ChienLuoc.mq5 — 4 chiến lược của web tin-hieu cho MT5   |
-//| CHỈ BÁO + VẼ LÊN CHART, KHÔNG TỰ ĐẶT LỆNH                        |
+//| v2.00: TỰ VÀO LỆNH 0.02 lot + báo + vẽ (mặc định chỉ trên DEMO)   |
 //|                                                                  |
 //|  XH  Phá biên phiên Á theo xu hướng (EMA34/89 H4+H1 cùng chiều   |
 //|      lúc 13h VN → M15 đóng ngoài biên Á → LIMIT retest mép biên, |
@@ -21,9 +21,14 @@
 //| Giờ: tự quy đổi giờ máy chủ → UTC → giờ VN (UTC+7).              |
 //+------------------------------------------------------------------+
 #property copyright "tin-hieu · Letuan"
-#property version   "1.00"
+#property version   "2.00"
+#include <Trade/Trade.mqh>
 
-input double InpLot          = 0.01;   // Lot gợi ý (chỉ để tính rủi ro $)
+input bool   InpTrade        = true;   // TỰ VÀO LỆNH
+input double InpLot          = 0.02;   // Lot mỗi lệnh
+input bool   InpAllowReal    = false;  // Cho phép vào lệnh trên TÀI KHOẢN THẬT (mặc định: chỉ demo)
+input bool   InpTradeGated   = false;  // Vẫn vào cả lệnh bị luật "không vào khi" chặn
+input long   InpMagic        = 260415; // Magic number
 input double InpSpread       = 0;      // Spread giả định (giá). 0 = tự: vàng 0.35, BTC 18
 input bool   InpPush         = true;   // Gửi thông báo lên MT5 điện thoại (nếu đã cài MetaQuotes ID)
 input bool   InpSound        = true;   // Hộp Alert + âm thanh
@@ -82,6 +87,7 @@ void OnTick()
 {
    datetime t = iTime(_Symbol, PERIOD_M5, 0);
    if(t != lastM5) { lastM5 = t; Recalc(); }
+   ManagePositions();
 }
 void OnTimer() { datetime t = iTime(_Symbol, PERIOD_M5, 0); if(t != lastM5) { lastM5 = t; Recalc(); } }
 
@@ -474,6 +480,101 @@ void Draw(const Sig &arr[])
 }
 
 //+------------------------------------------------------------------+
+//| TỰ VÀO LỆNH                                                      |
+//+------------------------------------------------------------------+
+CTrade TR;
+bool CanTrade(string &why)
+{
+   if(!InpTrade) { why = "tat tu vao lenh (InpTrade=false)"; return false; }
+   if(AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_REAL && !InpAllowReal) { why = "TAI KHOAN THAT - chua bat InpAllowReal → chi bao, khong vao lenh"; return false; }
+   if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) || !MQLInfoInteger(MQL_TRADE_ALLOWED)) { why = "chua bat nut Algo Trading"; return false; }
+   why = ""; return true;
+}
+double LotN()
+{
+   double mn = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN), st = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP), mx = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+   double v = st > 0 ? MathFloor(InpLot / st + 1e-9) * st : InpLot; return MathMax(mn, MathMin(mx, v));
+}
+double NP(double p) { return NormalizeDouble(p, _Digits); }
+bool Placed(string id) { return GlobalVariableCheck("KH4_" + _Symbol + "_" + id); }
+void MarkPlaced(string id) { GlobalVariableSet("KH4_" + _Symbol + "_" + id, (double)TimeCurrent()); }
+// lệnh/vị thế của EA theo chiến lược (comment bắt đầu bằng mã chiến lược)
+bool HasPos(string strat) { for(int i = PositionsTotal() - 1; i >= 0; i--) { ulong tk = PositionGetTicket(i); if(!PositionSelectByTicket(tk)) continue; if(PositionGetInteger(POSITION_MAGIC) == InpMagic && PositionGetString(POSITION_SYMBOL) == _Symbol && StringFind(PositionGetString(POSITION_COMMENT), strat) == 0) return true; } return false; }
+int  CountPos() { int n = 0; for(int i = PositionsTotal() - 1; i >= 0; i--) { ulong tk = PositionGetTicket(i); if(!PositionSelectByTicket(tk)) continue; if(PositionGetInteger(POSITION_MAGIC) == InpMagic && PositionGetString(POSITION_SYMBOL) == _Symbol) n++; } return n; }
+void DelOrders(string strat) { for(int i = OrdersTotal() - 1; i >= 0; i--) { ulong tk = OrderGetTicket(i); if(!OrderSelect(tk)) continue; if(OrderGetInteger(ORDER_MAGIC) == InpMagic && OrderGetString(ORDER_SYMBOL) == _Symbol && StringFind(OrderGetString(ORDER_COMMENT), strat) == 0) TR.OrderDelete(tk); } }
+bool HasOrder(string strat) { for(int i = OrdersTotal() - 1; i >= 0; i--) { ulong tk = OrderGetTicket(i); if(!OrderSelect(tk)) continue; if(OrderGetInteger(ORDER_MAGIC) == InpMagic && OrderGetString(ORDER_SYMBOL) == _Symbol && StringFind(OrderGetString(ORDER_COMMENT), strat) == 0) return true; } return false; }
+string Cmt(string strat, double risk) { return strat + " r" + DoubleToString(risk, _Digits); }
+
+// vào lệnh cho tín hiệu MỚI (XH: LIMIT · VUNG/HS: thị trường)
+void TradeSignals(Sig &arr[])
+{
+   string why; if(!CanTrade(why)) return; TR.SetExpertMagicNumber(InpMagic);
+   long now = (long)TimeCurrent() - GMTOFF; double lot = LotN(), ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK), bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double stopLv = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * _Point;
+   for(int i = 0; i < ArraySize(arr); i++) {
+      Sig s = arr[i]; if(s.strat == "PBA") continue;                     // PBA đặt lệnh chờ riêng (TradePBA)
+      if(s.strat == "XH" && s.state == "EXPIRED" && Placed(s.id) && HasOrder("XH")) { DelOrders("XH"); Print(_Symbol, " XH: huy lenh LIMIT (", s.info, ")"); continue; }
+      if(Placed(s.id)) continue;
+      if(s.gate != "" && !InpTradeGated) continue;
+      if(now - s.ct > 600) continue;                                     // chỉ tín hiệu vừa xuất hiện (≤ 10 phút)
+      if(HasPos(s.strat) || HasOrder(s.strat)) continue;
+      bool ok = false;
+      if(s.strat == "XH" && s.state == "PENDING") {
+         datetime exp = (datetime)(s.expT + GMTOFF);
+         if(s.side > 0 && s.entry < ask - stopLv) ok = TR.BuyLimit(lot, NP(s.entry), _Symbol, NP(s.sl), NP(s.tp), ORDER_TIME_SPECIFIED, exp, Cmt("XH", s.risk));
+         if(s.side < 0 && s.entry > bid + stopLv) ok = TR.SellLimit(lot, NP(s.entry), _Symbol, NP(s.sl), NP(s.tp), ORDER_TIME_SPECIFIED, exp, Cmt("XH", s.risk));
+      } else if((s.strat == "VUNG" || s.strat == "HS") && s.state == "OPEN") {
+         if(s.side > 0 && s.sl < bid - stopLv && s.tp > ask + stopLv) ok = TR.Buy(lot, _Symbol, 0, NP(s.sl), NP(s.tp), Cmt(s.strat, s.risk));
+         if(s.side < 0 && s.sl > ask + stopLv && s.tp < bid - stopLv) ok = TR.Sell(lot, _Symbol, 0, NP(s.sl), NP(s.tp), Cmt(s.strat, s.risk));
+      } else continue;
+      MarkPlaced(s.id);
+      string m = StringFormat("%s %s %s %.2f lot · Entry %s SL %s TP %s → %s", _Symbol, s.strat, s.side > 0 ? "BUY" : "SELL", lot, F(s.entry), F(s.sl), F(s.tp), ok ? "DA DAT LENH" : "LOI: " + TR.ResultRetcodeDescription());
+      Print(m); if(InpPush) SendNotification(m);
+   }
+}
+// 🌅 PBA: 13h VN đặt BUY STOP + SELL STOP quanh biên Á (khớp 1 huỷ 1), huỷ lúc 22h VN
+void TradePBA(const Bar &m5[], const Bar &m15[])
+{
+   string why; if(!EN_PBA || !CanTrade(why)) return; TR.SetExpertMagicNumber(InpMagic);
+   long now = (long)TimeCurrent() - GMTOFF; double h = HourF(now); long dk = DayOf(now), d0 = dk * 86400;
+   if(h < 6 || h >= 15) { if(h >= 15) DelOrders("PBA"); return; }
+   string id = "PBA-" + IntegerToString(dk); if(Placed(id)) return;
+   double hh = -DBL_MAX, ll = DBL_MAX; int nA = 0; for(int i = 0; i < ArraySize(m5); i++) if(m5[i].t >= d0 && m5[i].t < d0 + 6 * 3600) { hh = MathMax(hh, m5[i].h); ll = MathMin(ll, m5[i].l); nA++; }
+   MarkPlaced(id); if(nA < 60) return;
+   double mid = (hh + ll) / 2, pct = 100 * (hh - ll) / mid; if(pct < PBA_minPct || pct > PBA_maxPct) { Print(_Symbol, " PBA: bien A ", DoubleToString(pct, 2), "% ngoai khoang → bo ngay nay"); return; }
+   double a15[]; AtrArr(m15, 14, a15); double a = a15[ArraySize(a15) - 1], buf = 0.1 * a, lvB = hh + buf, lvS = ll - buf, lot = LotN();
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK), bid = SymbolInfoDouble(_Symbol, SYMBOL_BID), stopLv = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * _Point;
+   datetime exp = (datetime)(d0 + 15 * 3600 + GMTOFF);
+   double capB = PBA_cap / 100 * lvB, slB = (lvB - (ll - buf)) > capB ? lvB - capB : ll - buf, rB = lvB - slB;
+   double capS = PBA_cap / 100 * lvS, slS = ((hh + buf) - lvS) > capS ? lvS + capS : hh + buf, rS = slS - lvS;
+   bool b = false, s = false;
+   if(lvB > ask + stopLv) b = TR.BuyStop(lot, NP(lvB), _Symbol, NP(slB), NP(lvB + PBA_rr * rB), ORDER_TIME_SPECIFIED, exp, Cmt("PBA", rB));
+   if(lvS < bid - stopLv) s = TR.SellStop(lot, NP(lvS), _Symbol, NP(slS), NP(lvS - PBA_rr * rS), ORDER_TIME_SPECIFIED, exp, Cmt("PBA", rS));
+   string m = StringFormat("%s PBA bien A %s-%s: BUY STOP %s %s · SELL STOP %s %s (%.2f lot)", _Symbol, F(ll), F(hh), F(lvB), b ? "OK" : "-", F(lvS), s ? "OK" : "-", lot);
+   Print(m); if(InpPush) SendNotification(m);
+}
+// quản lý vị thế: khớp 1 huỷ 1 (PBA) · dời hoà vốn ở 1.5R (XH, PBA) · đóng theo giờ
+void ManagePositions()
+{
+   if(!InpTrade) return; TR.SetExpertMagicNumber(InpMagic); long now = (long)TimeCurrent() - GMTOFF; double h = HourF(now);
+   for(int i = PositionsTotal() - 1; i >= 0; i--) {
+      ulong tk = PositionGetTicket(i); if(!PositionSelectByTicket(tk)) continue;
+      if(PositionGetInteger(POSITION_MAGIC) != InpMagic || PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+      string c = PositionGetString(POSITION_COMMENT); int sp = StringFind(c, " r"); string strat = sp > 0 ? StringSubstr(c, 0, sp) : c; double risk = sp > 0 ? StringToDouble(StringSubstr(c, sp + 2)) : 0;
+      long typ = PositionGetInteger(POSITION_TYPE); int d = typ == POSITION_TYPE_BUY ? 1 : -1; double op = PositionGetDouble(POSITION_PRICE_OPEN), sl = PositionGetDouble(POSITION_SL), tp = PositionGetDouble(POSITION_TP);
+      double cur = d > 0 ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK); long age = (long)TimeCurrent() - (long)PositionGetInteger(POSITION_TIME);
+      if(strat == "PBA") DelOrders("PBA");                                          // khớp 1 huỷ 1
+      if((strat == "XH" || strat == "PBA") && risk > 0 && d * (cur - op) >= 1.5 * risk && d * (sl - op) < 0) {
+         double nsl = strat == "PBA" ? op + d * 0.1 : op; TR.PositionModify(tk, NP(nsl), tp); Print(_Symbol, " ", strat, ": loi 1.5R → doi SL ve hoa von ", F(nsl)); }
+      bool close = false; string why = "";
+      if(strat == "XH" && h >= 20) { close = true; why = "3h sang VN"; }
+      if(strat == "PBA" && h >= 19) { close = true; why = "2h sang VN"; }
+      if((strat == "VUNG" || strat == "HS") && age >= 24 * 3600) { close = true; why = "giu du 24h"; }
+      if(close && TR.PositionClose(tk)) { string m = _Symbol + " " + strat + ": dong lenh (" + why + ")"; Print(m); if(InpPush) SendNotification(m); }
+   }
+}
+
+//+------------------------------------------------------------------+
 void Recalc()
 {
    Bar m5[], m15[], h1[], h4[];
@@ -485,6 +586,7 @@ void Recalc()
    if(EN_HS)   RunHS(m15, arr);
    if(EN_VUNG) RunVUNG(m5, m15, h1, h4, arr);
    ApplyGates(arr);
+   if(!firstRun) { TradeSignals(arr); TradePBA(m5, m15); }
    ArrayResize(SIGS, ArraySize(arr)); for(int i = 0; i < ArraySize(arr); i++) SIGS[i] = arr[i];
    long now = (long)TimeTradeServer() - GMTOFF;
    for(int i = 0; i < ArraySize(arr); i++) if(arr[i].ct > now - 2 * 86400) Notify(arr[i]);
@@ -494,7 +596,8 @@ void Recalc()
    double e1a[], e1b[], e4a[], e4b[], e15a[], e15b[]; EmaArr(h1, 34, e1a); EmaArr(h1, 89, e1b); EmaArr(h4, 34, e4a); EmaArr(h4, 89, e4b); EmaArr(m15, 34, e15a); EmaArr(m15, 89, e15b);
    int n1 = ArraySize(h1) - 1, n4 = ArraySize(h4) - 1, n15 = ArraySize(m15) - 1;
    int d4 = Sgn(e4a[n4] - e4b[n4]), d1 = Sgn(e1a[n1] - e1b[n1]), d15 = Sgn(e15a[n15] - e15b[n15]);
-   string txt = StringFormat("KE HOACH 4 CHIEN LUOC · %s · gio may chu GMT%+.1f · lot goi y %.2f\n", _Symbol, GMTOFF / 3600.0, InpLot);
+   string cw; bool ct = CanTrade(cw);
+   string txt = StringFormat("KE HOACH 4 CHIEN LUOC v2 · %s · gio may chu GMT%+.1f · %s\n", _Symbol, GMTOFF / 3600.0, ct ? StringFormat("TU VAO LENH %.2f lot · dang mo %d vi the", LotN(), CountPos()) : "KHONG VAO LENH: " + cw);
    txt += StringFormat("EMA34/89: H4 %s · H1 %s · M15 %s → %s\n", d4 > 0 ? "TANG" : "GIAM", d1 > 0 ? "TANG" : "GIAM", d15 > 0 ? "TANG" : "GIAM",
                        d4 == d1 ? (d4 > 0 ? "chi tim BUY (XH)" : "chi tim SELL (XH)") : "H4/H1 lech nhau → nghi XH");
    txt += StringFormat("Bat: %s%s%s%s\n", EN_XH ? "XH " : "", EN_VUNG ? "VUNG " : "", EN_HS ? "HS " : "", EN_PBA ? StringFormat("PBA(TP %.1fR) ", PBA_rr) : "");
@@ -503,7 +606,7 @@ void Recalc()
       txt += StringFormat("%s %s %s %s @%s SL %s TP %s → %s%s\n", VNtime(arr[i].ct), arr[i].strat, arr[i].side > 0 ? "BUY" : "SELL", arr[i].state == "PENDING" ? "LIMIT" : "", F(arr[i].entry), F(arr[i].sl), F(arr[i].tp), StateVI(arr[i].state), arr[i].gate != "" ? " [khong vao: " + arr[i].gate + "]" : ""); }
    if(!shown) txt += "Chua co tin hieu trong 3 ngay qua.\n";
    for(int k = 0; k < ArraySize(newsT); k++) if(newsT[k] > now && newsT[k] < now + 86400) txt += "Tin My: " + VNtime(newsT[k]) + " " + newsN[k] + " (khong vao ±30 phut)\n";
-   txt += "EA CHI BAO + VE, KHONG TU DAT LENH. Khong phai loi khuyen dau tu.";
+   txt += "Khong phai loi khuyen dau tu. Rui ro mat von.";
    Comment(txt);
 }
 //+------------------------------------------------------------------+

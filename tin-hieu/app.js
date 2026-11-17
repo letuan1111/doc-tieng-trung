@@ -424,8 +424,8 @@
   async function loadJournal() { try { S.journal = await getJSON(JR + '?t=' + Date.now()); S.jErr = ''; } catch (e) { S.jErr = e.message; } renderJournal(); }
   function jRows() {
     const J = S.journal; if (!J) return [];
-    const all = $('jSym').value === 'all', sk = $('jSkip').checked, old = $('jOld').checked, g = $('jGrade').value;
-    return J.trades.filter(t => (all || t.sym === S.sym) && (sk || t.state !== 'SKIP') && (old || t.ver === V3.version || (window.WAVE && t.ver === WAVE.version) || (window.EMAPB && t.ver === EMAPB.version) || (window.EMA21 && t.ver === EMA21.version) || (window.ZONES && t.ver === ZONES.version) || (window.QUETBIEN && t.ver === QUETBIEN.version) || (window.ASIANBO && t.ver === ASIANBO.version) || (window.CONGTHUC && t.ver === CONGTHUC.version) || (window.BOSRT && t.ver === BOSRT.version) || (window.AIBOT && t.ver === AIBOT.version) || (window.XUHUONG && t.ver === XUHUONG.version) || (window.HOISAU && t.ver === HOISAU.version)) && (g === 'all' || (g === 'KEEP' ? KEEP.has(t.grade) && t.state !== 'SKIP' : g === 'T' ? (PLAN.has(t.grade) && !!t.tgOK) : (t.grade || 'A') === g))).slice().reverse();
+    const symbol = $('jSym').value, sk = $('jSkip').checked, old = $('jOld').checked, g = $('jGrade').value;
+    return J.trades.filter(t => (symbol === 'all' || t.sym === (symbol === 'cur' ? S.sym : symbol)) && (sk || t.state !== 'SKIP') && (old || t.ver === V3.version || (window.WAVE && t.ver === WAVE.version) || (window.EMAPB && t.ver === EMAPB.version) || (window.EMA21 && t.ver === EMA21.version) || (window.ZONES && t.ver === ZONES.version) || (window.QUETBIEN && t.ver === QUETBIEN.version) || (window.ASIANBO && t.ver === ASIANBO.version) || (window.CONGTHUC && t.ver === CONGTHUC.version) || (window.BOSRT && t.ver === BOSRT.version) || (window.AIBOT && t.ver === AIBOT.version) || (window.XUHUONG && t.ver === XUHUONG.version) || (window.HOISAU && t.ver === HOISAU.version)) && (groupMatches(t, g) || (g === 'KEEP' ? KEEP.has(t.grade) && t.state !== 'SKIP' : g === 'T' ? (PLAN.has(t.grade) && !!t.tgOK) : (t.grade || 'A') === g))).slice().reverse();
   }
   // ---------------- 🔂 BOS M5 + retest: ô riêng ----------------
   // 🤖 AI trợ lý: đọc phân tích máy chủ (J.ai) — bây giờ cần làm gì, chờ giá tới đâu
@@ -482,6 +482,37 @@
   }
   // ---------------- 💼 Tài khoản DEMO giống MT5 ----------------
   const CSZ = { XAU: 100, BTC: 1 };
+  function groupMatches(order, group) {
+    switch (group) {
+      case 'all': return true;
+      case 'plan': return PLAN.has(order.grade);
+      case 'telegram': return !!order.tg;
+      case 'ref': return order.grade === 'P' || order.grade === 'I';
+      case 'lab': return !KEEP.has(order.grade);
+      default: return false;
+    }
+  }
+  function overlapTickets(orders) {
+    const filled = orders.filter(o => o.fillT && !o.cancelled).slice().sort((a,b) => a.fillT - b.fillT || a.ticket - b.ticket);
+    const end = new Map(), result = new Set();
+    for (const o of filled) {
+      if (o.fillT < end.get(o.sym)) result.add(o.ticket);
+      end.set(o.sym, Math.max(end.get(o.sym) || 0, o.exitT || Infinity));
+    }
+    return result;
+  }
+  function auditEntry(o, overlap) {
+    const stop = o.initialSL ?? o.sl;
+    const usd = Number.isFinite(o.entry) && Number.isFinite(stop) ? Math.max(0, o.side * (o.entry - stop)) * CSZ[o.sym] * o.lot : NaN;
+    const detail = [o.initialSL != null ? 'SL ban đầu ' + o.initialSL.toFixed(2) : 'SL ban đầu chưa ghi',
+      o.movedSL != null ? 'SL sau dời ' + o.movedSL.toFixed(2) : '',
+      o.entryFeed ? 'Nguồn khi ghi nhận: ' + o.entryFeed : o.pxSrc,
+      o.exitFeed ? 'Nguồn khi ghi thoát: ' + o.exitFeed : ''].filter(Boolean).map(esc).join('<br>');
+    return o.entry.toFixed(SYMS[o.sym].dp) + '<br><small>' +
+      (Number.isFinite(usd) ? (o.initialSL != null ? 'Rủi ro ban đầu: ' : 'Ước tính theo SL đang lưu: ') + usd.toFixed(2) + ' USD' : 'Rủi ro chưa rõ') +
+      (usd > 10 ? ' · <b class="loss">Vượt 10 USD</b>' : '') +
+      (overlap.has(o.ticket) ? ' · Chồng lệnh cùng mã' : '') + '</small><details><summary>Dấu vết giá</summary>' + detail + '</details>';
+  }
   function renderAcct() {
     const el = $('acctStats'); if (!el) return; const A = S.journal && S.journal.acct;
     if (!A) { el.innerHTML = '<div><b>500.00$</b><small>Máy chủ mở tài khoản ở lần chạy tới</small></div>'; $('acctTbl').innerHTML = ''; $('acctMeta').textContent = ''; return; }
@@ -499,16 +530,34 @@
     $('acctMeta').textContent = `${A.login} · mở ${ft(A.start)} · vốn ${A.bal0}$ · 1:${A.lev} · máy chủ cập nhật ${ft(A.updated)}`;
     const typ = (o) => `<span class="chip ${o.side > 0 ? 'buy' : 'sell'}">${o.side > 0 ? 'buy' : 'sell'}${!o.fillT && !o.closed ? ' limit' : ''}</span>`;
     const MD = { X: '🧭', Z: '🧱', H: '🎯', P: '🌅', I: '🤖', K: '🔂', E: '🔁', R: '🧲', Q: '💧', W: '🌊', C: '📐', A: 'V4', B: 'V4·GN', S: 'BOS15' }, mdl = (o) => `<span title="${esc(o.model || o.grade)}${o.tg ? ' · có gửi Telegram' : ' · không gửi Telegram'}">${MD[o.grade] || o.grade}${o.tg ? '📲' : ''}</span>`;
+    const symbol = $('aSym').value, group = $('aGroup').value;
+    const selected = A.orders.filter(o => (symbol === 'all' || o.sym === symbol) && groupMatches(o, group));
+    const closed = selected.filter(o => o.closed && !o.cancelled && o.fillT);
+    const overlap = overlapTickets(A.orders);
+    const sl = closed.filter(o => o.state === 'LOSS').length;
+    const pnl = closed.reduce((sum, o) => sum + o.profit, 0);
+    $('aSummary').textContent = closed.length + ' lệnh đã đóng · ' + sl + ' SL · ' + closed.filter(o => o.state === 'WIN').length +
+      ' TP · ' + closed.filter(o => overlap.has(o.ticket)).length + ' lệnh khớp chồng · Lãi/lỗ đã chốt ' + sg(pnl) + ' USD';
+    const until = new Map(), accepted = [];
+    for (const o of selected.filter(o => o.fillT && !o.cancelled).sort((a,b) => a.fillT - b.fillT || a.ticket - b.ticket)) {
+      if (o.fillT < until.get(o.sym)) continue;
+      until.set(o.sym, o.exitT || Infinity);
+      if (o.closed) accepted.push(o);
+    }
+    $('aReplay').textContent = 'Nếu chỉ giữ lần khớp đầu tiên mỗi mã trong nhóm này: ' + accepted.length +
+      ' lệnh đã đóng · ' + accepted.filter(o => o.state === 'LOSS').length + ' SL · ' +
+      sg(accepted.reduce((sum,o) => sum + o.profit, 0)) + ' USD (tính lại từ các lần khớp đã ghi).';
     if (S.acctTab === 'hist') {
-      const H = A.orders.filter(o => o.closed).slice().reverse();
-      $('acctTbl').innerHTML = `<thead><tr><th>Ticket</th><th>Mở lúc</th><th>Loại</th><th>Lot</th><th>Mã</th><th>Giá vào</th><th>S/L</th><th>T/P</th><th>Đóng lúc</th><th>Giá đóng</th><th>Lý do</th><th>Lợi nhuận</th><th>Số dư</th></tr></thead><tbody>${H.length ? H.map(o => `<tr${o.cancelled ? ' class="muted"' : ''}><td class="mono">${o.ticket}</td><td>${ft(o.fillT || o.placed)}</td><td>${mdl(o)} ${typ(o)}</td><td>${o.lot.toFixed(2)}</td><td>${o.sym}</td><td class="mono">${o.entry.toFixed(dp(o.sym))}</td><td class="mono">${o.sl.toFixed(dp(o.sym))}</td><td class="mono">${o.tp.toFixed(dp(o.sym))}</td><td>${o.exitT ? ft(o.exitT) : '—'}</td><td class="mono">${o.exitP != null ? o.exitP.toFixed(dp(o.sym)) : '—'}</td><td title="${esc(o.reason || '')}">${o.cancelled ? 'Huỷ lệnh chờ' : esc(o.reason || '')}</td><td class="${o.profit > 0 ? 'win' : o.profit < 0 ? 'loss' : 'muted'}">${o.cancelled ? '—' : sg(o.profit)}</td><td>${o.bal != null ? o.bal.toFixed(2) : '—'}</td></tr>`).join('') : '<tr><td colspan="13" class="muted">Chưa có lệnh nào đóng.</td></tr>'}</tbody>`;
+      const H = selected.filter(o => o.closed).slice().reverse();
+      $('acctTbl').innerHTML = `<thead><tr><th>Ticket</th><th>Mở lúc</th><th>Loại</th><th>Lot</th><th>Mã</th><th>Giá vào</th><th>S/L</th><th>T/P</th><th>Đóng lúc</th><th>Giá đóng</th><th>Lý do</th><th>Lợi nhuận</th><th>Số dư</th></tr></thead><tbody>${H.length ? H.map(o => `<tr${o.cancelled ? ' class="muted"' : ''}><td class="mono">${o.ticket}</td><td>${ft(o.fillT || o.placed)}</td><td>${mdl(o)} ${typ(o)}</td><td>${o.lot.toFixed(2)}</td><td>${o.sym}</td><td class="mono">${auditEntry(o, overlap)}</td><td class="mono">${o.sl.toFixed(dp(o.sym))}</td><td class="mono">${o.tp.toFixed(dp(o.sym))}</td><td>${o.exitT ? ft(o.exitT) : '—'}</td><td class="mono">${o.exitP != null ? o.exitP.toFixed(dp(o.sym)) : '—'}</td><td title="${esc(o.reason || '')}">${o.cancelled ? 'Huỷ lệnh chờ' : esc(o.reason || '')}</td><td class="${o.profit > 0 ? 'win' : o.profit < 0 ? 'loss' : 'muted'}">${o.cancelled ? '—' : sg(o.profit)}</td><td>${o.bal != null ? o.bal.toFixed(2) : '—'}</td></tr>`).join('') : '<tr><td colspan="13" class="muted">Chưa có lệnh nào đóng.</td></tr>'}</tbody>`;
     } else {
-      const rows = [...open.map(o => `<tr><td class="mono">${o.ticket}</td><td>${ft(o.fillT)}</td><td>${mdl(o)} ${typ(o)}</td><td>${o.lot.toFixed(2)}</td><td>${o.sym}</td><td class="mono">${o.entry.toFixed(dp(o.sym))}</td><td class="mono">${o.sl.toFixed(dp(o.sym))}</td><td class="mono">${o.tp.toFixed(dp(o.sym))}</td><td class="mono">${o._cur != null ? o._cur.toFixed(dp(o.sym)) : '—'}</td><td class="${o._fl > 0 ? 'win' : o._fl < 0 ? 'loss' : ''}"><b>${sg(o._fl || 0)}</b></td></tr>`),
-        ...(pend.length ? [`<tr><td colspan="10" class="muted" style="padding-top:10px">Lệnh chờ</td></tr>`] : []),
-        ...pend.map(o => `<tr><td class="mono">${o.ticket}</td><td>${ft(o.placed)}</td><td>${mdl(o)} ${typ(o)}</td><td>${o.lot.toFixed(2)}</td><td>${o.sym}</td><td class="mono">${o.entry.toFixed(dp(o.sym))}</td><td class="mono">${o.sl.toFixed(dp(o.sym))}</td><td class="mono">${o.tp.toFixed(dp(o.sym))}</td><td class="muted">chờ giá chạm</td><td class="muted">—</td></tr>`)];
-      $('acctTbl').innerHTML = `<thead><tr><th>Ticket</th><th>Thời gian</th><th>Loại</th><th>Lot</th><th>Mã</th><th>Giá vào</th><th>S/L</th><th>T/P</th><th>Giá hiện tại</th><th>Lợi nhuận</th></tr></thead><tbody>${rows.length ? rows.join('') : '<tr><td colspan="10" class="muted">Không có lệnh đang chạy hay lệnh chờ — máy đang đợi tín hiệu 🧭 🧱 🎯.</td></tr>'}</tbody>`;
+      const rows = [...selected.filter(o => !o.closed && o.fillT).map(o => `<tr><td class="mono">${o.ticket}</td><td>${ft(o.fillT)}</td><td>${mdl(o)} ${typ(o)}</td><td>${o.lot.toFixed(2)}</td><td>${o.sym}</td><td class="mono">${auditEntry(o, overlap)}</td><td class="mono">${o.sl.toFixed(dp(o.sym))}</td><td class="mono">${o.tp.toFixed(dp(o.sym))}</td><td class="mono">${o._cur != null ? o._cur.toFixed(dp(o.sym)) : '—'}</td><td class="${o._fl > 0 ? 'win' : o._fl < 0 ? 'loss' : ''}"><b>${sg(o._fl || 0)}</b></td></tr>`),
+        ...(selected.some(o => !o.closed && !o.fillT) ? [`<tr><td colspan="10" class="muted" style="padding-top:10px">Lệnh chờ</td></tr>`] : []),
+        ...selected.filter(o => !o.closed && !o.fillT).map(o => `<tr><td class="mono">${o.ticket}</td><td>${ft(o.placed)}</td><td>${mdl(o)} ${typ(o)}</td><td>${o.lot.toFixed(2)}</td><td>${o.sym}</td><td class="mono">${auditEntry(o, overlap)}</td><td class="mono">${o.sl.toFixed(dp(o.sym))}</td><td class="mono">${o.tp.toFixed(dp(o.sym))}</td><td class="muted">chờ giá chạm</td><td class="muted">—</td></tr>`)];
+      $('acctTbl').innerHTML = `<thead><tr><th>Ticket</th><th>Thời gian</th><th>Loại</th><th>Lot</th><th>Mã</th><th>Giá vào</th><th>S/L</th><th>T/P</th><th>Giá hiện tại</th><th>Lợi nhuận</th></tr></thead><tbody>${rows.length ? rows.join('') : '<tr><td colspan="10" class="muted">Chưa có lệnh mở hoặc chờ trong bộ lọc này.</td></tr>'}</tbody>`;
     }
   }
+  for (const id of ['aSym','aGroup']) $(id).onchange = renderAcct;
   document.querySelectorAll('#acctTabs button').forEach(b => b.onclick = () => { S.acctTab = b.dataset.a; document.querySelectorAll('#acctTabs button').forEach(x => x.classList.toggle('on', x === b)); renderAcct(); });
   function renderDemo(J) {
     const D = J && J.demo, el = $('dStats'); if (!el) return;

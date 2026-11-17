@@ -201,6 +201,8 @@ try {
       if (!old) { const rec = { ...s, id, sym: 'XAU', ver: MOD.version, src: process.env.MOCK_DIR ? 'MOCK' : 'OKX ' + SYMS.XAU.okx, seen: NOW(), dp: 2, live: NOW() - s.ct < 3 * 3e5 + 10 * 60e3 };
         J.trades.push(rec); byId.set(id, rec); added++; if (tg) notify(rec); continue; }
       if (MOD.FINAL[old.state]) continue;
+      if (G === 'P' && s.sl !== s.initialSL && s.initialSL != null) old.movedSL = s.sl;
+      if (G === 'X' && s.beT) old.movedSL = s.entry;
       const before = old.state; for (const k of ['state', 'fillT', 'exitT', 'exitP', 'r', 'pts', 'why']) if (s[k] !== undefined) old[k] = s[k];
       if (old.state !== before) { changed++; if (tg) notify(old); }
     }
@@ -352,15 +354,28 @@ J.telegram = { chats: CHATS.length, token: !!TOKEN };
 //  Ký quỹ đòn bẩy 1:500 · chưa tính swap qua đêm và hoa hồng
 { const A = J.acct = J.acct || { login: 'DEMO-500', server: 'Máy chủ bot (tài khoản giấy)', start: NOW(), bal0: 500, lot: 0.02, lev: 500, next: 100000001, orders: [] };
   const CS = { XAU: 100, BTC: 1 }, FINX = (st) => /^(WIN|LOSS|TIME)$/.test(st), CANC = (st) => /^(EXPIRED|INVALID|SKIP|MISSED|CANCEL)/.test(st);
+  const feed = t => {
+    const src = t.src || SRC[t.sym];
+    if (!src) return null;
+    const off = OFF[SYMS[t.sym].okx];
+    return /^OKX/.test(src) && Number.isFinite(off) ? src + ' · offset ' + off : src;
+  };
   const have = new Set(A.orders.map(o => o.id));
   // 13/11/2026 22h (Letuan): vào HẾT mọi lệnh của mọi chiến lược (vàng + BTC), kể cả lệnh bị luật chặn Telegram — tính lại từ ngày mở tài khoản
 for (const t of J.trades.filter(t => t.live && t.state !== 'SKIP' && t.ct >= A.start && !have.has(t.id)).sort((a, b) => a.ct - b.ct)) {
     A.orders.push({ ticket: A.next++, id: t.id, sym: t.sym, grade: t.grade, model: t.model, side: t.side, lot: A.lot, placed: t.ct, kind: t.state === 'PENDING' || (t.fillT && t.fillT > t.ct + 6e4) || (!t.fillT && !FINX(t.state)) ? 'limit' : 'market', entry: t.entry, sl: t.sl, tp: t.tp, state: t.state, pxSrc: t.pxSrc || null, tg: !!(TGONLY(t.grade) && t.tgOK) });
+    const order = A.orders.at(-1);
+    order.initialSL = t.initialSL ?? t.sl;
+    order.entryFeed = t.pxSrc || feed(t);
     have.add(t.id); }
   for (const o of A.orders) { if (o.closed) continue; const t = byId.get(o.id); if (!t) continue;
     Object.assign(o, { state: t.state, entry: t.entry, sl: t.sl, tp: t.tp, exitT: t.exitT || null, exitP: t.exitP != null ? t.exitP : null });
+    if (t.movedSL != null || (t.grade === 'X' && t.beT) || (t.grade === 'P' && t.initialSL != null && t.sl !== t.initialSL)) {
+      o.movedSL = t.movedSL ?? (t.grade === 'X' ? t.entry : t.sl);
+      o.sl = o.movedSL;
+    }
     if (!o.fillT && (t.state === 'OPEN' || FINX(t.state))) o.fillT = t.fillT || t.ct;
-    if (FINX(t.state) && o.exitP != null) { o.closed = true; o.profit = +(o.side * (o.exitP - o.entry) * CS[o.sym] * o.lot).toFixed(2); o.reason = t.state === 'WIN' ? 'TP' : t.state === 'LOSS' ? 'SL' : 'Hết giờ giữ lệnh'; }
+    if (FINX(t.state) && o.exitP != null) { o.closed = true; o.exitFeed = feed(t); o.profit = +(o.side * (o.exitP - o.entry) * CS[o.sym] * o.lot).toFixed(2); o.reason = t.state === 'WIN' ? 'TP' : t.state === 'LOSS' ? 'SL' : 'Hết giờ giữ lệnh'; }
     else if (CANC(t.state)) { o.closed = true; o.cancelled = true; o.profit = 0; o.reason = 'Huỷ lệnh chờ' + (t.why ? ': ' + t.why : ''); o.exitT = o.exitT || NOW(); } }
   let bal = A.bal0, peak = A.bal0, dd = 0;
   for (const o of A.orders.filter(o => o.closed && !o.cancelled).sort((a, b) => (a.exitT || 0) - (b.exitT || 0))) { bal += o.profit; o.bal = +bal.toFixed(2); peak = Math.max(peak, bal); dd = Math.max(dd, peak - bal); }

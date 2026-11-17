@@ -74,9 +74,16 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
         <span class="note" id="acctMeta">Đang tải tài khoản…</span>
       </div>
       <div class="stat" id="acctStats" style="margin-top:10px"></div>
+      <h4>Phân tích lệnh demo</h4>
+      <div class="toggles">
+        <label>Mã <select id="aSym"><option>XAU</option><option>BTC</option><option value="all">Tất cả</option></select></label>
+        <label>Chiến lược <select id="aGroup"><option value="plan">Kế hoạch chính</option><option value="telegram">Đủ điều kiện Telegram</option><option value="ref">Tham khảo</option><option value="lab">Thử nghiệm</option><option value="all">Tất cả</option></select></label>
+      </div>
+      <p class="note" id="aSummary" aria-live="polite"></p>
+      <p class="note" id="aReplay"></p>
       <div class="seg" id="acctTabs" style="margin:10px 0 8px"><button data-a="pos" class="on">Giao dịch</button><button data-a="hist">Lịch sử</button></div>
       <div class="tw"><table id="acctTbl"></table></div>
-      <p class="note" style="margin:6px 0 0">Giống MT5: từ 13/11 máy chủ tự đặt <b>mọi lệnh của mọi chiến lược</b> (vàng + BTC, kể cả lệnh bị luật chặn Telegram — lệnh có 📲 là lệnh đã gửi Telegram), tính lại từ ngày mở tài khoản 11/11, 0.02 lot, lệnh LIMIT nằm ở "Lệnh chờ" tới khi giá chạm. Khớp và đóng theo nến M5 giá TradingView, có spread. Đòn bẩy 1:500. Chưa tính swap qua đêm và hoa hồng. Chạy cả khi bạn tắt máy.</p>
+      <p class="note" style="margin:6px 0 0">Giống MT5: từ 13/11 máy chủ tự đặt <b>mọi lệnh của mọi chiến lược</b> (vàng + BTC, kể cả lệnh bị luật chặn Telegram — 📲 đánh dấu đủ điều kiện Telegram), tính lại từ ngày mở tài khoản 11/11, 0.02 lot, lệnh LIMIT nằm ở "Lệnh chờ" tới khi giá chạm. Khớp và đóng theo nến M5 giá TradingView, có spread. Đòn bẩy 1:500. Chưa tính swap qua đêm và hoa hồng. Chạy cả khi bạn tắt máy.</p>
     </div>
     <div class="card">
       <div class="price"><b id="px">—</b><span id="chg" class="chip">—</span><span id="src" class="chip">đang tải…</span><span id="upd" class="note"></span></div>
@@ -114,9 +121,9 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
     <div class="card">
       <h3>Nhật ký giao dịch — máy chủ ghi 24/7, kể cả khi không mở trang</h3>
       <div class="toggles" style="margin:0 0 8px">
-        <label><select id="jSym"><option value="all">Tất cả cặp</option><option value="cur">Cặp đang xem</option></select></label>
+        <label><select id="jSym"><option value="XAU" selected>XAU</option><option value="all">Tất cả cặp</option><option value="cur">Cặp đang xem</option></select></label>
         <label><input type="checkbox" id="jSkip"> Hiện lệnh bị bỏ qua (có entry đẹp hơn / đang có lệnh)</label>
-        <label><select id="jGrade"><option value="KEEP" selected>✅ Chiến lược đang dùng (🧭 🧱 🎯 + 🌅 🤖 tham khảo)</option><option value="H">Chỉ 🎯 Hồi sâu qua EMA89 (vàng M15 · gửi Telegram)</option><option value="X">Chỉ 🧭 Phá biên Á theo xu hướng (vàng · gửi Telegram)</option><option value="all">Mọi lệnh (kể cả chiến lược đã loại)</option><option value="T">📲 Chỉ lệnh gửi Telegram</option><option value="I">Chỉ 🤖 AI trợ lý (vàng M15 · gửi Telegram)</option><option value="A">Chỉ lệnh Chuẩn</option><option value="B">Chỉ lệnh Ghi nhận</option><option value="W">Chỉ Sóng 15 (vàng M5)</option><option value="S">Chỉ BOS 15 (vàng M15/M30, SL 10 · TP 15)</option><option value="E">Chỉ EMA hồi (vàng: EMA M30 + M5)</option><option value="R">Chỉ Test EMA21 M30 (vàng)</option><option value="P">Chỉ 🌅 Phá biên phiên Á (vàng · gửi Telegram)</option><option value="Q">Chỉ 💧 Quét biên tích lũy (vàng M5, thử nghiệm)</option><option value="Z">Chỉ 🧱 Vùng S/R H4/H1 + quét M15 (AI)</option><option value="K">Chỉ 🔂 BOS M5 + retest (TP 1.2R · gửi Telegram)</option><option value="C">Chỉ 📐 Công thức (vàng + BTC · M5/M15/M30)</option></select></label>
+        <label><select id="jGrade"><option value="plan" selected>Kế hoạch chính</option><option value="ref">Tham khảo</option><option value="lab">Thử nghiệm</option><option value="KEEP">✅ Chiến lược đang dùng (🧭 🧱 🎯 + 🌅 🤖 tham khảo)</option><option value="H">Chỉ 🎯 Hồi sâu qua EMA89 (vàng M15 · gửi Telegram)</option><option value="X">Chỉ 🧭 Phá biên Á theo xu hướng (vàng · gửi Telegram)</option><option value="all">Mọi lệnh (kể cả chiến lược đã loại)</option><option value="T">📲 Đủ điều kiện Telegram</option><option value="I">Chỉ 🤖 AI trợ lý (vàng M15 · gửi Telegram)</option><option value="A">Chỉ lệnh Chuẩn</option><option value="B">Chỉ lệnh Ghi nhận</option><option value="W">Chỉ Sóng 15 (vàng M5)</option><option value="S">Chỉ BOS 15 (vàng M15/M30, SL 10 · TP 15)</option><option value="E">Chỉ EMA hồi (vàng: EMA M30 + M5)</option><option value="R">Chỉ Test EMA21 M30 (vàng)</option><option value="P">Chỉ 🌅 Phá biên phiên Á (vàng · gửi Telegram)</option><option value="Q">Chỉ 💧 Quét biên tích lũy (vàng M5, thử nghiệm)</option><option value="Z">Chỉ 🧱 Vùng S/R H4/H1 + quét M15 (AI)</option><option value="K">Chỉ 🔂 BOS M5 + retest (TP 1.2R · gửi Telegram)</option><option value="C">Chỉ 📐 Công thức (vàng + BTC · M5/M15/M30)</option></select></label>
         <label><input type="checkbox" id="jOld"> Hiện lệnh của bản cũ</label>
         <button class="btn" id="jCsv">⬇ Tải CSV</button>
         <span class="note" id="jUpd"></span>
@@ -201,6 +208,6 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f input,lab
 <script src="ai.js?v=1"></script>
 <script src="xuhuong.js?v=1"></script>
 <script src="hoisau.js?v=1"></script>
-<script src="app.js?v=45"></script>
+<script src="app.js?v=46"></script>
 </body>
 </html>

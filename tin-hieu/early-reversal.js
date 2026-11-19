@@ -37,4 +37,29 @@ function run(data,opts={}){
   candleTime:x.t,notice:'Cảnh báo nghiên cứu, không phải lệnh giao dịch. Chưa kiểm định backtest.'};
 }
 root.EarlyReversal={run};
+if(typeof document!=='undefined'){
+ const start=()=>{
+ const el=document.getElementById('earlyNow');if(!el)return;
+ async function fetchCandles(interval,limit){
+   const u='https://fapi.binance.com/fapi/v1/klines?symbol=XAUUSDT&interval='+interval+'&limit='+limit;
+   const res=await fetch(u,{cache:'no-store'});if(!res.ok)throw Error('Nguồn Binance không khả dụng: '+res.status);
+   const raw=await res.json(),now=Date.now();
+   return raw.map(k=>({t:+k[0],ct:+k[6]+1,o:+k[1],h:+k[2],l:+k[3],c:+k[4]})).filter(x=>x.ct<=now);
+ }
+ async function refresh(){
+  try{
+   const [m1,m5,m15]=await Promise.all([fetchCandles('1m',200),fetchCandles('5m',120),fetchCandles('15m',120)]);
+   const result=run({m1,m5,m15});
+   const safe=x=>String(x);
+   el.textContent='XAUUSDT Binance Futures · '+result.state+(result.side?' · '+result.side:'')+
+     ' · '+(result.score??0)+'/85 điểm quan sát · '+result.reason+
+     (result.invalidation?' · Vô hiệu hóa tham khảo: '+safe(result.invalidation.toFixed(2)):'')+
+     ' · Cập nhật '+new Date().toLocaleTimeString('vi-VN')+
+     ' · Không dùng giá này làm giá khớp Exness.';
+  }catch(err){el.textContent='Không lấy được dữ liệu M1/M5/M15 đồng nhất: '+err.message+'; không phát tín hiệu.';}
+ }
+ refresh();setInterval(refresh,60000);
+ };
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+}
 })(typeof window!=='undefined'?window:globalThis);

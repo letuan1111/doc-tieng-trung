@@ -16,6 +16,7 @@ const QB = req(path.join(__dir, '..', 'tin-hieu', 'quetbien.js'));
 const PB = req(path.join(__dir, '..', 'tin-hieu', 'asianbo.js'));
 const BOSRT = req(path.join(__dir, '..', 'tin-hieu', 'bosrt.js'));
 const XH = req(path.join(__dir, '..', 'tin-hieu', 'xuhuong.js'));
+const HOI_M5 = req(path.join(__dir, '..', 'tin-hieu', 'hoi-m5.js'));
 const HS = req(path.join(__dir, '..', 'tin-hieu', 'hoisau.js'));
 const KH = req(path.join(__dir, '..', 'tin-hieu', 'kehoach.js'));
 const AIB = req(path.join(__dir, '..', 'tin-hieu', 'ai.js')), AIM = req(path.join(__dir, '..', 'tin-hieu', 'ai-model.json')); AIB.setModel(AIM);
@@ -162,7 +163,7 @@ J.trades = J.trades.filter(t => t.grade !== 'H' || t.ver === HS.version || t.liv
 const byId = new Map(J.trades.map(x => [x.id, x]));
 // nạp sẵn lịch sử 12 tháng (tính lại từ OKX) — chỉ thêm lệnh chưa có, cùng bản quy tắc
 try { const SEED = JSON.parse(fs.readFileSync(path.join(__dir, 'journal-seed.json'), 'utf8'));
-  if (SEED.version === V3.version) { let n = 0; for (const t of SEED.trades) if (!byId.has(t.id) && (t.grade !== 'W' || t.ver === WAVE.version) && (t.grade !== 'E' || t.ver === EMAPB.version) && (t.grade !== 'R' || t.ver === EMA21.version) && (t.grade !== 'Z' || t.ver === ZONES.version) && (t.grade !== 'Q' || t.ver === QB.version) && (t.grade !== 'P' || t.ver === PB.version) && (t.grade !== 'C' || t.ver === CT.version) && (t.grade !== 'K' || t.ver === BOSRT.version) && (t.grade !== 'I' || t.ver === AIB.version) && (t.grade !== 'X' || t.ver === XH.version) && (t.grade !== 'H' || t.ver === HS.version)) { J.trades.push(t); byId.set(t.id, t); n++; } if (n) console.log(`Nạp ${n} lệnh lịch sử 12 tháng`); } } catch (_) {}
+  if (SEED.version === V3.version) { let n = 0; for (const t of SEED.trades) if (!byId.has(t.id) && !HOI_M5.retiredForGold(t) && (t.grade !== 'W' || t.ver === WAVE.version) && (t.grade !== 'E' || t.ver === EMAPB.version) && (t.grade !== 'R' || t.ver === EMA21.version) && (t.grade !== 'Z' || t.ver === ZONES.version) && (t.grade !== 'Q' || t.ver === QB.version) && (t.grade !== 'P' || t.ver === PB.version) && (t.grade !== 'C' || t.ver === CT.version) && (t.grade !== 'K' || t.ver === BOSRT.version) && (t.grade !== 'I' || t.ver === AIB.version) && (t.grade !== 'X' || t.ver === XH.version) && (t.grade !== 'H' || t.ver === HS.version)) { J.trades.push(t); byId.set(t.id, t); n++; } if (n) console.log(`Nạp ${n} lệnh lịch sử 12 tháng`); } } catch (_) {}
 let added = 0, changed = 0, XAU15 = null, XAUH1 = null; const errs = [], DS = {}, SRC = {}, L_SRC = (sym) => SRC[sym] || 'OKX ' + SYMS[sym].okx;
 for (const sym of Object.keys(SYMS)) {
   let L;
@@ -175,6 +176,7 @@ for (const sym of Object.keys(SYMS)) {
   for (const s of res) {
     if (s.state === 'SKIP' && /^M5 không có/.test(s.why || '')) continue; // M5 đứng riêng: không phải tín hiệu
     const id = `${sym}-${s.id}`, old = byId.get(id);
+    if (!old && HOI_M5.retiredForGold({ sym, grade: s.grade })) continue;
     if (!old) {
       const rec = { ...s, id, sym, ver: V3.version, src: L.src, seen: NOW(), lastT: D[s.tf][D[s.tf].length - 1].ct, dp: SYMS[sym].dp };
       // tín hiệu tạo trước lúc nhật ký thấy nó > 1 nến: đánh dấu "tính lại"
@@ -194,13 +196,20 @@ try {
   if (process.env.MOCK_DIR) { const rd = (tf) => JSON.parse(fs.readFileSync(path.join(process.env.MOCK_DIR, `XAU_${tf}.json`), 'utf8')).map(k => ({ t: k[0], ct: k[0] + MS[tf], o: k[1], h: k[2], l: k[3], c: k[4] })).filter(x => x.ct <= NOW()); m5 = rd('m5').slice(-NEED.m5); m15 = rd('m15').slice(-3000); XAUH1 = rd('h1').slice(-2200); }
   else { m5 = closed(await okx(SYMS.XAU.okx, 'm5')); m15 = XAU15 || []; }
   // các mô hình chạy trên M5 vàng: tính lại toàn bộ cửa sổ mỗi lần, cập nhật lệnh chưa kết thúc
-  for (const [MOD, G] of [[WAVE, 'W'], [EMAPB, 'E'], [EMA21, 'R'], [ZONES, 'Z'], [QB, 'Q'], [PB, 'P'], [XH, 'X']]) {
+  for (const [MOD, G] of [[WAVE, 'W'], [EMAPB, 'E'], [EMA21, 'R'], [ZONES, 'Z'], [QB, 'Q'], [PB, 'P'], [XH, 'X'], [HOI_M5, 'M']]) {
     const W = MOD.run({ m5, m15, h1: XAUH1 || [] }, { spread: SYMS.XAU.spread }), seenW = new Set(), tg = MOD.telegram !== false;
     for (const s of W) {
       const id = `XAU-${s.id}`, old = byId.get(id); seenW.add(id);
+      if (!old && HOI_M5.retiredForGold({ sym: 'XAU', grade: G })) continue;
       if (!old) { const rec = { ...s, id, sym: 'XAU', ver: MOD.version, src: process.env.MOCK_DIR ? 'MOCK' : 'OKX ' + SYMS.XAU.okx, seen: NOW(), dp: 2, live: NOW() - s.ct < 3 * 3e5 + 10 * 60e3 };
         J.trades.push(rec); byId.set(id, rec); added++; if (tg) notify(rec); continue; }
       if (MOD.FINAL[old.state]) continue;
+      // Preserve the quoted entry basis if the TradingView offset changed between scans.
+      if (G === 'M' && Number.isFinite(s.exitP)) {
+        s.exitP += old.entry - s.entry;
+        s.pts = old.side * (s.exitP - old.entry);
+        s.r = s.pts / old.risk;
+      }
       if (G === 'P' && s.sl !== s.initialSL && s.initialSL != null) old.movedSL = s.sl;
       if (G === 'X' && s.beT) old.movedSL = s.entry;
       const before = old.state; for (const k of ['state', 'fillT', 'exitT', 'exitP', 'r', 'pts', 'why']) if (s[k] !== undefined) old[k] = s[k];
@@ -219,6 +228,7 @@ for (const sym of Object.keys(SYMS)) {
     const W = CT.run({ m5, m15, h1 }, { spread: SYMS[sym].spread }), seen = new Set(), tg = CT.telegram !== false;
     for (const s of W) {
       const id = `${sym}-${s.id}`, old = byId.get(id); seen.add(id);
+      if (!old && HOI_M5.retiredForGold({ sym, grade: 'C' })) continue;
       if (!old) { const rec = { ...s, id, sym, ver: CT.version, src: process.env.MOCK_DIR ? 'MOCK' : 'OKX ' + SYMS[sym].okx, seen: NOW(), dp: SYMS[sym].dp, live: NOW() - s.ct < 3 * 3e5 + 10 * 60e3 };
         J.trades.push(rec); byId.set(id, rec); added++; if (tg) notify(rec); continue; }
       if (CT.FINAL[old.state]) continue;
@@ -324,7 +334,7 @@ for (const t of J.trades) if (t.grade !== 'I' && t.grade !== 'W' && t.grade !== 
   const USDPT = 100 * D.lot, FIN = (st) => st === 'WIN' || st === 'LOSS' || st === 'TIME';
   const pick = (t) => ({ id: t.id, grade: t.grade, side: t.side, ct: t.ct, hour: t.hour, entry: t.entry, sl: t.sl, tp: t.tp, risk: t.risk, state: t.state, exitT: t.exitT, exitP: t.exitP, pts: t.pts, live: t.live });
   for (const x of D.taken) { const t = byId.get(x.id); if (t && !FIN(x.state)) Object.assign(x, pick(t)); }
-  const okEA = (t) => t.sym === 'XAU' && t.ct >= D.start && ((t.grade === 'E' && t.tgOK && t.risk <= 30) || t.grade === 'R' || (t.grade === 'Z' && t.tgOK));
+  const okEA = (t) => !HOI_M5.retiredForGold(t) && t.sym === 'XAU' && t.ct >= D.start && ((t.grade === 'E' && t.tgOK && t.risk <= 30) || t.grade === 'R' || (t.grade === 'Z' && t.tgOK));
   const have = new Set(D.taken.map(x => x.id));
   for (const t of J.trades.filter(t => okEA(t) && !have.has(t.id)).sort((a, b) => a.ct - b.ct)) {
     if (D.taken.some(x => !FIN(x.state))) break;                                   // đang có lệnh → bỏ tín hiệu
@@ -362,7 +372,7 @@ J.telegram = { chats: CHATS.length, token: !!TOKEN };
   };
   const have = new Set(A.orders.map(o => o.id));
   // 13/11/2026 22h (Letuan): vào HẾT mọi lệnh của mọi chiến lược (vàng + BTC), kể cả lệnh bị luật chặn Telegram — tính lại từ ngày mở tài khoản
-for (const t of J.trades.filter(t => t.live && t.state !== 'SKIP' && t.ct >= A.start && !have.has(t.id)).sort((a, b) => a.ct - b.ct)) {
+for (const t of J.trades.filter(t => !HOI_M5.retiredForGold(t) && t.live && t.state !== 'SKIP' && t.ct >= A.start && !have.has(t.id)).sort((a, b) => a.ct - b.ct)) {
     A.orders.push({ ticket: A.next++, id: t.id, sym: t.sym, grade: t.grade, model: t.model, side: t.side, lot: A.lot, placed: t.ct, kind: t.state === 'PENDING' || (t.fillT && t.fillT > t.ct + 6e4) || (!t.fillT && !FINX(t.state)) ? 'limit' : 'market', entry: t.entry, sl: t.sl, tp: t.tp, state: t.state, pxSrc: t.pxSrc || null, tg: !!(TGONLY(t.grade) && t.tgOK) });
     const order = A.orders.at(-1);
     order.initialSL = t.initialSL ?? t.sl;

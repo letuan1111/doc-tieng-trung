@@ -1,0 +1,20 @@
+{
+ "srcPref": {
+  "XAU": "okx",
+  "BTC": "okx"
+ },
+ "offset": {},
+ "owner": "5775966809",
+ "tgOffset": 486683264,
+ "lastRun": 1795895497084,
+ "consSent": {},
+ "mt5err": "chưa cấu hình MT5",
+ "telegram": {
+  "configured": true,
+  "connected": true,
+  "bot": "GoldTradingSignal2026_bot",
+  "ok": true
+ },
+ "tgUpdErr": "",
+ "tgUpdates": 21
+}
